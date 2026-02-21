@@ -43,6 +43,6 @@ Manjaro/Arch: yay -S iscsi-util
 Clona el repositorio y compila con `dotnet`:
 
 ```bash
-git clone https://github.com/<tu-usuario>/ISCSI-Util.git
+git clone https://github.com/mijocecr/ISCSI-Util.git
 cd ISCSI-Util
 dotnet build
