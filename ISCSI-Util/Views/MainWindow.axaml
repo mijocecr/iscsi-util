@@ -221,7 +221,7 @@
                      VerticalAlignment="Center"
                      HorizontalAlignment="Stretch"
                      Grid.ColumnSpan="2"
-                     Watermark="Deje en blanco sino requiere autenticacion"
+                     Watermark="Deje en blanco sino requiere usuario"
                      Text="{Binding Usuario, Mode=TwoWay}"
                      Margin=" 0 0 5 0"
                      />
@@ -232,7 +232,7 @@
                      VerticalAlignment="Center"
                      HorizontalAlignment="Stretch"
                      Grid.ColumnSpan="2"
-                     Watermark="Deje en blanco sino requiere autenticacion"
+                     Watermark="Deje en blanco sino requiere password"
                      PasswordChar="*"
                      Text="{Binding Password, Mode=TwoWay}"
                      Margin=" 0 0 5 0"
@@ -254,7 +254,7 @@
                   Margin="10 15 10 0"
                   
                   
-                  Source="../Assets/Manjaro-logo.png"
+                  Source="../Assets/Linux-Logo.png"
                   HorizontalAlignment="Left"
                   />
            <TextBlock Grid.Column="0"
@@ -265,7 +265,7 @@
                       FontSize="25"
                       Height="45"
                       Padding="0 15 0 0"
-                      Text="Manjaro"/>
+                      Text="Cerratonix"/>
            
            <Button Grid.Column="1"
                    Grid.Row="0"
