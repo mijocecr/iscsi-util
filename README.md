@@ -1,3 +1,4 @@
+
 # Iniciador-iSCSI-GUI-Manjaro
 
 Herramienta para Linux (Manjaro / Arch) escrita en **C# con Avalonia** para descubrir, conectar y desconectar destinos iSCSI de forma gráfica y sencilla.  
@@ -18,6 +19,9 @@ Incluye soporte para notificaciones en Linux mediante `notify-send`.
 
 ---
 
+<img width="630" height="738" alt="Captura de pantalla_20251227_104840" src="https://github.com/user-attachments/assets/d18893f3-3a96-429e-87c0-7949286fb000" />
+
+
 ## 📦 Requisitos
 
 - **.NET 9.0** o superior.
@@ -32,6 +36,8 @@ Incluye soporte para notificaciones en Linux mediante `notify-send`.
 ---
 
 ## ⚙️ Instalación
+
+Manjaro/Arch: yay -S iscsi-util
 
 Clona el repositorio y compila con `dotnet`:
 
