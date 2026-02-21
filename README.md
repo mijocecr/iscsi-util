@@ -20,7 +20,8 @@ El ejecutable corre bien en Ubuntu y probablemente en otras distros tambien (htt
 
 ---
 
-<img width="630" height="738" alt="Captura de pantalla_20251227_104840" src="https://github.com/user-attachments/assets/d18893f3-3a96-429e-87c0-7949286fb000" />
+<img width="630" height="738" alt="Captura de pantalla_20260221_141752" src="https://github.com/user-attachments/assets/51a69f96-de09-46f3-9814-4d1f3148dbb9" />
+
 
 
 ## 📦 Requisitos
