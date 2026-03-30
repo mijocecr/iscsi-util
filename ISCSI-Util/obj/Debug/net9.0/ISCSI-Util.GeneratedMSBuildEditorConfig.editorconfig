@@ -26,6 +26,9 @@ build_property.EnableCodeStyleSeverity =
 [/home/miguel/RiderProjects/Iniciador-iSCSI-GUI-Manjaro/ISCSI-Util/App.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
+[/home/miguel/RiderProjects/Iniciador-iSCSI-GUI-Manjaro/ISCSI-Util/Styles/Colors.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
 [/home/miguel/RiderProjects/Iniciador-iSCSI-GUI-Manjaro/ISCSI-Util/Views/MainWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 

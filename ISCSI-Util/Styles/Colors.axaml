@@ -1,0 +1,27 @@
+<ResourceDictionary
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- Tema claro -->
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="AppBackgroundColor">#FFFFFF</Color>
+            <Color x:Key="AppForegroundColor">#000000</Color>
+        </ResourceDictionary>
+
+        <!-- Tema oscuro -->
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="AppBackgroundColor">#151d23</Color>
+            <Color x:Key="AppForegroundColor">#FFFFFF</Color>
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <SolidColorBrush x:Key="AppBackgroundBrush"
+                     Color="{DynamicResource AppBackgroundColor}"/>
+
+    <SolidColorBrush x:Key="AppForegroundBrush"
+                     Color="{DynamicResource AppForegroundColor}"/>
+
+</ResourceDictionary>

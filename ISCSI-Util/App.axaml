@@ -1,32 +1,29 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             
              x:Class="ISCSI_Util.App"
              xmlns:local="using:ISCSI_Util"
              xmlns:conv="using:ISCSI_Util.Converters"
-
              RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
     <Application.DataTemplates>
         <local:ViewLocator/>
     </Application.DataTemplates>
-  
-             <Application.Styles>
-                  
-                 <FluentTheme />
-    </Application.Styles>
-           
-             <Application.Resources>
-                 <!-- Geometría de círculo -->
-                 <Geometry x:Key="CircleGeometry">M12,2 A10,10 0 1 1 11.999,2</Geometry>
 
-                 <!-- Converters -->
-                 <conv:EstadoToGeometryConverter x:Key="EstadoToGeometryConverter"/>
-                 <conv:BoolToColorConverter x:Key="BoolToColorConverter"/>
-                 <conv:BoolToStrokeConverter x:Key="BoolToStrokeConverter"/>
- 
-                
-             </Application.Resources>
-             
+    <Application.Styles>
+        <FluentTheme/>
+    </Application.Styles>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://ISCSI-Util/Styles/Colors.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Geometry x:Key="CircleGeometry">M12,2 A10,10 0 1 1 11.999,2</Geometry>
+            <conv:EstadoToGeometryConverter x:Key="EstadoToGeometryConverter"/>
+            <conv:BoolToColorConverter x:Key="BoolToColorConverter"/>
+            <conv:BoolToStrokeConverter x:Key="BoolToStrokeConverter"/>
+        </ResourceDictionary>
+    </Application.Resources>
+
 </Application>

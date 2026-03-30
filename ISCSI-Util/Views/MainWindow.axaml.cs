@@ -19,41 +19,44 @@ namespace ISCSI_Util.Views
             this.MaxHeight = 580;
             this.MaxWidth = 500;
             this.Title = "iSCSI Util";
-            
+
+            // ⭐ El ViewModel se crea aquí, pero NO se inicializa todavía
             DataContext = new MainWindowViewModel();
         }
 
-        
-        // Este evento se dispara cuando la ventana ya está visible
+        // ⭐ Este evento se dispara cuando la ventana YA está visible
         protected override async void OnOpened(EventArgs e)
         {
             base.OnOpened(e);
 
-            // Llamar a tu método existente
+            // 1) Primero pedir la contraseña (PasswordDialog)
             await SolicitarPassword();
 
-            // Una vez guardada la contraseña en Credenciales.AdminPassword,
-            // arrancar el demonio iscsid
+            // 2) Ahora que Credenciales.AdminPassword ya está cargada,
+            //    podemos arrancar iscsid sin errores
             IscsiHelper.AsegurarServicioIscsid();
+
+            // 3) Ahora sí podemos inicializar el ViewModel
+            if (DataContext is MainWindowViewModel vm)
+            {
+                await vm.InicializarAsync();   // ⭐ Aquí se cargan los destinos conectados
+            }
         }
-        
-        
-        
+
         public async Task SolicitarPassword()
         {
-           
-                // Primero se crea el diálogo
-                var dialog = new PasswordDialog();
-dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-                // Luego se asigna el DataContext
-                dialog.DataContext = new PasswordDialogViewModel(pass =>
-                {
-                    Credenciales.AdminPassword = pass;
-                    dialog.Close();
-                });
+            // Crear el diálogo
+            var dialog = new PasswordDialog();
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-                await dialog.ShowDialog(this);
-            
+            // Asignar DataContext
+            dialog.DataContext = new PasswordDialogViewModel(pass =>
+            {
+                Credenciales.AdminPassword = pass;
+                dialog.Close();
+            });
+
+            await dialog.ShowDialog(this);
         }
     }
 }

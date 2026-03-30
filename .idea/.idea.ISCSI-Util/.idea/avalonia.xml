@@ -4,6 +4,7 @@
     <option name="projectPerEditor">
       <map>
         <entry key="ISCSI-Util/App.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
+        <entry key="ISCSI-Util/Styles/Colors.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Styles/Theme.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/MainWindow.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/PasswordDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />

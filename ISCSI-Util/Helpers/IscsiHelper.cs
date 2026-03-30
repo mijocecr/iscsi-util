@@ -593,6 +593,53 @@ WantedBy=multi-user.target
         }
     }
 
+    ////// Modificacion 30/3/26
     
+    //Lista las Sesiones activas
+    
+    public static List<IscsiDestino> ObtenerDestinosConectados()
+    {
+        var destinos = new List<IscsiDestino>();
+
+        try
+        {
+            string sesionesOut = Ejecutar("sudo", "-S iscsiadm -m session");
+
+            if (string.IsNullOrWhiteSpace(sesionesOut))
+                return destinos;
+
+            var sesiones = sesionesOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var s in sesiones)
+            {
+                // Ejemplo de línea:
+                // tcp: [1] 192.168.1.10:3260,1 iqn.2024-01.com.server:target1
+
+                var tokens = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (tokens.Length < 2) continue;
+
+                string ip = tokens[1].Split(':')[0];
+                string iqn = tokens.LastOrDefault(t => t.StartsWith("iqn."));
+                if (string.IsNullOrEmpty(iqn)) continue;
+
+                destinos.Add(new IscsiDestino
+                {
+                    Ip = ip,
+                    Iqn = iqn,
+                    Conectado = true,
+                    Seleccionado = false
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al obtener destinos conectados: {ex.Message}");
+        }
+
+        return destinos;
+    }
+
+    
+    /////////////////////////// 
 
 }

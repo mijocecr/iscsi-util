@@ -4,217 +4,190 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="clr-namespace:ISCSI_Util.Models"
-
-        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="580"
+        mc:Ignorable="d"
+        d:DesignWidth="500"
+        d:DesignHeight="580"
         x:Class="ISCSI_Util.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/icon.png"
-        Title="ISCSI_Util">
-    
-    
-    
+        Title="ISCSI_Util"
+        Background="{DynamicResource AppBackgroundBrush}">
 
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainWindowViewModel />
     </Design.DataContext>
-    
-    
-    
 
-    <StackPanel Background="#151d23">
+    <StackPanel Background="{DynamicResource AppBackgroundBrush}">
+
+        <!-- PANEL SUPERIOR -->
         <Panel HorizontalAlignment="Stretch"
-               Background="Black"
-               Height="60"
-               
-               
-               >
-            
+               Background="{DynamicResource AppForegroundBrush}"
+               Height="60">
+
             <TextBlock Text="Conectar a iSCSI"
                        FontWeight="Bold"
                        FontSize="28"
-                       Foreground="White"
+                       Foreground="{DynamicResource AppBackgroundBrush}"
                        Height="60"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
-                       Padding="0  10 0 0"
-                       Margin="0 10 0 0"
-            />
-               
-           
-            
+                       Padding="0 10 0 0"
+                       Margin="0 10 0 0"/>
         </Panel>
-        <Separator VerticalAlignment="Bottom"
-                   HorizontalAlignment="Stretch"
+
+        <Separator HorizontalAlignment="Stretch"
                    Margin="0 3 0 0"
-                   Background="white"
-                   
-                   
-        />
-        
+                   Background="{DynamicResource AppForegroundBrush}"/>
+
+        <!-- LABEL DIRECCION IP -->
         <Grid RowDefinitions="*" ColumnDefinitions="*,*">
-            
             <TextBlock Grid.Column="0"
-                Text="Direccion IP:"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Center"
-                Foreground="White"
-                FontWeight="Bold"
-                FontSize="20"
-                Padding="10,0,0,0"
-                Margin="0 10 0 10"/>
-        
-            
+                       Text="Direccion IP:"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource AppForegroundBrush}"
+                       FontWeight="Bold"
+                       FontSize="20"
+                       Padding="10,0,0,0"
+                       Margin="0 10 0 10"/>
         </Grid>
-        
-        
-       
-        
+
+        <!-- INPUT IP + BOTON DESCUBRIR -->
         <Grid RowDefinitions="Auto,Auto"
-              ColumnDefinitions="Auto,*,Auto"
-              ShowGridLines="False">
-            
-           
-            
+              ColumnDefinitions="Auto,*,Auto">
+
             <TextBox Grid.Column="0"
                      HorizontalAlignment="Stretch"
                      TextAlignment="Center"
                      FontSize="15"
                      FontWeight="Bold"
                      Margin="5 0 5 10"
-                     Watermark="Ingrese una Direccion IPv4..."
+                     Watermark=""
                      Grid.ColumnSpan="3"
                      Text="{Binding IpServidor, Mode=TwoWay}"
-                     
-                     />
-            <TextBlock Grid.Column="0" Grid.Row="1"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Text="[ Destinos Disponibles ]"
-                FontWeight="Bold"
-                FontSize="15"
-                
-                Grid.ColumnSpan="2"
-                Foreground="YellowGreen"
-                Margin="5 5 5 0"
-                
-                
-                />
-            <Button Grid.Row="1" Grid.Column="2" 
+                     Background="{DynamicResource AppBackgroundBrush}"
+                     Foreground="{DynamicResource AppForegroundBrush}"/>
+
+            <TextBlock Grid.Column="0"
+                       Grid.Row="1"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Text="[ Destinos Disponibles ]"
+                       FontWeight="Bold"
+                       FontSize="15"
+                       Grid.ColumnSpan="2"
+                       Foreground="YellowGreen"
+                       Margin="5 5 5 0"/>
+
+            <!-- BOTÓN AMARILLO (NO CAMBIA) -->
+            <Button Grid.Row="1"
+                    Grid.Column="2"
                     Width="150"
                     Height="45"
                     Content="Descubrir Destinos"
                     VerticalContentAlignment="Center"
-                    
                     Foreground="Black"
                     Background="Yellow"
                     FontWeight="Bold"
                     HorizontalContentAlignment="Center"
                     VerticalAlignment="Center"
-                    
                     Margin="5 5 5 0"
-          
-                    Command="{Binding DescubrirDestinosCommand}"
-                    
-          
-                    />
-            
-            
+                    Command="{Binding DescubrirDestinosCommand}"/>
         </Grid>
-       
-           
-            <ListBox Background="#151d23"
-                     Height="210"
-                     Margin="5 10 5 10"
-                     ItemsSource="{Binding Destinos}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="models:IscsiDestino">
-                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="5">
-                            <!-- Columna 0: Selección -->
-                            <CheckBox Grid.RowSpan="2"
-                                      Grid.Column="0"
-                                
-                                      ToolTip.Tip="Marca esta casilla para seleccionar el destino"
-                                      Content=""
-                                      IsChecked="{Binding Seleccionado, Mode=TwoWay}"
-                                      VerticalAlignment="Center"
-                                      Margin="5"/>
 
-                            <!-- Columna 1, Fila 0: IQN + icono de estado -->
-                            <StackPanel Grid.Row="0" Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="8"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Iqn}"
-                                           Foreground="White"
-                                           FontWeight="Bold"
-                                           Margin="5,0,0,0"/>
-                               
-                            </StackPanel>
-                            
-                            
-                            <Path Grid.RowSpan="2" Grid.Row="0" Grid.Column="2"  Width="14" Height="14"
-                                  Data="{Binding Conectado, Converter={StaticResource EstadoToGeometryConverter}}"
-                                  Fill="{Binding Conectado, Converter={StaticResource BoolToColorConverter}}"
-                                  Stroke="DarkGray"
-                                  StrokeThickness="{Binding Conectado, Converter={StaticResource BoolToStrokeConverter}}"
-                                  Margin="0,0,10,0"
-                                  
+        <!-- LISTA DE DESTINOS -->
+        <ListBox Background="{DynamicResource AppBackgroundBrush}"
+                 Height="210"
+                 Margin="5 10 5 10"
+                 ItemsSource="{Binding Destinos}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="models:IscsiDestino">
+                    <Grid ColumnDefinitions="Auto,*,Auto"
+                          RowDefinitions="Auto,Auto"
+                          Margin="5">
+
+                        <CheckBox Grid.RowSpan="2"
+                                  Grid.Column="0"
+                                  ToolTip.Tip="Marca esta casilla para seleccionar el destino"
+                                  Content=""
+                                  IsChecked="{Binding Seleccionado, Mode=TwoWay}"
                                   VerticalAlignment="Center"
-                                  HorizontalAlignment="Right"/>
-                            
+                                  Margin="5"
+                                  Foreground="{DynamicResource AppForegroundBrush}"/>
 
-                            <!-- Columna 1, Fila 1: Toggles -->
-                            <StackPanel Grid.Row="1" Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        
-                                        Spacing="15"
-                                        Margin="5,2,0,0"
-                                       >
-                                <ToggleSwitch IsChecked="{Binding UsaChap, Mode=TwoWay}"
-                                              Content="CHAP"
-                                              Width="90"
-                                              Foreground="LightCoral"
-                                              Margin="10 0 10 0"/>
-                                <ToggleSwitch 
-                                              Content="Persistir"
-                                              Width="90"
-                                              ToolTip.Tip="Mantener este destino conectado cuando reinicie sistema"
-                                              Foreground="DeepSkyBlue"
-                                              IsChecked="{Binding Persistir, Mode=TwoWay}"
-                                              Margin="10 2 10 0"/>
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
+                        <StackPanel Grid.Row="0"
+                                    Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Iqn}"
+                                       Foreground="{DynamicResource AppForegroundBrush}"
+                                       FontWeight="Bold"
+                                       Margin="5,0,0,0"/>
+                        </StackPanel>
 
-                </ListBox.ItemTemplate>
-            </ListBox>
+                        <Path Grid.RowSpan="2"
+                              Grid.Row="0"
+                              Grid.Column="2"
+                              Width="14"
+                              Height="14"
+                              Data="{Binding Conectado, Converter={StaticResource EstadoToGeometryConverter}}"
+                              Fill="{Binding Conectado, Converter={StaticResource BoolToColorConverter}}"
+                              Stroke="DarkGray"
+                              StrokeThickness="{Binding Conectado, Converter={StaticResource BoolToStrokeConverter}}"
+                              Margin="0,0,10,0"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Right"/>
 
-        <Grid   RowSpacing = "5" ShowGridLines="False" RowDefinitions="*,*" ColumnDefinitions="Auto,*,*">
+                        <StackPanel Grid.Row="1"
+                                    Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    Spacing="15"
+                                    Margin="5,2,0,0">
+
+                            <ToggleSwitch IsChecked="{Binding UsaChap, Mode=TwoWay}"
+                                          Content="CHAP"
+                                          Width="90"
+                                          Foreground="LightCoral"
+                                          Margin="10 0 10 0"/>
+
+                            <ToggleSwitch Content="Persistir"
+                                          Width="90"
+                                          ToolTip.Tip="Mantener este destino conectado cuando reinicie sistema"
+                                          Foreground="DeepSkyBlue"
+                                          IsChecked="{Binding Persistir, Mode=TwoWay}"
+                                          Margin="10 2 10 0"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- USUARIO / PASSWORD -->
+        <Grid RowSpacing="5"
+              RowDefinitions="*,*"
+              ColumnDefinitions="Auto,*,*">
+
             <TextBlock Grid.Column="0"
                        Grid.Row="0"
                        Text="Usuario:"
-                       Foreground="White"
+                       Foreground="{DynamicResource AppForegroundBrush}"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        Padding="50, 0 5 0"
                        FontWeight="Bold"
-                       FontSize="15"
-                       />
+                       FontSize="15"/>
+
             <TextBlock Grid.Column="0"
                        Grid.Row="1"
                        Text="Password:"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        Padding="50, 0 5 0"
-                       Foreground="White"
+                       Foreground="{DynamicResource AppForegroundBrush}"
                        FontWeight="Bold"
-                       FontSize="15"
-                       
-                       
-            />
-            
+                       FontSize="15"/>
+
             <TextBox Grid.Row="0"
                      Grid.Column="1"
                      Height="30"
@@ -223,9 +196,10 @@
                      Grid.ColumnSpan="2"
                      Watermark="Deje en blanco sino requiere usuario"
                      Text="{Binding Usuario, Mode=TwoWay}"
-                     Margin=" 0 0 5 0"
-                     />
-            
+                     Margin="0 0 5 0"
+                     Background="{DynamicResource AppBackgroundBrush}"
+                     Foreground="{DynamicResource AppForegroundBrush}"/>
+
             <TextBox Grid.Row="1"
                      Grid.Column="1"
                      Height="30"
@@ -235,74 +209,61 @@
                      Watermark="Deje en blanco sino requiere password"
                      PasswordChar="*"
                      Text="{Binding Password, Mode=TwoWay}"
-                     Margin=" 0 0 5 0"
-            />
-            
+                     Margin="0 0 5 0"
+                     Background="{DynamicResource AppBackgroundBrush}"
+                     Foreground="{DynamicResource AppForegroundBrush}"/>
         </Grid>
-        
-        <Separator VerticalAlignment="Bottom"
-                   HorizontalAlignment="Stretch"
+
+        <Separator HorizontalAlignment="Stretch"
                    Margin="0 10 0 0"
-                   Background="white"
-                   
-        />
-        
-       <Grid RowDefinitions="*" ColumnDefinitions="*,Auto,Auto">
-           <Image Grid.Column="0"
-                  Height="45"
-                  Width="100"
-                  Margin="10 15 10 0"
-                  
-                  
-                  Source="../Assets/Linux-Logo.png"
-                  HorizontalAlignment="Left"
-                  />
-           <TextBlock Grid.Column="0"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Stretch"
-                      Foreground="White"
-                      FontWeight="DemiBold"
-                      FontSize="25"
-                      Height="45"
-                      Padding="0 15 0 0"
-                      Text="Cerratonix"/>
-           
-           <Button Grid.Column="1"
-                   Grid.Row="0"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
+                   Background="{DynamicResource AppForegroundBrush}"/>
+
+        <!-- PIE DE PAGINA -->
+        <Grid RowDefinitions="*"
+              ColumnDefinitions="*,Auto,Auto">
+
+            <Image Grid.Column="0"
                    Height="45"
-                   Content="Desconectar"
-                   Command="{Binding DesconectarSeleccionadosCommand}"
-                   HorizontalContentAlignment="Center"
-                   VerticalContentAlignment="Center"
-                   Background="Red"
-                   Foreground="White"
-                   FontWeight="Bold"
-                   Margin="0 15 10 0"
-                   />
-           
-           <Button Grid.Column="2"
-                   Grid.Row="0"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   VerticalContentAlignment="Center"
-                   
-                   Height="45"
-                   Content="Conectar"
-                   Command="{Binding ConectarSeleccionadosCommand}"
-                   Background="#00aaa7"
-                   Foreground="White"
-                   FontWeight="Bold"
-                   Margin="0 15 10 0"
-                   HorizontalContentAlignment="Center"
-                   
-                   />
-           
-           
-       </Grid>
-        
-        
+                   Width="100"
+                   Margin="10 15 10 0"
+                   Source="../Assets/Linux-Logo.png"
+                   HorizontalAlignment="Left"/>
+
+            <TextBlock Grid.Column="0"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Stretch"
+                       Foreground="{DynamicResource AppForegroundBrush}"
+                       FontWeight="DemiBold"
+                       FontSize="25"
+                       Height="45"
+                       Padding="0 15 0 0"
+                       Text="Cerratonix"/>
+
+            <!-- BOTÓN ROJO (NO CAMBIA) -->
+            <Button Grid.Column="1"
+                    Height="45"
+                    Content="Desconectar"
+                    Command="{Binding DesconectarSeleccionadosCommand}"
+                    Background="Red"
+                    Foreground="White"
+                    FontWeight="Bold"
+                    VerticalContentAlignment="Center"
+
+                    Margin="0 15 10 0"/>
+
+            <!-- BOTÓN TURQUESA (NO CAMBIA) -->
+            <Button Grid.Column="2"
+                    Height="45"
+                    Content="Conectar"
+                    Command="{Binding ConectarSeleccionadosCommand}"
+                    Background="#00aaa7"
+                    Foreground="White"
+                    FontWeight="Bold"
+                    VerticalContentAlignment="Center"
+                    
+
+                    Margin="0 15 10 0"/>
+        </Grid>
+
     </StackPanel>
-  
 </Window>

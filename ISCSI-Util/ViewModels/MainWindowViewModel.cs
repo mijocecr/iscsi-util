@@ -1,6 +1,4 @@
-﻿
-
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -26,9 +24,36 @@ public partial class MainWindowViewModel : ObservableObject
         set => SetProperty(ref _ipServidor, value);
     }
 
-    
-    
-    
+    // ⭐ IMPORTANTE:
+    // Ya NO llamamos InicializarAsync() aquí.
+    // El constructor queda limpio.
+    public MainWindowViewModel()
+    {
+    }
+
+    // ⭐ Ahora es PÚBLICO para que MainWindow lo llame en OnOpened()
+    public async Task InicializarAsync()
+    {
+        // 1) Pedir contraseña primero
+        //await EnsurePasswordAsync();
+
+        // 2) Ahora sí podemos usar sudo
+        CargarDestinosConectados();
+    }
+
+    private void CargarDestinosConectados()
+    {
+        var conectados = IscsiHelper.ObtenerDestinosConectados();
+
+        foreach (var d in conectados)
+        {
+            if (!Destinos.Any(x => x.Iqn == d.Iqn && x.Ip == d.Ip))
+                Destinos.Add(d);
+        }
+
+        Console.WriteLine($"[AUTO] Se cargaron {Destinos.Count} destinos conectados al iniciar.");
+    }
+
     // Comando asíncrono para descubrir
     [RelayCommand]
     public async Task DescubrirDestinosAsync()
@@ -112,4 +137,3 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 }
-
