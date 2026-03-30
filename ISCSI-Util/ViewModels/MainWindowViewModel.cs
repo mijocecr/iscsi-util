@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -17,6 +18,9 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private string usuario;
     [ObservableProperty] private string password;
 
+    // ⭐ NUEVO: propiedad que controla si se muestran los campos CHAP
+    [ObservableProperty] private bool hayChapActivo;
+
     private string _ipServidor;
     public string IpServidor
     {
@@ -24,20 +28,40 @@ public partial class MainWindowViewModel : ObservableObject
         set => SetProperty(ref _ipServidor, value);
     }
 
-    // ⭐ IMPORTANTE:
-    // Ya NO llamamos InicializarAsync() aquí.
-    // El constructor queda limpio.
+    // Constructor limpio
     public MainWindowViewModel()
     {
+        // ⭐ Suscribirse a cambios en la colección
+        Destinos.CollectionChanged += (_, __) =>
+        {
+            // Suscribir a cambios internos de cada destino
+            foreach (var d in Destinos)
+            {
+                d.PropertyChanged -= Destino_PropertyChanged;
+                d.PropertyChanged += Destino_PropertyChanged;
+            }
+
+            RecalcularChap();
+        };
     }
 
-    // ⭐ Ahora es PÚBLICO para que MainWindow lo llame en OnOpened()
+    // ⭐ Detectar cambios en UsaChap dentro de cada destino
+    private void Destino_PropertyChanged(object sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IscsiDestino.UsaChap))
+            RecalcularChap();
+    }
+
+    // ⭐ Recalcular si hay CHAP activo en algún destino
+    private void RecalcularChap()
+    {
+        HayChapActivo = Destinos.Any(d => d.UsaChap);
+    }
+
+    // Llamado desde MainWindow.OnOpened()
     public async Task InicializarAsync()
     {
-        // 1) Pedir contraseña primero
-        //await EnsurePasswordAsync();
-
-        // 2) Ahora sí podemos usar sudo
+        // Aquí NO pedimos password, eso ya lo hace MainWindow
         CargarDestinosConectados();
     }
 

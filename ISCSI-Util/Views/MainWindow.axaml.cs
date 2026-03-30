@@ -18,7 +18,7 @@ namespace ISCSI_Util.Views
             this.MinWidth = 500;
             this.MaxHeight = 580;
             this.MaxWidth = 500;
-            this.Title = "iSCSI Util";
+            this.Title = "iscsi-util";
 
             // ⭐ El ViewModel se crea aquí, pero NO se inicializa todavía
             DataContext = new MainWindowViewModel();
