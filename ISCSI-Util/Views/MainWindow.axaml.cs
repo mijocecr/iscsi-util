@@ -25,24 +25,32 @@ namespace ISCSI_Util.Views
         }
 
         // ⭐ Este evento se dispara cuando la ventana YA está visible
+      
         protected override async void OnOpened(EventArgs e)
         {
             base.OnOpened(e);
 
-            // 1) Primero pedir la contraseña (PasswordDialog)
+            // 1) Pedir contraseña
             await SolicitarPassword();
 
-            // 2) Ahora que Credenciales.AdminPassword ya está cargada,
-            //    podemos arrancar iscsid sin errores
+            // 2) Si el usuario canceló o no escribió nada, no seguimos
+            if (string.IsNullOrWhiteSpace(Credenciales.AdminPassword))
+            {
+                Console.WriteLine("[ERROR] No se ingresó contraseña. Abortando inicialización.");
+                return;
+            }
+
+            // 3) Asegurar iscsid
             IscsiHelper.AsegurarServicioIscsid();
 
-            // 3) Ahora sí podemos inicializar el ViewModel
+            // 4) Inicializar ViewModel (cargar sesiones activas)
             if (DataContext is MainWindowViewModel vm)
             {
-                await vm.InicializarAsync();   // ⭐ Aquí se cargan los destinos conectados
+                await vm.InicializarAsync();
             }
         }
 
+        
         public async Task SolicitarPassword()
         {
             // Crear el diálogo

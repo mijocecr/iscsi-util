@@ -85,4 +85,8 @@ public partial class IscsiDestino : ObservableObject
 
     // ⭐ Ruta real de la partición (si existe)
     public string PartitionPath { get; set; }
+    
+    
+    
+    
 }

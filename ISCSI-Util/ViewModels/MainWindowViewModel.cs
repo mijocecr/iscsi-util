@@ -71,6 +71,9 @@ public partial class MainWindowViewModel : ObservableObject
 
         foreach (var d in conectados)
         {
+            // ⭐ Completar información igual que un destino descubierto
+            IscsiHelper.CompletarInformacionDestino(d);
+
             if (!Destinos.Any(x => x.Iqn == d.Iqn && x.Ip == d.Ip))
                 Destinos.Add(d);
         }
@@ -78,6 +81,7 @@ public partial class MainWindowViewModel : ObservableObject
         Console.WriteLine($"[AUTO] Se cargaron {Destinos.Count} destinos conectados al iniciar.");
     }
 
+    
     // Comando asíncrono para descubrir
     [RelayCommand]
     public async Task DescubrirDestinosAsync()

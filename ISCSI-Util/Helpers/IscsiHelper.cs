@@ -612,13 +612,15 @@ WantedBy=multi-user.target
 
             foreach (var s in sesiones)
             {
-                // Ejemplo de línea:
+                // Ejemplo:
                 // tcp: [1] 192.168.1.10:3260,1 iqn.2024-01.com.server:target1
 
                 var tokens = s.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (tokens.Length < 2) continue;
+                if (tokens.Length < 3) continue;
 
-                string ip = tokens[1].Split(':')[0];
+                // ⭐ IP está en tokens[2], no en tokens[1]
+                string ip = tokens[2].Split(':')[0];
+
                 string iqn = tokens.LastOrDefault(t => t.StartsWith("iqn."));
                 if (string.IsNullOrEmpty(iqn)) continue;
 
@@ -637,6 +639,47 @@ WantedBy=multi-user.target
         }
 
         return destinos;
+    }
+
+    
+    public static void CompletarInformacionDestino(IscsiDestino d)
+    {
+        // 1. Buscar symlink en /dev/disk/by-path/
+        var byPath = Ejecutar("ls", "-1 /dev/disk/by-path/")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var match = byPath.FirstOrDefault(line =>
+            line.Contains(d.Ip) && line.Contains("lun"));
+
+        if (match != null)
+            d.DevicePath = "/dev/disk/by-path/" + match.Trim();
+
+        // 2. Detectar partición real
+        if (!string.IsNullOrWhiteSpace(d.DevicePath))
+        {
+            var lsblkOut = Ejecutar("lsblk", "-rno NAME " + d.DevicePath);
+            var lines = lsblkOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            if (lines.Length > 1)
+                d.PartitionPath = "/dev/" + lines[1].Trim();
+            else
+                d.PartitionPath = d.DevicePath;
+        }
+
+        // 3. Detectar mountpoint
+        if (!string.IsNullOrWhiteSpace(d.PartitionPath))
+        {
+            var mounts = Ejecutar("mount", "");
+            var line = mounts.Split('\n')
+                .FirstOrDefault(l => l.Contains(d.PartitionPath));
+
+            if (line != null)
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 3)
+                    d.MountPoint = parts[2];
+            }
+        }
     }
 
     
