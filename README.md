@@ -5,7 +5,7 @@ Herramienta para Linux escrita en **C# con Avalonia** para descubrir, conectar y
 esta inspirado en el iniciador iSCSI de Microsoft Windows.
 esta herramienta no necesita configuración ni comandos una vez esta instalada. 
 Inicialmente se desarrollo para Manjaro/Arch pero existen binarios portables, que pueden usarse sin problema en otras distribuciones.
-
+(https://github.com/mijocecr/Iniciador-iSCSI-GUI-Manjaro/releases/tag/iscsi-util)
 
 ---
 
