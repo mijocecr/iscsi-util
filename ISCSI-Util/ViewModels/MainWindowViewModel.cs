@@ -69,6 +69,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public async Task InicializarAsync()
     {
+        CargarDestinosConectados();
     }
 
     private void CargarDestinosConectados()
