@@ -1,5 +1,4 @@
 
-
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,10 +10,19 @@ using ISCSI_Util.Utils;
 
 namespace ISCSI_Util.Helpers;
 
+/// <summary>
+/// Helper class for managing iSCSI operations including discovery, connection, and configuration.
+/// Provides methods to interact with iscsiadm and manage persistent connections.
+/// </summary>
 public static class IscsiHelper
 {
-    #region Descubrir_Destinos
+    #region Discover iSCSI Targets
 
+    /// <summary>
+    /// Discovers iSCSI targets available on the specified IP address.
+    /// Returns a list of discovered targets with their current connection status.
+    /// Sends a desktop notification with the count of discovered targets.
+    /// </summary>
     public static List<IscsiDestino> Descubrir(string ip)
     {
         var destinos = new List<IscsiDestino>();
@@ -211,13 +219,21 @@ process.StandardInput.Close();
         return process.ExitCode;
     }
 
-
+    /// <summary>
+    /// Retrieves the current user's group name using the 'id' command.
+    /// Falls back to 'users' group if detection fails.
+    /// </summary>
     private static string ObtenerGrupoUsuario()
     {
         var grupo = Ejecutar("id", "-gn").Trim();
         return string.IsNullOrWhiteSpace(grupo) ? "users" : grupo;
     }
 
+    /// <summary>
+    /// Detects the filesystem type from blkid output.
+    /// Supports ext2/3/4, xfs, btrfs, f2fs, ntfs, vfat, exfat, iso9660.
+    /// Falls back to ext4 if type cannot be determined.
+    /// </summary>
     private static string DetectarFsType(string blkidOut)
     {
         if (blkidOut.Contains("TYPE=\"ext2\"")) return "ext2";
@@ -233,11 +249,14 @@ process.StandardInput.Close();
         return "ext4"; // fallback
     }
 
-    // Conectar
-  
-   
-   public static void Conectar(IscsiDestino destino)
-{
+    /// <summary>
+    /// Connects to an iSCSI target and mounts it.
+    /// Handles CHAP authentication if configured.
+    /// Creates mount directory and sets appropriate permissions.
+    /// Sends desktop notification on completion.
+    /// </summary>
+    public static void Conectar(IscsiDestino destino)
+    {
     try
     {
         Console.WriteLine($"[DEBUG] Iniciando conexión para IQN={destino.Iqn}, IP={destino.Ip}, UsaChap={destino.UsaChap}");
@@ -405,6 +424,11 @@ process.StandardInput.Close();
     
     
  
+    /// <summary>
+    /// Configures persistent connection for an iSCSI target.
+    /// Sets automatic startup and creates a systemd service for mounting.
+    /// Detects filesystem type and sets appropriate mount permissions.
+    /// </summary>
     public static void ConfigurarPersistencia(IscsiDestino destino, string fsType)
     {
         try
@@ -527,6 +551,10 @@ WantedBy=multi-user.target
 
 // EliminarServicioPersistencia
 
+    /// <summary>
+    /// Removes the systemd service and mount script created for persistent connections.
+    /// Disables automatic mounting after system reboot.
+    /// </summary>
     public static void EliminarServicioPersistencia(IscsiDestino destino)
     {
         try
@@ -562,6 +590,11 @@ WantedBy=multi-user.target
 
     
     
+    /// <summary>
+    /// Ensures the iscsid systemd service is running.
+    /// Restarts it if not already active.
+    /// Required for iSCSI operations to function.
+    /// </summary>
     public static void AsegurarServicioIscsid()
     {
         try
@@ -597,6 +630,10 @@ WantedBy=multi-user.target
     
     //Lista las Sesiones activas
     
+    /// <summary>
+    /// Retrieves a list of currently connected iSCSI targets.
+    /// Parses iscsiadm session output and extracts target information.
+    /// </summary>
     public static List<IscsiDestino> ObtenerDestinosConectados()
     {
         var destinos = new List<IscsiDestino>();
@@ -642,6 +679,10 @@ WantedBy=multi-user.target
     }
 
     
+    /// <summary>
+    /// Completes the target information with device path and mount point.
+    /// Finds the device in /dev/disk/by-path/ and detects the actual partition.
+    /// </summary>
     public static void CompletarInformacionDestino(IscsiDestino d)
     {
         // 1. Buscar symlink en /dev/disk/by-path/

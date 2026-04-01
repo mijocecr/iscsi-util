@@ -7,8 +7,16 @@ using ISCSI_Util.ViewModels;
 
 namespace ISCSI_Util.Views
 {
+    /// <summary>
+    /// Main application window for the iSCSI Utility.
+    /// Handles password prompt, service initialization, and view model setup.
+    /// </summary>
     public partial class MainWindow : Window
     {
+        /// <summary>
+        /// Initializes the main window with fixed dimensions and creates the view model.
+        /// Sets up the window UI before it becomes visible.
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
@@ -20,44 +28,50 @@ namespace ISCSI_Util.Views
             this.MaxWidth = 500;
             this.Title = "iscsi-util";
 
-            // ⭐ El ViewModel se crea aquí, pero NO se inicializa todavía
+            // Create view model (initialization happens in OnOpened)
             DataContext = new MainWindowViewModel();
         }
 
-        // ⭐ Este evento se dispara cuando la ventana YA está visible
-      
+        /// <summary>
+        /// Handles window opening event.
+        /// Prompts for admin password, ensures iscsid service is running, and initializes the view model.
+        /// This is called after the window becomes visible.
+        /// </summary>
         protected override async void OnOpened(EventArgs e)
         {
             base.OnOpened(e);
 
-            // 1) Pedir contraseña
+            // 1) Prompt for admin password
             await SolicitarPassword();
 
-            // 2) Si el usuario canceló o no escribió nada, no seguimos
+            // 2) If user cancelled or didn't enter password, abort
             if (string.IsNullOrWhiteSpace(Credenciales.AdminPassword))
             {
                 Console.WriteLine("[ERROR] No se ingresó contraseña. Abortando inicialización.");
                 return;
             }
 
-            // 3) Asegurar iscsid
+            // 3) Ensure iscsid service is running
             IscsiHelper.AsegurarServicioIscsid();
 
-            // 4) Inicializar ViewModel (cargar sesiones activas)
+            // 4) Initialize view model (load active sessions)
             if (DataContext is MainWindowViewModel vm)
             {
                 await vm.InicializarAsync();
             }
         }
 
-        
+        /// <summary>
+        /// Shows a password dialog and stores the entered password.
+        /// Used to collect admin credentials for iSCSI operations.
+        /// </summary>
         public async Task SolicitarPassword()
         {
-            // Crear el diálogo
+            // Create and configure the password dialog
             var dialog = new PasswordDialog();
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-            // Asignar DataContext
+            // Set up the dialog with a callback to store the entered password
             dialog.DataContext = new PasswordDialogViewModel(pass =>
             {
                 Credenciales.AdminPassword = pass;

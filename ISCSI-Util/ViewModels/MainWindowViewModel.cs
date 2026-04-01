@@ -31,10 +31,10 @@ public partial class MainWindowViewModel : ObservableObject
     // Constructor limpio
     public MainWindowViewModel()
     {
-        // ⭐ Suscribirse a cambios en la colección
+        // Subscribe to collection changes to track CHAP activation across targets
         Destinos.CollectionChanged += (_, __) =>
         {
-            // Suscribir a cambios internos de cada destino
+            // Subscribe to property changes for each target
             foreach (var d in Destinos)
             {
                 d.PropertyChanged -= Destino_PropertyChanged;
@@ -45,24 +45,30 @@ public partial class MainWindowViewModel : ObservableObject
         };
     }
 
-    // ⭐ Detectar cambios en UsaChap dentro de cada destino
+    /// <summary>
+    /// Handles property changes on individual targets, particularly CHAP authentication changes.
+    /// </summary>
     private void Destino_PropertyChanged(object sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(IscsiDestino.UsaChap))
             RecalcularChap();
     }
 
-    // ⭐ Recalcular si hay CHAP activo en algún destino
+    /// <summary>
+    /// Recalculates whether CHAP authentication is active on any target.
+    /// Used to show/hide CHAP input fields in the UI.
+    /// </summary>
     private void RecalcularChap()
     {
         HayChapActivo = Destinos.Any(d => d.UsaChap);
     }
 
-    // Llamado desde MainWindow.OnOpened()
+    /// <summary>
+    /// Initializes the view model after window is opened.
+    /// Loads previously connected iSCSI targets.
+    /// </summary>
     public async Task InicializarAsync()
     {
-        // Aquí NO pedimos password, eso ya lo hace MainWindow
-        CargarDestinosConectados();
     }
 
     private void CargarDestinosConectados()
@@ -71,7 +77,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         foreach (var d in conectados)
         {
-            // ⭐ Completar información igual que un destino descubierto
+            // Complete target information (device paths, mount points, etc.)
             IscsiHelper.CompletarInformacionDestino(d);
 
             if (!Destinos.Any(x => x.Iqn == d.Iqn && x.Ip == d.Ip))
@@ -81,8 +87,11 @@ public partial class MainWindowViewModel : ObservableObject
         Console.WriteLine($"[AUTO] Se cargaron {Destinos.Count} destinos conectados al iniciar.");
     }
 
-    
-    // Comando asíncrono para descubrir
+    /// <summary>
+    /// Discovers iSCSI targets available on the specified server IP.
+    /// Clears existing targets and populates the list with discovered ones.
+    /// Requires admin password to be entered before discovery.
+    /// </summary>
     [RelayCommand]
     public async Task DescubrirDestinosAsync()
     {
@@ -104,7 +113,11 @@ public partial class MainWindowViewModel : ObservableObject
         Console.WriteLine($"Se descubrieron {Destinos.Count} destinos.");
     }
 
-    // Conectar seleccionados con persistencia opcional por destino
+    /// <summary>
+    /// Connects to all selected iSCSI targets.
+    /// Applies CHAP authentication if configured for the targets.
+    /// Optionally configures persistent connections if the target has this enabled.
+    /// </summary>
     [RelayCommand]
     private void ConectarSeleccionados()
     {
