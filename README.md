@@ -1,9 +1,11 @@
 
 # iSCSI-Util
 
-Herramienta para Linux (Manjaro / Arch) escrita en **C# con Avalonia** para descubrir, conectar y desconectar destinos iSCSI de forma gráfica y sencilla.  
-Incluye soporte para notificaciones en Linux mediante `notify-send`. 
-El ejecutable corre bien en Ubuntu y probablemente en otras distros tambien (https://github.com/mijocecr/Iniciador-iSCSI-GUI-Manjaro/releases/download/iscsi-util/ISCSI-Util).
+Herramienta para Linux escrita en **C# con Avalonia** para descubrir, conectar y desconectar destinos iSCSI de forma gráfica y sencilla.  
+esta inspirado en el iniciador iSCSI de Microsoft Windows.
+esta herramienta no necesita configuración ni comandos una vez esta instalada. 
+Inicialmente se desarrollo para Manjaro/Arch pero existen binarios portables, que pueden usarse sin problema en otras distribuciones.
+(https://github.com/mijocecr/Iniciador-iSCSI-GUI-Manjaro/releases/tag/iscsi-util)
 
 ---
 
@@ -11,22 +13,20 @@ El ejecutable corre bien en Ubuntu y probablemente en otras distros tambien (htt
 
 - Descubrimiento de destinos iSCSI (`iscsiadm -m discovery`).
 - Conexión y desconexión de múltiples destinos seleccionados.
-- Montaje automático en `/mnt/iscsi/<IQN>` con detección de filesystem.
+- Montaje automático y persistencia en `/mnt/iscsi/<IQN>` con detección de filesystem.
 - Ajuste dinámico de permisos y grupo de usuario.
-- Notificaciones de escritorio en Linux:
-  - Al descubrir: número de destinos encontrados.
-  - Al conectar: IQN y punto de montaje.
-  - Al desconectar: IQN y punto de montaje liberado.
+- Notificaciones de escritorio en Linux.
 
 ---
 
-<img width="630" height="738" alt="Captura de pantalla_20260221_141752" src="https://github.com/user-attachments/assets/51a69f96-de09-46f3-9814-4d1f3148dbb9" />
+<img width="630" height="738" alt="Captura de pantalla_20260331_222332" src="https://github.com/user-attachments/assets/f771769c-d942-4c12-8d58-be56b025feef" />
+
 
 
 
 ## 📦 Requisitos
 
-- **.NET 9.0** o superior.
+- **.NET 9.0**.
 - **Avalonia UI**.
 - **CommunityToolkit.Mvvm**.
 - Herramientas del sistema:
