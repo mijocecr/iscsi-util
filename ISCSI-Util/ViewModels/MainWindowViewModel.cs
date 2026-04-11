@@ -169,6 +169,18 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Initializes a single iSCSI target partition.
+    /// </summary>
+    [RelayCommand]
+    private void InicializarDestino(IscsiDestino destino)
+    {
+        if (destino == null)
+            return;
+
+        IscsiHelper.InicializarDestino(destino);
+    }
+
     // Método auxiliar para abrir el PasswordDialog
     private async Task EnsurePasswordAsync()
     {

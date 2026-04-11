@@ -48,6 +48,10 @@ public partial class IscsiDestino : ObservableObject
     [ObservableProperty]
     private string passwordChap;
 
+    /// <summary>Indicates if the partition has a filesystem.</summary>
+    [ObservableProperty]
+    private bool tieneFilesystem = false;
+
     /// <summary>The actual partition path if a partition exists; otherwise the device path.</summary>
     public string PartitionPath { get; set; }
 }

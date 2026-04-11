@@ -721,6 +721,47 @@ WantedBy=multi-user.target
                     d.MountPoint = parts[2];
             }
         }
+
+        // 4. Detectar si tiene filesystem (solo si está conectado)
+        if (!string.IsNullOrWhiteSpace(d.PartitionPath))
+        {
+            try
+            {
+                var blkidOut = Ejecutar("sudo", $"-S blkid -p {d.PartitionPath}");
+                d.TieneFilesystem = !string.IsNullOrWhiteSpace(blkidOut) && blkidOut.Contains("TYPE=");
+            }
+            catch
+            {
+                d.TieneFilesystem = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Initializes an iSCSI target partition by formatting it with ext4.
+    /// </summary>
+    public static void InicializarDestino(IscsiDestino destino)
+    {
+        if (string.IsNullOrWhiteSpace(destino.PartitionPath))
+        {
+            Console.WriteLine($"Error: No se encontró ruta de partición para {destino.Iqn}");
+            return;
+        }
+
+        try
+        {
+            Console.WriteLine($"Formateando {destino.PartitionPath} con ext4...");
+            Ejecutar("sudo", $"-S mkfs.ext4 -F {destino.PartitionPath}");
+            
+            destino.TieneFilesystem = true;
+            NotificadorLinux.Enviar($"Destino {destino.Iqn} inicializado con éxito");
+            Console.WriteLine($"Destino {destino.Iqn} inicializado correctamente");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al inicializar {destino.Iqn}: {ex.Message}");
+            destino.TieneFilesystem = false;
+        }
     }
 
     

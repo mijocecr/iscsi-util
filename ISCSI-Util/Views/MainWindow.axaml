@@ -108,7 +108,7 @@
                      ItemsSource="{Binding Destinos}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="models:IscsiDestino">
-                        <Grid ColumnDefinitions="Auto,*,Auto"
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto"
                               RowDefinitions="Auto,Auto"
                               Margin="5">
 
@@ -131,9 +131,24 @@
                                            Margin="5,0,0,0"/>
                             </StackPanel>
 
+                            <Button Grid.Row="0"
+                                    Grid.RowSpan="2"
+                                    Grid.Column="2"
+                                    Content="Inicializar"
+                                    IsVisible="{Binding !TieneFilesystem}"
+                                    Command="{Binding $parent[Window].DataContext.InicializarDestinoCommand}"
+                                    CommandParameter="{Binding}"
+                                    Background="Orange"
+                                    Foreground="Black"
+                                    FontWeight="Bold"
+                                    VerticalAlignment="Center"
+                                    VerticalContentAlignment="Center"
+                                    Margin="5,5,20,5"
+                                    Padding="10,5"/>
+
                             <Path Grid.RowSpan="2"
                                   Grid.Row="0"
-                                  Grid.Column="2"
+                                  Grid.Column="3"
                                   Width="14"
                                   Height="14"
                                   Data="{Binding Conectado, Converter={StaticResource EstadoToGeometryConverter}}"
@@ -146,6 +161,7 @@
 
                             <StackPanel Grid.Row="1"
                                         Grid.Column="1"
+                                        Grid.ColumnSpan="2"
                                         Orientation="Horizontal"
                                         Spacing="15"
                                         Margin="5,2,0,0">
