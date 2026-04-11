@@ -143,7 +143,7 @@
                                     FontWeight="Bold"
                                     VerticalAlignment="Center"
                                     VerticalContentAlignment="Center"
-                                    Margin="5,5,20,5"
+                                    Margin="2,5,20,5"
                                     Padding="10,5"/>
 
                             <Path Grid.RowSpan="2"
