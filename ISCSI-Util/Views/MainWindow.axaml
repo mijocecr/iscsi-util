@@ -101,16 +101,17 @@
                         Command="{Binding DescubrirDestinosCommand}"/>
             </Grid>
 
-            <!-- LISTA DE DESTINOS (RESPONSIVA) -->
-            <ListBox Grid.Row="3"
-                     Background="{DynamicResource AppBackgroundBrush}"
-                     Margin="5 10 5 10"
-                     ItemsSource="{Binding Destinos}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="models:IscsiDestino">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto"
-                              RowDefinitions="Auto,Auto"
-                              Margin="5">
+            <!-- LISTA DE DESTINOS (RESPONSIVA Y SCROLLABLE) -->
+            <ScrollViewer Grid.Row="3"
+                          Margin="5 10 5 10"
+                          VerticalScrollBarVisibility="Auto">
+                <ListBox Background="{DynamicResource AppBackgroundBrush}"
+                         ItemsSource="{Binding Destinos}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:IscsiDestino">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                                  RowDefinitions="Auto,Auto"
+                                  Margin="5">
 
                             <CheckBox Grid.RowSpan="2"
                                       Grid.Column="0"
@@ -183,6 +184,7 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+            </ScrollViewer>
 
             <!-- PANEL CHAP (Auto) -->
             <StackPanel Grid.Row="4"
