@@ -195,6 +195,13 @@ public partial class MainWindowViewModel : ObservableObject
             return;
 
         IscsiHelper.InicializarDestino(destino);
+
+        // Double connection to ensure filesystem is properly detected
+        IscsiHelper.Conectar(destino);
+        IscsiHelper.Conectar(destino); //Esta llamada doble es intencional - no tocar
+
+        // Complete target information to detect the new filesystem
+        IscsiHelper.CompletarInformacionDestino(destino);
     }
 
     // Método auxiliar para abrir el PasswordDialog
