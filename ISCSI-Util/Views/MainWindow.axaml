@@ -105,7 +105,7 @@
             <ScrollViewer Grid.Row="3"
                           Margin="5 10 5 10"
                           VerticalScrollBarVisibility="Auto"
-                          MaxHeight="400">
+                          HorizontalScrollBarVisibility="Disabled">
                 <ListBox Background="{DynamicResource AppBackgroundBrush}"
                          ItemsSource="{Binding Destinos}">
                     <ListBox.ItemTemplate>
