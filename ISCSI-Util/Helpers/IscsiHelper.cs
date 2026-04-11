@@ -690,12 +690,14 @@ WantedBy=multi-user.target
     /// </summary>
     public static void CompletarInformacionDestino(IscsiDestino d)
     {
+        Console.WriteLine($"[INICIO] CompletarInformacionDestino para {d.Iqn} ({d.Ip})");
+        
         // 1. Buscar symlink en /dev/disk/by-path/
         var byPath = Ejecutar("ls", "-1 /dev/disk/by-path/")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         var match = byPath.FirstOrDefault(line =>
-            line.Contains(d.Ip) && line.Contains("lun"));
+            line.Contains(d.Ip) && line.Contains("lun") && line.Contains(d.Iqn.Split(':')[1]));
 
         if (match != null)
             d.DevicePath = "/dev/disk/by-path/" + match.Trim();
@@ -740,6 +742,12 @@ WantedBy=multi-user.target
                 d.TieneFilesystem = false;
             }
         }
+        
+        Console.WriteLine($"  Device Path: {d.DevicePath ?? "NO ENCONTRADO"}");
+        Console.WriteLine($"  Partition Path: {d.PartitionPath ?? "NO ENCONTRADO"}");
+        Console.WriteLine($"  Mount Point: {d.MountPoint ?? "NO MONTADO"}");
+        Console.WriteLine($"  TieneFilesystem: {d.TieneFilesystem}");
+        Console.WriteLine($"[FIN] CompletarInformacionDestino para {d.Iqn}");
     }
 
     /// <summary>
