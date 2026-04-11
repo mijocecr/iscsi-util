@@ -21,11 +21,16 @@ public partial class MainWindowViewModel : ObservableObject
     // ⭐ NUEVO: propiedad que controla si se muestran los campos CHAP
     [ObservableProperty] private bool hayChapActivo;
 
-    private string _ipServidor;
-    public string IpServidor
+    [ObservableProperty] private string ipServidor;
+
+    // Handle IpServidor changes to load connected targets when empty
+    partial void OnIpServidorChanged(string value)
     {
-        get => _ipServidor;
-        set => SetProperty(ref _ipServidor, value);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            // Load connected targets when textbox is empty
+            CargarDestinosConectados();
+        }
     }
 
     // Constructor limpio
