@@ -135,7 +135,7 @@
                                     Grid.RowSpan="2"
                                     Grid.Column="2"
                                     Content="Inicializar"
-                                    IsVisible="{Binding !TieneFilesystem}"
+                                    IsVisible="{Binding PuedeInicializar}"
                                     Command="{Binding $parent[Window].DataContext.InicializarDestinoCommand}"
                                     CommandParameter="{Binding}"
                                     Background="Orange"

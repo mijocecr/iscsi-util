@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ISCSI_Util.Models;
@@ -52,6 +53,23 @@ public partial class IscsiDestino : ObservableObject
     [ObservableProperty]
     private bool tieneFilesystem = false;
 
+    /// <summary>Computed property: true if target is connected AND has no filesystem (can be initialized).</summary>
+    public bool PuedeInicializar => Conectado && !TieneFilesystem;
+
     /// <summary>The actual partition path if a partition exists; otherwise the device path.</summary>
     public string PartitionPath { get; set; }
+
+    /// <summary>
+    /// Override OnPropertyChanged to notify when computed properties change.
+    /// </summary>
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        
+        // When Conectado or TieneFilesystem change, notify about PuedeInicializar
+        if (e.PropertyName == nameof(Conectado) || e.PropertyName == nameof(TieneFilesystem))
+        {
+            OnPropertyChanged(nameof(PuedeInicializar));
+        }
+    }
 }
