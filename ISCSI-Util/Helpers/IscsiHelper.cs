@@ -56,7 +56,8 @@ public static class IscsiHelper
                     Ip = ip,
                     Iqn = iqn,
                     Conectado = conectado,
-                    Seleccionado = false
+                    Seleccionado = false,
+                    TieneFilesystem = false  // Initialize as false for discovered targets
                 };
 
                 destino.DevicePath = byPath.FirstOrDefault(dev => dev.Contains(ip) && dev.Contains("lun"))
