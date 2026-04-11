@@ -19,7 +19,7 @@
 
     <!-- GRID PRINCIPAL -->
     <Grid Background="{DynamicResource AppBackgroundBrush}"
-          RowDefinitions="Auto,*,Auto">
+          RowDefinitions="*,Auto">
 
         <!-- ===================================================== -->
         <!--                CONTENIDO SUPERIOR (RESPONSIVO)        -->
@@ -248,7 +248,7 @@
         <!-- ===================================================== -->
         <!--                        FOOTER                         -->
         <!-- ===================================================== -->
-        <Grid Grid.Row="2"
+        <Grid Grid.Row="1"
               RowDefinitions="*"
               ColumnDefinitions="*,Auto,Auto"
               Background="{DynamicResource AppBackgroundBrush}">
