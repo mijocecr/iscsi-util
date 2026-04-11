@@ -146,6 +146,9 @@ public partial class MainWindowViewModel : ObservableObject
             IscsiHelper.Conectar(destino);
             IscsiHelper.Conectar(destino); //Esta llamada doble es intencional - no tocar
 
+            // After connecting, complete target information (detect filesystem, mount point, etc)
+            IscsiHelper.CompletarInformacionDestino(destino);
+
             if (destino.Persistir)
             {
                 IscsiHelper.ConfigurarPersistencia(destino, "ext4");
