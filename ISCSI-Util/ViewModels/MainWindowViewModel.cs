@@ -90,7 +90,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     /// <summary>
     /// Discovers iSCSI targets available on the specified server IP.
-    /// Clears existing targets and populates the list with discovered ones.
+    /// Loads connected targets first, then adds newly discovered ones.
     /// Requires admin password to be entered before discovery.
     /// </summary>
     [RelayCommand]
@@ -98,18 +98,31 @@ public partial class MainWindowViewModel : ObservableObject
     {
         await EnsurePasswordAsync();
 
-        Destinos.Clear();
-
         if (string.IsNullOrWhiteSpace(IpServidor))
         {
             Console.WriteLine("No se indicó IP.");
             return;
         }
 
+        // First, load already connected targets
+        var conectados = IscsiHelper.ObtenerDestinosConectados();
+        Destinos.Clear();
+
+        foreach (var d in conectados)
+        {
+            IscsiHelper.CompletarInformacionDestino(d);
+            if (!Destinos.Any(x => x.Iqn == d.Iqn && x.Ip == d.Ip))
+                Destinos.Add(d);
+        }
+
+        // Then discover new targets from server
         var encontrados = IscsiHelper.Descubrir(IpServidor);
 
         foreach (var destino in encontrados)
-            Destinos.Add(destino);
+        {
+            if (!Destinos.Any(x => x.Iqn == destino.Iqn && x.Ip == destino.Ip))
+                Destinos.Add(destino);
+        }
 
         Console.WriteLine($"Se descubrieron {Destinos.Count} destinos.");
     }
