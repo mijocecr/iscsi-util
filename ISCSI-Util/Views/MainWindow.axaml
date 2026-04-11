@@ -144,6 +144,7 @@
                                     FontWeight="Bold"
                                     FontSize="11"
                                     VerticalAlignment="Center"
+                                    HorizontalAlignment="Right"
                                     VerticalContentAlignment="Center"
                                     Margin="2,0,15,0"
                                     Padding="8,3"/>
