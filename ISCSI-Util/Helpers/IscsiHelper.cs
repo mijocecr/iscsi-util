@@ -67,6 +67,10 @@ public static class IscsiHelper
                     destino.DevicePath = Path.Combine("/dev/disk/by-path", destino.DevicePath);
 
                 destinos.Add(destino);
+
+                // If already connected, complete information to detect filesystem
+                if (destino.Conectado)
+                    CompletarInformacionDestino(destino);
             }
         }
         catch (Exception ex)
