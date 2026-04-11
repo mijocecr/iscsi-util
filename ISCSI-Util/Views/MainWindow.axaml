@@ -25,7 +25,7 @@
         <!--                CONTENIDO SUPERIOR (RESPONSIVO)        -->
         <!-- ===================================================== -->
         <Grid Grid.Row="0"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+              RowDefinitions="Auto,Auto,Auto,*,Auto"
               Background="{DynamicResource AppBackgroundBrush}">
 
             <!-- PANEL SUPERIOR -->
