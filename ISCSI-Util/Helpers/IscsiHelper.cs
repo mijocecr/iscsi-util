@@ -145,7 +145,7 @@ process.StandardInput.Close();
     const int timeoutMs = 5000;
     if (!process.WaitForExit(timeoutMs))
     {
-        NotificadorLinux.Enviar("[ERROR] Timeout esperando al proceso, se aborta.");
+        //NotificadorLinux.Enviar("[ERROR] Timeout esperando al proceso, se aborta.");
         Console.WriteLine("[ERROR] Timeout esperando al proceso, se aborta.");
         try { process.Kill(); } catch { /* ignorar */ }
         return string.Empty;
@@ -166,7 +166,7 @@ process.StandardInput.Close();
     
     if (fileName == "sudo" && process.ExitCode != 0)
     {
-        NotificadorLinux.Enviar("[ERROR] Fallo de autenticación de sudo (ExitCode != 0). Se aborta.");
+       // NotificadorLinux.Enviar("[ERROR] Fallo de autenticación de sudo (ExitCode != 0). Se aborta.");
         Console.WriteLine("[ERROR] Fallo de autenticación de sudo (ExitCode != 0). Se aborta.");
         Credenciales.AdminPassword = string.Empty;
 
@@ -448,7 +448,7 @@ process.StandardInput.Close();
             Ejecutar("sudo", 
                 $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --op update --name node.startup --value manual");
 
-            NotificadorLinux.Enviar($"Persistencia eliminada para {destino.Iqn}");
+            Console.WriteLine($"Persistencia eliminada para {destino.Iqn}");
         }
 
         NotificadorLinux.Enviar($"Destino {destino.Iqn} desconectado correctamente.");
@@ -498,7 +498,7 @@ process.StandardInput.Close();
             }
             else
             {
-                NotificadorLinux.Enviar($"El UUID {uuid} ya existe en /etc/fstab, no se añadió duplicado.");
+                Console.WriteLine($"El UUID {uuid} ya existe en /etc/fstab, no se añadió duplicado.");
             }
         }
         catch (Exception ex)
@@ -618,7 +618,7 @@ WantedBy=multi-user.target
             Ejecutar("sudo",
                 $"-S iscsiadm -m node -T '{destino.Iqn}' -p {destino.Ip} --op update --name node.startup --value manual");
 
-            NotificadorLinux.Enviar($"Persistencia eliminada para {destino.Iqn}");
+            Console.WriteLine($"Persistencia eliminada para {destino.Iqn}");
         }
         catch (Exception ex)
         {
