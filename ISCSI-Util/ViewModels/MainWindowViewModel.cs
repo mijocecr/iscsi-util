@@ -188,7 +188,9 @@ public partial class MainWindowViewModel : ObservableObject
     /// <summary>
     /// Initializes a single iSCSI target partition.
     /// </summary>
-    [RelayCommand]
+   /* [RelayCommand]
+  
+   
     private void InicializarDestino(IscsiDestino destino)
     {
         if (destino == null)
@@ -203,7 +205,41 @@ public partial class MainWindowViewModel : ObservableObject
         // Complete target information to detect the new filesystem
         IscsiHelper.CompletarInformacionDestino(destino);
     }
+*/
+    
+    
+   [RelayCommand]
+   private void InicializarDestino(IscsiDestino destino)
+   {
+       if (destino == null)
+           return;
 
+       // 1. Formatear el destino
+       IscsiHelper.InicializarDestino(destino);
+
+       // Si falló el formateo, no seguir
+       if (!destino.TieneFilesystem)
+           return;
+
+       // 2. Conectar automáticamente (llamada doble intencional)
+       IscsiHelper.Conectar(destino);
+       IscsiHelper.Conectar(destino); // NO TOCAR
+
+       // 3. Completar información del destino
+       IscsiHelper.CompletarInformacionDestino(destino);
+
+       // 4. Configurar persistencia si está marcada
+       if (destino.Persistir)
+       {
+           // ext4 porque InicializarDestino siempre usa ext4
+           IscsiHelper.ConfigurarPersistencia(destino, "ext4");
+           IscsiHelper.CrearServicioPersistencia(destino);
+       }
+   }
+
+    
+    
+    
     // Método auxiliar para abrir el PasswordDialog
     private async Task EnsurePasswordAsync()
     {

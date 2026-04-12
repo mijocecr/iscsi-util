@@ -753,7 +753,7 @@ WantedBy=multi-user.target
     /// <summary>
     /// Initializes an iSCSI target partition by formatting it with ext4.
     /// </summary>
-    public static void InicializarDestino(IscsiDestino destino)
+public static void InicializarDestino(IscsiDestino destino)
     {
         if (string.IsNullOrWhiteSpace(destino.PartitionPath))
         {
@@ -776,7 +776,7 @@ WantedBy=multi-user.target
             destino.TieneFilesystem = false;
         }
     }
-
+    
     
     /////////////////////////// 
 
