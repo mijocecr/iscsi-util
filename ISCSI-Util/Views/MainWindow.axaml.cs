@@ -21,10 +21,10 @@ namespace ISCSI_Util.Views
         {
             InitializeComponent();
             this.Width = 500;
-            this.Height = 580;
-            this.MinHeight = 580;
+            this.Height = 590;
+            this.MinHeight = 590;
             this.MinWidth = 500;
-            this.MaxHeight = 580;
+            this.MaxHeight = 590;
             this.MaxWidth = 500;
             this.Title = "iscsi-util";
 

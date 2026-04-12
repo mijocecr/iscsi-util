@@ -273,13 +273,47 @@ process.StandardInput.Close();
         if (!yaConectado)
         {
             Ejecutar("sudo", $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip}");
-
+/*
             if (destino.UsaChap)
             {
                 Ejecutar("sudo", $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --op=update --name node.session.auth.authmethod --value=CHAP");
                 Ejecutar("sudo", $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --op=update --name node.session.auth.username --value={destino.UsuarioChap}");
                 Ejecutar("sudo", $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --op=update --name node.session.auth.password --value={destino.PasswordChap}");
+            }*/
+
+// Autenticación CHAP o Mutual CHAP
+            if (destino.UsaChap || destino.UsaMutualChap)
+            {
+                // Activar CHAP
+                Ejecutar("sudo", 
+                    $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} " +
+                    "--op=update --name node.session.auth.authmethod --value=CHAP");
+
+                // CHAP unidireccional
+                if (destino.UsaChap)
+                {
+                    Ejecutar("sudo",
+                        $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} " +
+                        $"--op=update --name node.session.auth.username --value={destino.UsuarioChap}");
+
+                    Ejecutar("sudo",
+                        $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} " +
+                        $"--op=update --name node.session.auth.password --value={destino.PasswordChap}");
+                }
+
+                // Mutual CHAP (bidireccional)
+                if (destino.UsaMutualChap)
+                {
+                    Ejecutar("sudo",
+                        $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} " +
+                        $"--op=update --name node.session.auth.username_in --value={destino.UsuarioMutualChap}");
+
+                    Ejecutar("sudo",
+                        $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} " +
+                        $"--op=update --name node.session.auth.password_in --value={destino.PasswordMutualChap}");
+                }
             }
+
 
             Ejecutar("sudo", $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --login");
         }

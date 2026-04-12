@@ -15,11 +15,15 @@ public partial class MainWindowViewModel : ObservableObject
 {
     public ObservableCollection<IscsiDestino> Destinos { get; } = new();
 
+    // CHAP unidireccional
     [ObservableProperty] private string usuario;
     [ObservableProperty] private string password;
-
-    // ⭐ NUEVO: propiedad que controla si se muestran los campos CHAP
     [ObservableProperty] private bool hayChapActivo;
+
+    // ⭐ NUEVO: MUTUAL CHAP
+    [ObservableProperty] private bool hayMutualChapActivo;
+    [ObservableProperty] private string usuarioMutualChap;
+    [ObservableProperty] private string passwordMutualChap;
 
     private string _ipServidor;
     public string IpServidor
@@ -28,13 +32,10 @@ public partial class MainWindowViewModel : ObservableObject
         set => SetProperty(ref _ipServidor, value);
     }
 
-    // Constructor limpio
     public MainWindowViewModel()
     {
-        // Subscribe to collection changes to track CHAP activation across targets
         Destinos.CollectionChanged += (_, __) =>
         {
-            // Subscribe to property changes for each target
             foreach (var d in Destinos)
             {
                 d.PropertyChanged -= Destino_PropertyChanged;
@@ -45,28 +46,21 @@ public partial class MainWindowViewModel : ObservableObject
         };
     }
 
-    /// <summary>
-    /// Handles property changes on individual targets, particularly CHAP authentication changes.
-    /// </summary>
     private void Destino_PropertyChanged(object sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(IscsiDestino.UsaChap))
+        if (e.PropertyName == nameof(IscsiDestino.UsaChap) ||
+            e.PropertyName == nameof(IscsiDestino.UsaMutualChap))
+        {
             RecalcularChap();
+        }
     }
 
-    /// <summary>
-    /// Recalculates whether CHAP authentication is active on any target.
-    /// Used to show/hide CHAP input fields in the UI.
-    /// </summary>
     private void RecalcularChap()
     {
         HayChapActivo = Destinos.Any(d => d.UsaChap);
+        HayMutualChapActivo = Destinos.Any(d => d.UsaMutualChap);
     }
 
-    /// <summary>
-    /// Initializes the view model after window is opened.
-    /// Loads previously connected iSCSI targets.
-    /// </summary>
     public async Task InicializarAsync()
     {
         CargarDestinosConectados();
@@ -78,7 +72,6 @@ public partial class MainWindowViewModel : ObservableObject
 
         foreach (var d in conectados)
         {
-            // Complete target information (device paths, mount points, etc.)
             IscsiHelper.CompletarInformacionDestino(d);
 
             if (!Destinos.Any(x => x.Iqn == d.Iqn && x.Ip == d.Ip))
@@ -88,11 +81,6 @@ public partial class MainWindowViewModel : ObservableObject
         Console.WriteLine($"[AUTO] Se cargaron {Destinos.Count} destinos conectados al iniciar.");
     }
 
-    /// <summary>
-    /// Discovers iSCSI targets available on the specified server IP.
-    /// Loads connected targets first, then adds newly discovered ones.
-    /// Requires admin password to be entered before discovery.
-    /// </summary>
     [RelayCommand]
     public async Task DescubrirDestinosAsync()
     {
@@ -104,7 +92,6 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        // First, load already connected targets
         var conectados = IscsiHelper.ObtenerDestinosConectados();
         Destinos.Clear();
 
@@ -115,7 +102,6 @@ public partial class MainWindowViewModel : ObservableObject
                 Destinos.Add(d);
         }
 
-        // Then discover new targets from server
         var encontrados = IscsiHelper.Descubrir(IpServidor);
 
         foreach (var destino in encontrados)
@@ -127,19 +113,18 @@ public partial class MainWindowViewModel : ObservableObject
         Console.WriteLine($"Se descubrieron {Destinos.Count} destinos.");
     }
 
-    /// <summary>
-    /// Connects to all selected iSCSI targets.
-    /// Applies CHAP authentication if configured for the targets.
-    /// Optionally configures persistent connections if the target has this enabled.
-    /// </summary>
     [RelayCommand]
     private void ConectarSeleccionados()
     {
         foreach (var destino in Destinos.Where(d => d.Seleccionado))
         {
+            // -------------------------
+            // CHAP unidireccional
+            // -------------------------
             if (destino.UsaChap)
             {
-                if (!string.IsNullOrWhiteSpace(Usuario) && !string.IsNullOrWhiteSpace(Password))
+                if (!string.IsNullOrWhiteSpace(Usuario) &&
+                    !string.IsNullOrWhiteSpace(Password))
                 {
                     destino.UsuarioChap = Usuario;
                     destino.PasswordChap = Password;
@@ -156,10 +141,35 @@ public partial class MainWindowViewModel : ObservableObject
                 destino.PasswordChap = null;
             }
 
-            IscsiHelper.Conectar(destino);
-            IscsiHelper.Conectar(destino); //Esta llamada doble es intencional - no tocar
+            // -------------------------
+            // MUTUAL CHAP
+            // -------------------------
+            if (destino.UsaMutualChap)
+            {
+                if (!string.IsNullOrWhiteSpace(UsuarioMutualChap) &&
+                    !string.IsNullOrWhiteSpace(PasswordMutualChap))
+                {
+                    destino.UsuarioMutualChap = UsuarioMutualChap;
+                    destino.PasswordMutualChap = PasswordMutualChap;
+                }
+                else
+                {
+                    Console.WriteLine($"[WARN] Mutual CHAP habilitado pero sin Usuario/Password para {destino.Iqn}. Saltando.");
+                    continue;
+                }
+            }
+            else
+            {
+                destino.UsuarioMutualChap = null;
+                destino.PasswordMutualChap = null;
+            }
 
-            // After connecting, complete target information (detect filesystem, mount point, etc)
+            // -------------------------
+            // Conexión (doble llamada)
+            // -------------------------
+            IscsiHelper.Conectar(destino);
+            IscsiHelper.Conectar(destino); // NO TOCAR
+
             IscsiHelper.CompletarInformacionDestino(destino);
 
             if (destino.Persistir)
@@ -170,7 +180,6 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Desconectar seleccionados y eliminar persistencia si aplica
     [RelayCommand]
     private void DesconectarSeleccionados()
     {
@@ -185,12 +194,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Initializes a single iSCSI target partition.
-    /// </summary>
-   /* [RelayCommand]
-  
-   
+    [RelayCommand]
     private void InicializarDestino(IscsiDestino destino)
     {
         if (destino == null)
@@ -198,49 +202,21 @@ public partial class MainWindowViewModel : ObservableObject
 
         IscsiHelper.InicializarDestino(destino);
 
-        // Double connection to ensure filesystem is properly detected
+        if (!destino.TieneFilesystem)
+            return;
+
         IscsiHelper.Conectar(destino);
-        IscsiHelper.Conectar(destino); //Esta llamada doble es intencional - no tocar
+        IscsiHelper.Conectar(destino); // NO TOCAR
 
-        // Complete target information to detect the new filesystem
         IscsiHelper.CompletarInformacionDestino(destino);
+
+        if (destino.Persistir)
+        {
+            IscsiHelper.ConfigurarPersistencia(destino, "ext4");
+            IscsiHelper.CrearServicioPersistencia(destino);
+        }
     }
-*/
-    
-    
-   [RelayCommand]
-   private void InicializarDestino(IscsiDestino destino)
-   {
-       if (destino == null)
-           return;
 
-       // 1. Formatear el destino
-       IscsiHelper.InicializarDestino(destino);
-
-       // Si falló el formateo, no seguir
-       if (!destino.TieneFilesystem)
-           return;
-
-       // 2. Conectar automáticamente (llamada doble intencional)
-       IscsiHelper.Conectar(destino);
-       IscsiHelper.Conectar(destino); // NO TOCAR
-
-       // 3. Completar información del destino
-       IscsiHelper.CompletarInformacionDestino(destino);
-
-       // 4. Configurar persistencia si está marcada
-       if (destino.Persistir)
-       {
-           // ext4 porque InicializarDestino siempre usa ext4
-           IscsiHelper.ConfigurarPersistencia(destino, "ext4");
-           IscsiHelper.CrearServicioPersistencia(destino);
-       }
-   }
-
-    
-    
-    
-    // Método auxiliar para abrir el PasswordDialog
     private async Task EnsurePasswordAsync()
     {
         if (App.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&

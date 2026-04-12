@@ -17,74 +17,57 @@
         <vm:MainWindowViewModel />
     </Design.DataContext>
 
-    <!-- GRID PRINCIPAL -->
     <Grid Background="{DynamicResource AppBackgroundBrush}"
           RowDefinitions="*,Auto">
 
-        <!-- ===================================================== -->
-        <!--                CONTENIDO SUPERIOR (RESPONSIVO)        -->
-        <!-- ===================================================== -->
         <Grid Grid.Row="0"
-              RowDefinitions="Auto,Auto,Auto,*,Auto"
+              RowDefinitions="Auto,Auto,Auto,2*,*"
               Background="{DynamicResource AppBackgroundBrush}">
 
             <!-- PANEL SUPERIOR -->
             <Panel Grid.Row="0"
-                   HorizontalAlignment="Stretch"
                    Background="{DynamicResource AppForegroundBrush}"
                    Height="60">
-
-                <TextBlock Text="Conectar  iSCSI"
+                <TextBlock Text="Conectar iSCSI"
                            FontWeight="Bold"
                            FontSize="28"
                            Foreground="{DynamicResource AppBackgroundBrush}"
-                           Height="60"
-                           HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Padding="0 10 0 0"
-                           Margin="0 10 0 0"/>
+                           HorizontalAlignment="Center"/>
             </Panel>
 
-            <!-- LABEL DIRECCION IP -->
-            <Grid Grid.Row="1"
-                  RowDefinitions="*" ColumnDefinitions="*,*">
-                <TextBlock Grid.Column="0"
-                           Text="Direccion IP:"
-                           HorizontalAlignment="Left"
-                           VerticalAlignment="Center"
+            <!-- LABEL IP -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*">
+                <TextBlock Text="Dirección IP:"
                            Foreground="{DynamicResource AppForegroundBrush}"
                            FontWeight="Bold"
                            FontSize="20"
-                           Padding="10,0,0,0"
-                           Margin="0 10 0 10"/>
+                           Margin="10 10 0 10"/>
             </Grid>
 
-            <!-- INPUT IP + BOTON DESCUBRIR -->
+            <!-- INPUT IP + BOTÓN DESCUBRIR -->
             <Grid Grid.Row="2"
                   RowDefinitions="Auto,Auto"
                   ColumnDefinitions="Auto,*,Auto">
 
-                <TextBox Grid.Column="0"
-                         HorizontalAlignment="Stretch"
+                <TextBox Grid.ColumnSpan="3"
+                         Text="{Binding IpServidor, Mode=TwoWay}"
                          TextAlignment="Center"
                          FontSize="15"
                          FontWeight="Bold"
                          Margin="5 0 5 10"
-                         Grid.ColumnSpan="3"
-                         Text="{Binding IpServidor, Mode=TwoWay}"
                          Background="{DynamicResource AppBackgroundBrush}"
                          Foreground="{DynamicResource AppForegroundBrush}"/>
 
-                <TextBlock Grid.Column="0"
-                           Grid.Row="1"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Text="[ Unidades Disponibles ]"
+                <TextBlock Grid.Row="1"
+                           Grid.ColumnSpan="2"
+                           Text="{Binding Destinos.Count, StringFormat='[ Unidades Disponibles: {0} ]'}"
                            FontWeight="Bold"
                            FontSize="15"
-                           Grid.ColumnSpan="2"
-                           Foreground="YellowGreen"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
                            Margin="5 5 5 0"/>
+
 
                 <Button Grid.Row="1"
                         Grid.Column="2"
@@ -92,165 +75,205 @@
                         Height="45"
                         Content="Descubrir Destinos"
                         VerticalContentAlignment="Center"
-                        Foreground="Black"
+                        HorizontalAlignment="Center"
                         Background="Yellow"
+                        Foreground="Black"
                         FontWeight="Bold"
-                        HorizontalContentAlignment="Center"
-                        VerticalAlignment="Center"
                         Margin="5 5 5 0"
                         Command="{Binding DescubrirDestinosCommand}"/>
             </Grid>
 
-            <!-- LISTA DE DESTINOS (RESPONSIVA Y SCROLLABLE) -->
-            <ScrollViewer Grid.Row="3"
-                          Margin="5 10 5 10"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <ListBox Background="{DynamicResource AppBackgroundBrush}"
-                         ItemsSource="{Binding Destinos}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:IscsiDestino">
-                            <Grid ColumnDefinitions="Auto,*,Auto,Auto"
-                                  RowDefinitions="Auto,Auto"
-                                  Margin="5">
+            
+            
+            <!-- LISTA DE DESTINOS -->
+<ScrollViewer Grid.Row="3"
+              Margin="5 10 5 10"
+              MinHeight="210"
+              VerticalScrollBarVisibility="Auto">
+    <ListBox ItemsSource="{Binding Destinos}"
+             Background="{DynamicResource AppBackgroundBrush}">
+        <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="models:IscsiDestino">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                      RowDefinitions="Auto,Auto"
+                      Margin="3">
 
-                            <CheckBox Grid.RowSpan="2"
-                                      Grid.Column="0"
-                                      ToolTip.Tip="Marca esta casilla para seleccionar el destino"
-                                      IsChecked="{Binding Seleccionado, Mode=TwoWay}"
-                                      VerticalAlignment="Center"
-                                      Margin="5"
-                                      Foreground="{DynamicResource AppForegroundBrush}"/>
+                    <CheckBox Grid.RowSpan="2"
+                              IsChecked="{Binding Seleccionado, Mode=TwoWay}"
+                              Foreground="{DynamicResource AppForegroundBrush}"
+                              Margin="3"
+                              VerticalAlignment="Center"/>
 
-                            <StackPanel Grid.Row="0"
-                                        Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="8"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Iqn}"
-                                           Foreground="{DynamicResource AppForegroundBrush}"
-                                           FontWeight="Bold"
-                                           Margin="5,0,0,0"/>
-                            </StackPanel>
-
-                            <Button Grid.Row="0"
-                                    Grid.Column="2"
-                                    Content="Inicializar"
-                                    IsVisible="{Binding PuedeInicializar}"
-                                    Command="{Binding $parent[Window].DataContext.InicializarDestinoCommand}"
-                                    CommandParameter="{Binding}"
-                                    Background="Orange"
-                                    Foreground="Black"
-                                    FontWeight="Bold"
-                                    FontSize="11"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Right"
-                                    VerticalContentAlignment="Center"
-                                    Margin="2,0,15,0"
-                                    Padding="8,3"/>
-
-                            <Path Grid.RowSpan="2"
-                                  Grid.Row="0"
-                                  Grid.Column="3"
-                                  Width="14"
-                                  Height="14"
-                                  Data="{Binding Conectado, Converter={StaticResource EstadoToGeometryConverter}}"
-                                  Fill="{Binding Conectado, Converter={StaticResource BoolToColorConverter}}"
-                                  Stroke="DarkGray"
-                                  StrokeThickness="{Binding Conectado, Converter={StaticResource BoolToStrokeConverter}}"
-                                  Margin="0,0,10,0"
-                                  VerticalAlignment="Center"
-                                  HorizontalAlignment="Right"/>
-
-                            <StackPanel Grid.Row="1"
-                                        Grid.Column="1"
-                                        Grid.ColumnSpan="2"
-                                        Orientation="Horizontal"
-                                        Spacing="15"
-                                        Margin="5,2,0,0">
-
-                                <ToggleSwitch IsChecked="{Binding UsaChap, Mode=TwoWay}"
-                                              Content="CHAP"
-                                              Width="90"
-                                              Foreground="LightCoral"
-                                              Margin="10 0 10 0"/>
-
-                                <ToggleSwitch Content="Persistir"
-                                              Width="90"
-                                              ToolTip.Tip="Mantener este destino conectado cuando reinicie sistema"
-                                              Foreground="DeepSkyBlue"
-                                              IsChecked="{Binding Persistir, Mode=TwoWay}"
-                                              Margin="10 2 10 0"/>
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-            </ScrollViewer>
-
-            <!-- PANEL CHAP (Auto) -->
-            <StackPanel Grid.Row="4"
-                        Margin="0 10 0 0"
-                        IsVisible="{Binding HayChapActivo}">
-
-                <Grid RowSpacing="5"
-                      RowDefinitions="*,*"
-                      ColumnDefinitions="Auto,*,*">
-
-                    <TextBlock Grid.Column="0"
-                               Grid.Row="0"
-                               Text="Usuario:"
-                               Foreground="{DynamicResource AppForegroundBrush}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Padding="50, 0 5 0"
-                               FontWeight="Bold"
-                               FontSize="15"/>
-
-                    <TextBlock Grid.Column="0"
-                               Grid.Row="1"
-                               Text="Password:"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Padding="50, 0 5 0"
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Iqn}"
                                Foreground="{DynamicResource AppForegroundBrush}"
                                FontWeight="Bold"
-                               FontSize="15"/>
+                               Margin="3 0 0 0"
+                               VerticalAlignment="Center"/>
 
-                    <TextBox Grid.Row="0"
-                             Grid.Column="1"
-                             Height="30"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Stretch"
-                             Grid.ColumnSpan="2"
-                             
+                    <Button Grid.Column="2"
+                            Content="Init"
+                            ToolTip.Tip="Crea un sistema de archivos básico en el disco para permitir su gestión inicial."
+                            IsVisible="{Binding PuedeInicializar}"
+                            Command="{Binding $parent[Window].DataContext.InicializarDestinoCommand}"
+                            CommandParameter="{Binding}"
+                            Background="Orange"
+                            Foreground="Black"
+                            FontWeight="Bold"
+                            FontSize="10"
+                            Margin="2 0 10 0"
+                            Padding="4 2"
+                            
+                            VerticalAlignment="Center"/>
+
+                    <Path Grid.Column="3"
+                          Width="10"
+                          Height="10"
+                          Data="{Binding Conectado, Converter={StaticResource EstadoToGeometryConverter}}"
+                          Fill="{Binding Conectado, Converter={StaticResource BoolToColorConverter}}"
+                          Stroke="DarkGray"
+                          Margin="0 0 6 0"
+                          VerticalAlignment="Center"/>
+
+                    <StackPanel Grid.Row="1"
+                                Grid.Column="1"
+                                Grid.ColumnSpan="3"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                Margin="3 0 0 0">
+
+                        <ToggleSwitch Content="CHAP"
+                                      IsChecked="{Binding UsaChap, Mode=TwoWay}"
+                                      Foreground="#FF6F61"
+                                      ToolTip.Tip="CHAP Unidirectional."
+                                      MinHeight="20"/>
+
+                        <ToggleSwitch Content="Mutual"
+                                      IsChecked="{Binding UsaMutualChap, Mode=TwoWay}"
+                                      Foreground="#4DD0E1"
+                                      ToolTip.Tip="CHAP Mutual. Requiere activar CHAP Unidirectional."
+                                      MinHeight="20"/>
+
+                        <ToggleSwitch Content="Persistir"
+                                      IsChecked="{Binding Persistir, Mode=TwoWay}"
+                                      ToolTip.Tip="Mantener destino conectado cuando reinicie el sistema."
+                                      Foreground= "Orange"
+                                      MinHeight="20"/>
+                    </StackPanel>
+
+                </Grid>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+</ScrollViewer>
+
+            
+            
+         <!-- ÁREA DE AUTENTICACIÓN CON SCROLL -->
+<ScrollViewer Grid.Row="4"
+              MinHeight="120"
+              VerticalScrollBarVisibility="Auto"
+              HorizontalScrollBarVisibility="Disabled"
+              Margin="0 10 0 0">
+
+    <Grid ColumnDefinitions="*,*"
+          ColumnSpacing="12">
+
+        <!-- PANEL CHAP -->
+        <StackPanel Grid.Column="0"
+                    IsVisible="{Binding HayChapActivo}">
+            <Border Background="{DynamicResource AppBackgroundBrush}"
+                    CornerRadius="6"
+                    Padding="6"
+                    ToolTip.Tip="Autenticar CHAP. Cliente en Servidor"
+                    BorderBrush="#FF6F61"
+                    BorderThickness="2">
+
+                <Grid RowDefinitions="Auto,Auto"
+                      ColumnDefinitions="Auto,*"
+                      Margin="0 2 0 2">
+
+                    <TextBlock Text="User (OUT):"
+                               Foreground="{DynamicResource AppForegroundBrush}"
+                               FontWeight="Bold"
+                               Margin="0 0 8 0"/>
+
+                    <TextBox Grid.Column="1"
                              Text="{Binding Usuario, Mode=TwoWay}"
-                             Margin="0 0 5 0"
-                             Background="{DynamicResource AppBackgroundBrush}"
-                             Foreground="{DynamicResource AppForegroundBrush}"/>
+                             Background="#20FFFFFF"
+                             Foreground="{DynamicResource AppForegroundBrush}"
+                             Height="26"/>
+
+                    <TextBlock Grid.Row="1"
+                               Text="Password (OUT):"
+                               Foreground="{DynamicResource AppForegroundBrush}"
+                               FontWeight="Bold"
+                               Margin="0 0 8 0"/>
 
                     <TextBox Grid.Row="1"
                              Grid.Column="1"
-                             Height="30"
-                             VerticalAlignment="Center"
-                             HorizontalAlignment="Stretch"
-                             Grid.ColumnSpan="2"
-                             
                              PasswordChar="*"
                              Text="{Binding Password, Mode=TwoWay}"
-                             Margin="0 0 5 0"
-                             Background="{DynamicResource AppBackgroundBrush}"
-                             Foreground="{DynamicResource AppForegroundBrush}"/>
+                             Background="#20FFFFFF"
+                             Foreground="{DynamicResource AppForegroundBrush}"
+                             Height="26"/>
                 </Grid>
-            </StackPanel>
+
+            </Border>
+        </StackPanel>
+
+
+        <!-- PANEL MUTUAL CHAP -->
+        <StackPanel Grid.Column="1"
+                    IsVisible="{Binding HayMutualChapActivo}">
+            <Border Background="{DynamicResource AppBackgroundBrush}"
+                    CornerRadius="6"
+                    Padding="6"
+                    BorderBrush="#4DD0E1"
+                    ToolTip.Tip="Autenticar CHAP Mutual. Servidor en Cliente"
+                    BorderThickness="2">
+
+                <Grid RowDefinitions="Auto,Auto"
+                      ColumnDefinitions="Auto,*"
+                      Margin="0 2 0 2">
+
+                    <TextBlock Text="User (IN):"
+                               Foreground="{DynamicResource AppForegroundBrush}"
+                               FontWeight="Bold"
+                               Margin="0 0 8 0"/>
+
+                    <TextBox Grid.Column="1"
+                             Text="{Binding UsuarioMutualChap, Mode=TwoWay}"
+                             Background="#20FFFFFF"
+                             Foreground="{DynamicResource AppForegroundBrush}"
+                             Height="26"/>
+
+                    <TextBlock Grid.Row="1"
+                               Text="Password (IN):"
+                               Foreground="{DynamicResource AppForegroundBrush}"
+                               FontWeight="Bold"
+                               Margin="0 0 8 0"/>
+
+                    <TextBox Grid.Row="1"
+                             Grid.Column="1"
+                             PasswordChar="*"
+                             Text="{Binding PasswordMutualChap, Mode=TwoWay}"
+                             Background="#20FFFFFF"
+                             Foreground="{DynamicResource AppForegroundBrush}"
+                             Height="26"/>
+                </Grid>
+
+            </Border>
+        </StackPanel>
+
+    </Grid>
+</ScrollViewer>
+
 
         </Grid>
 
-        <!-- ===================================================== -->
-        <!--                        FOOTER                         -->
-        <!-- ===================================================== -->
+        <!-- FOOTER -->
         <Grid Grid.Row="1"
-              RowDefinitions="*"
               ColumnDefinitions="*,Auto,Auto"
               Background="{DynamicResource AppBackgroundBrush}">
 
@@ -259,11 +282,9 @@
                    Width="100"
                    Margin="10 15 10 10"
                    Source="../Assets/Linux-Logo.png"
+                   ToolTip.Tip="https://github.com/mijocecr"
                    HorizontalAlignment="Left"
-                   VerticalAlignment="Bottom">
-                <ToolTip.Tip>https://github.com/mijocecr</ToolTip.Tip>
-            </Image>
-
+                   VerticalAlignment="Bottom"/>
 
             <TextBlock Grid.Column="0"
                        HorizontalAlignment="Center"
@@ -271,32 +292,30 @@
                        Foreground="{DynamicResource AppForegroundBrush}"
                        FontWeight="DemiBold"
                        FontSize="25"
-                       
                        Height="45"
                        Padding="0 0 0 5"
                        Text="Cerratonix"/>
-            
 
             <Button Grid.Column="1"
                     Height="45"
                     Content="Desconectar"
+                    VerticalContentAlignment="Center"
+                    HorizontalAlignment="Center"
                     Command="{Binding DesconectarSeleccionadosCommand}"
                     Background="Red"
                     Foreground="White"
                     FontWeight="Bold"
-                    VerticalAlignment="Bottom"
-                    VerticalContentAlignment="Center"
                     Margin="0 0 10 10"/>
 
             <Button Grid.Column="2"
                     Height="45"
                     Content="Conectar"
+                    VerticalContentAlignment="Center"
+                    HorizontalAlignment="Center"
                     Command="{Binding ConectarSeleccionadosCommand}"
                     Background="#00aaa7"
                     Foreground="White"
                     FontWeight="Bold"
-                    VerticalContentAlignment="Center"
-                    VerticalAlignment="Bottom"
                     Margin="0 0 10 10"/>
         </Grid>
 

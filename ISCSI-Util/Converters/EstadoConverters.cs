@@ -31,7 +31,7 @@ public class EstadoToGeometryConverter : IValueConverter
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             bool conectado = value is bool b && b;
-            return conectado ? Brushes.Green : Brushes.Transparent;
+            return conectado ? Brushes.Lime : Brushes.Transparent;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
