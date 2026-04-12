@@ -19,8 +19,11 @@ Inicialmente se desarrollo para Manjaro/Arch pero existen binarios portables, qu
 
 ---
 
+First release
 <img width="630" height="738" alt="Captura de pantalla_20260331_222332" src="https://github.com/user-attachments/assets/f771769c-d942-4c12-8d58-be56b025feef" />
 
+Latest release
+<img width="630" height="748" alt="Captura de pantalla_20260412_200819" src="https://github.com/user-attachments/assets/77fc208d-2e4e-428c-b8b8-43ff4250d80d" />
 
 
 
