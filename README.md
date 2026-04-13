@@ -37,6 +37,7 @@ Inicialmente se desarrollo para Manjaro/Arch pero existen binarios portables, qu
 - **CommunityToolkit.Mvvm**.
 - Herramientas del sistema:
   - `iscsiadm`
+  - `open-iscsi`
   - `lsblk`, `blkid`
   - `notify-send` (para notificaciones en Linux).
 - Permisos de administrador (`sudo`) para ejecutar comandos iSCSI.
