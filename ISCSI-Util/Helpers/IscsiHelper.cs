@@ -90,77 +90,99 @@ public static class IscsiHelper
     // Helpers
     // ============================================================
 
-    private static string Ejecutar(string fileName, string args)
+   private static string Ejecutar(string fileName, string args)
+{
+    var psi = new ProcessStartInfo
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        FileName = fileName,
+        Arguments = args,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        RedirectStandardInput = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
 
-        using var process = new Process { StartInfo = psi };
+    using var process = new Process { StartInfo = psi };
 
-        var outputBuilder = new StringBuilder();
-        var errorBuilder = new StringBuilder();
+    var outputBuilder = new StringBuilder();
+    var errorBuilder = new StringBuilder();
 
-        process.OutputDataReceived += (s, e) =>
-        {
-            if (e.Data != null) outputBuilder.AppendLine(e.Data);
-        };
-        process.ErrorDataReceived += (s, e) =>
-        {
-            if (e.Data != null) errorBuilder.AppendLine(e.Data);
-        };
+    process.OutputDataReceived += (s, e) =>
+    {
+        if (e.Data != null) outputBuilder.AppendLine(e.Data);
+    };
+    process.ErrorDataReceived += (s, e) =>
+    {
+        if (e.Data != null) errorBuilder.AppendLine(e.Data);
+    };
 
-        process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+    process.Start();
+    process.BeginOutputReadLine();
+    process.BeginErrorReadLine();
 
-        if (fileName == "sudo" && args.Contains("-S") && !string.IsNullOrEmpty(Credenciales.AdminPassword))
-        {
-            var pass = Credenciales.AdminPassword?.TrimEnd('\r', '\n');
-            process.StandardInput.WriteLine(pass);
-            process.StandardInput.Flush();
-            process.StandardInput.Close();
-        }
-
-        const int timeoutMs = 15000;
-        if (!process.WaitForExit(timeoutMs))
-        {
-            try { process.Kill(); } catch { }
-            return string.Empty;
-        }
-
-        process.WaitForExit();
-
-        string output = outputBuilder.ToString();
-        string error = errorBuilder.ToString();
-
-        if (fileName == "sudo" && process.ExitCode != 0)
-        {
-            bool esErrorEsperado =
-                error.Contains("No active sessions", StringComparison.OrdinalIgnoreCase) ||
-                error.Contains("command not found", StringComparison.OrdinalIgnoreCase) ||
-                error.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
-                error.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
-                error.Contains("not installed", StringComparison.OrdinalIgnoreCase) ||
-                error.Contains("Unknown operation", StringComparison.OrdinalIgnoreCase) ||
-                args.Contains("command -v dos2unix", StringComparison.OrdinalIgnoreCase);
-
-            if (esErrorEsperado)
-                return output;
-
-            Console.WriteLine($"[Ejecutar] Comando sudo falló: {fileName} {args}\n{error}");
-            return string.Empty;
-        }
-
-        return output;
+    // Enviar contraseña si es sudo -S
+    if (fileName == "sudo" && args.Contains("-S") && !string.IsNullOrEmpty(Credenciales.AdminPassword))
+    {
+        var pass = Credenciales.AdminPassword?.TrimEnd('\r', '\n');
+        process.StandardInput.WriteLine(pass);
+        process.StandardInput.Flush();
+        process.StandardInput.Close();
     }
+
+    const int timeoutMs = 15000;
+    if (!process.WaitForExit(timeoutMs))
+    {
+        try { process.Kill(); } catch { }
+        return string.Empty;
+    }
+
+    process.WaitForExit();
+
+    string output = outputBuilder.ToString();
+    string error = errorBuilder.ToString();
+
+    // ============================================================
+    // 🔥 FILTRO DE ERRORES ESPERADOS (NO SE REPORTAN)
+    // ============================================================
+
+    if (fileName == "sudo" && process.ExitCode != 0)
+    {
+        bool esErrorEsperado =
+            // Errores típicos de iscsiadm
+            error.Contains("No active sessions", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("not installed", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("Unknown operation", StringComparison.OrdinalIgnoreCase) ||
+
+            // Archivos inexistentes (rm, rmdir, sed)
+            error.Contains("No such file", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("No existe el fichero", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("failed to remove", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("cannot remove", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("rmdir:", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("rm:", StringComparison.OrdinalIgnoreCase) ||
+
+            // Si el comando es rm o rmdir, nunca es error
+            args.Contains("rm ", StringComparison.OrdinalIgnoreCase) ||
+            args.Contains("rmdir", StringComparison.OrdinalIgnoreCase) ||
+
+            // Caso especial: dos2unix no instalado
+            args.Contains("command -v dos2unix", StringComparison.OrdinalIgnoreCase);
+
+        if (esErrorEsperado)
+            return output; // Silencioso
+
+        // ============================================================
+        // 🔥 ERRORES REALES (SÍ SE REPORTAN)
+        // ============================================================
+        Console.WriteLine($"[Ejecutar] Comando sudo falló: {fileName} {args}\n{error}");
+        return string.Empty;
+    }
+
+    return output;
+}
 
     private static int EjecutarConCodigo(string fileName, string args)
     {
@@ -319,11 +341,11 @@ public static class IscsiHelper
     // ============================================================
     // Desconectar
     // ============================================================
-
-    public static void Desconectar(IscsiDestino destino, bool eliminarPersistencia = false)
+    public static void Desconectar(IscsiDestino destino, bool eliminarPersistencia = true)
     {
         try
         {
+            // 1. Desmontar si está montado
             if (!string.IsNullOrEmpty(destino.MountPoint))
             {
                 int rcMount = EjecutarConCodigo("mountpoint", $"-q {destino.MountPoint}");
@@ -333,9 +355,10 @@ public static class IscsiHelper
                 }
             }
 
+            // 2. Logout iSCSI si está conectado
             var sesionesOut = Ejecutar("sudo", "-S iscsiadm -m session");
             bool conectado = sesionesOut.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                                        .Any(s => s.Contains(destino.Iqn));
+                .Any(s => s.Contains(destino.Iqn));
 
             if (conectado)
             {
@@ -344,8 +367,14 @@ public static class IscsiHelper
 
             destino.Conectado = false;
 
-            if (eliminarPersistencia)
-                EliminarServicioPersistencia(destino);
+            // 3. Eliminar persistencia SIEMPRE
+            EliminarServicioPersistencia(destino);
+
+            // 4. Eliminar punto de montaje
+            if (!string.IsNullOrEmpty(destino.MountPoint))
+            {
+                Ejecutar("sudo", $"-S rmdir {destino.MountPoint}");
+            }
 
             // NotificadorLinux.Enviar($"Destino {destino.Iqn} desconectado.");
         }
@@ -355,6 +384,7 @@ public static class IscsiHelper
         }
     }
 
+   
     // ============================================================
     // Completar información
     // ============================================================
@@ -558,41 +588,89 @@ WantedBy=multi-user.target
     // Eliminar persistencia
     // ============================================================
 
-    public static void EliminarServicioPersistencia(IscsiDestino destino)
+  public static void EliminarServicioPersistencia(IscsiDestino destino)
+{
+    try
     {
-        try
+        string safeName = SanitizarNombre(destino.Iqn);
+
+        string rawServiceName = $"iscsi-{safeName}.service";
+        string servicePath = $"/etc/systemd/system/{rawServiceName}";
+        string scriptPath = $"/usr/local/bin/mount-iscsi-{safeName}.sh";
+        string wantsPath = $"/etc/systemd/system/multi-user.target.wants/{rawServiceName}";
+
+        // ============================================================
+        // 1. Deshabilitar servicio solo si existe
+        // ============================================================
+        var checkService = Ejecutar("systemctl", $"status {rawServiceName}");
+        if (!string.IsNullOrWhiteSpace(checkService))
         {
-            string safeName = SanitizarNombre(destino.Iqn);
-
-            string rawServiceName = $"iscsi-{safeName}.service";
-            string servicePath = $"/etc/systemd/system/{rawServiceName}";
-            string scriptPath = $"/usr/local/bin/mount-iscsi-{safeName}.sh";
-            string wantsPath = $"/etc/systemd/system/multi-user.target.wants/{rawServiceName}";
-
             Ejecutar("sudo", $"-S systemctl disable {rawServiceName}");
-            Ejecutar("sudo", $"-S bash -c \"rm -f {wantsPath}\"");
-            Ejecutar("sudo", $"-S bash -c \"rm -f {servicePath}\"");
-            Ejecutar("sudo", $"-S bash -c \"rm -f {scriptPath}\"");
-
-            Ejecutar("sudo", "-S cp /etc/fstab /etc/fstab.bak");
-            Ejecutar("sudo", $"-S bash -c \"sed -i '\\|{destino.MountPoint}|d' /etc/fstab\"");
-
-            Ejecutar("sudo", "-S systemctl daemon-reload");
-            Ejecutar("sudo", "-S mount -a");
-
-            Ejecutar("sudo",
-                $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --op update --name node.startup --value manual");
-
-            string generatedMount = $"/run/systemd/generator/mnt-iscsi-{safeName}.mount";
-            Ejecutar("sudo", $"-S bash -c \"rm -f {generatedMount}\"");
-
-            // NotificadorLinux.Enviar($"Persistencia eliminada para {destino.Iqn}");
         }
-        catch (Exception ex)
+
+        // ============================================================
+        // 2. Eliminar symlink en wants si existe
+        // ============================================================
+        Ejecutar("sudo", $"-S bash -c \"[ -e '{wantsPath}' ] && rm -f '{wantsPath}'\"");
+
+        // ============================================================
+        // 3. Eliminar servicio si existe
+        // ============================================================
+        Ejecutar("sudo", $"-S bash -c \"[ -e '{servicePath}' ] && rm -f '{servicePath}'\"");
+
+        // ============================================================
+        // 4. Eliminar script si existe
+        // ============================================================
+        Ejecutar("sudo", $"-S bash -c \"[ -e '{scriptPath}' ] && rm -f '{scriptPath}'\"");
+
+        // ============================================================
+        // 5. Eliminar entrada de fstab (todas las coincidencias)
+        // ============================================================
+        Ejecutar("sudo", "-S cp /etc/fstab /etc/fstab.bak");
+        Ejecutar("sudo", 
+            $"-S bash -c \"sed -i '\\|{destino.MountPoint}|d' /etc/fstab\"");
+
+        // ============================================================
+        // 6. Recargar systemd
+        // ============================================================
+        Ejecutar("sudo", "-S systemctl daemon-reload");
+
+        // ============================================================
+        // 7. Ejecutar mount -a para limpiar montajes residuales
+        // ============================================================
+        Ejecutar("sudo", "-S mount -a");
+
+        // ============================================================
+        // 8. Dejar node.startup en manual (evita reconexiones automáticas)
+        // ============================================================
+        Ejecutar("sudo",
+            $"-S iscsiadm -m node -T {destino.Iqn} -p {destino.Ip} --op update --name node.startup --value manual");
+
+        // ============================================================
+        // 9. Eliminar mount units generados por systemd
+        // ============================================================
+        string gen1 = $"/run/systemd/generator/mnt-iscsi-{safeName}.mount";
+        string gen2 = $"/run/systemd/generator.late/mnt-iscsi-{safeName}.mount";
+        string gen3 = $"/run/systemd/generator/{rawServiceName}";
+        string gen4 = $"/run/systemd/generator.late/{rawServiceName}";
+
+        Ejecutar("sudo", $"-S bash -c \"rm -f '{gen1}' '{gen2}' '{gen3}' '{gen4}' 2>/dev/null\"");
+
+        // ============================================================
+        // 10. Eliminar directorio de montaje si está vacío
+        // ============================================================
+        if (!string.IsNullOrEmpty(destino.MountPoint))
         {
-            Console.WriteLine($"Error al eliminar servicio persistente para {destino.Iqn}: {ex.Message}");
+            Ejecutar("sudo", $"-S bash -c \"rmdir '{destino.MountPoint}' 2>/dev/null || true\"");
         }
+
+        // NotificadorLinux.Enviar($"Persistencia eliminada para {destino.Iqn}");
     }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error al eliminar servicio persistente para {destino.Iqn}: {ex.Message}");
+    }
+}
 
     // ============================================================
     // Asegurar iscsid
