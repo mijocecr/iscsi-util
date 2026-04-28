@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "7NsSYlWU+Mo=",
+  "dgSpecHash": "SalDwnHRSjQ=",
   "success": true,
   "projectFilePath": "/home/miguel/RiderProjects/Iniciador-iSCSI-GUI-Manjaro/ISCSI-Util/ISCSI-Util.csproj",
   "expectedPackageFiles": [
@@ -32,7 +32,9 @@
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.webassembly/2.88.9/skiasharp.nativeassets.webassembly.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.win32/2.88.9/skiasharp.nativeassets.win32.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/system.io.pipelines/8.0.0/system.io.pipelines.8.0.0.nupkg.sha512",
-    "/home/miguel/.nuget/packages/tmds.dbus.protocol/0.21.2/tmds.dbus.protocol.0.21.2.nupkg.sha512"
+    "/home/miguel/.nuget/packages/tmds.dbus.protocol/0.21.2/tmds.dbus.protocol.0.21.2.nupkg.sha512",
+    "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.14/microsoft.aspnetcore.app.ref.9.0.14.nupkg.sha512",
+    "/home/miguel/.nuget/packages/microsoft.netcore.app.host.linux-x64/9.0.14/microsoft.netcore.app.host.linux-x64.9.0.14.nupkg.sha512"
   ],
   "logs": []
 }

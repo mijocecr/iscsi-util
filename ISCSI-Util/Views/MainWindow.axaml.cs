@@ -1,7 +1,10 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using ISCSI_Util.Helpers;
+using ISCSI_Util.Models;
 using ISCSI_Util.Utils;
 using ISCSI_Util.ViewModels;
 
@@ -37,6 +40,11 @@ namespace ISCSI_Util.Views
         /// Prompts for admin password, ensures iscsid service is running, and initializes the view model.
         /// This is called after the window becomes visible.
         /// </summary>
+        ///
+        /// 
+      
+        
+        
         protected override async void OnOpened(EventArgs e)
         {
             base.OnOpened(e);
@@ -80,5 +88,35 @@ namespace ISCSI_Util.Views
 
             await dialog.ShowDialog(this);
         }
+        
+        private void Destino_DoubleTapped(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Grid grid)
+                return;
+
+            if (grid.DataContext is not IscsiDestino destino)
+                return;
+
+            // Solo abrir si está conectado y montado
+            if (!destino.Conectado || string.IsNullOrWhiteSpace(destino.MountPoint))
+                return;
+
+            try
+            {
+                // Abrir explorador de archivos según el sistema
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    Arguments = destino.MountPoint,
+                    UseShellExecute = false
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al abrir carpeta: {ex.Message}");
+            }
+        }
+
+        
     }
 }

@@ -329,12 +329,12 @@ public static class IscsiHelper
             Ejecutar("sudo", $"-S chmod g+s {destino.MountPoint}");
 
             destino.Conectado = true;
-            // NotificadorLinux.Enviar($"Destino {destino.Iqn} montado en {destino.MountPoint}");
+             NotificadorLinux.Enviar($"Destino {destino.Iqn} montado en {destino.MountPoint}");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[ERROR] Error al conectar destino {destino.Iqn}: {ex.Message}");
-            // NotificadorLinux.Enviar($"[ERROR] Fallo al conectar destino {destino.Iqn}");
+             NotificadorLinux.Enviar($"[ERROR] Fallo al conectar destino {destino.Iqn}");
         }
     }
 
@@ -376,7 +376,7 @@ public static class IscsiHelper
                 Ejecutar("sudo", $"-S rmdir {destino.MountPoint}");
             }
 
-            // NotificadorLinux.Enviar($"Destino {destino.Iqn} desconectado.");
+             NotificadorLinux.Enviar($"Destino {destino.Iqn} desconectado.");
         }
         catch (Exception ex)
         {
@@ -454,7 +454,7 @@ public static class IscsiHelper
         {
             Ejecutar("sudo", $"-S mkfs.ext4 -F {destino.PartitionPath}");
             destino.TieneFilesystem = true;
-            // NotificadorLinux.Enviar($"Destino {destino.Iqn} inicializado con éxito");
+             NotificadorLinux.Enviar($"Destino {destino.Iqn} inicializado con éxito");
         }
         catch (Exception ex)
         {
@@ -684,7 +684,7 @@ WantedBy=multi-user.target
 
             if (estado != "active")
             {
-                // NotificadorLinux.Enviar("El servicio iscsid no está activo. Habilitando...");
+                 NotificadorLinux.Enviar("El servicio iscsid no está activo. Habilitando...");
 
                 Ejecutar("sudo", "-S systemctl enable --now iscsid");
                 Ejecutar("sudo", "-S systemctl daemon-reexec");
@@ -695,7 +695,7 @@ WantedBy=multi-user.target
         catch (Exception ex)
         {
             Console.WriteLine($"[ERROR] No se pudo asegurar el servicio iscsid: {ex.Message}");
-            // NotificadorLinux.Enviar("[ERROR] Fallo al comprobar/arrancar iscsid.");
+             NotificadorLinux.Enviar("[ERROR] Fallo al comprobar/arrancar iscsid.");
         }
     }
 

@@ -89,6 +89,7 @@
 <ScrollViewer Grid.Row="3"
               Margin="5 10 5 10"
               MinHeight="210"
+              
               VerticalScrollBarVisibility="Auto">
     <ListBox ItemsSource="{Binding Destinos}"
              Background="{DynamicResource AppBackgroundBrush}">
@@ -96,6 +97,8 @@
             <DataTemplate x:DataType="models:IscsiDestino">
                 <Grid ColumnDefinitions="Auto,*,Auto,Auto"
                       RowDefinitions="Auto,Auto"
+                      DoubleTapped="Destino_DoubleTapped"
+                      ToolTip.Tip="Doble click -> Abrir punto de montaje."
                       Margin="3">
 
                     <CheckBox Grid.RowSpan="2"
