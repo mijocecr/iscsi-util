@@ -5,9 +5,7 @@
              xmlns:conv="using:ISCSI_Util.Converters"
              RequestedThemeVariant="Default">
 
-    <Application.DataTemplates>
-        <local:ViewLocator/>
-    </Application.DataTemplates>
+ 
 
     <Application.Styles>
         <FluentTheme/>

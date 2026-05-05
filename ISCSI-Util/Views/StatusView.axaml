@@ -1,0 +1,195 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ISCSI_Util.Views.StatusView">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto"
+          Margin="20">
+
+        <!-- SYSTEM SUMMARY -->
+        <Border x:Name="SummaryBorder"
+                Background="{DynamicResource SteamPanel}"
+                BorderBrush="{DynamicResource SteamBorder}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="16"
+                Margin="0,0,0,16"
+                HorizontalAlignment="Stretch">
+
+            <TextBlock x:Name="TxtSummary"
+                       Text="SYSTEM STATUS: Checking..."
+                       FontSize="18"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource SteamText}"/>
+        </Border>
+
+        <!-- TOP STATUS ROW: SERVICE / NETWORK / DAEMON -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*,*"
+              ColumnSpacing="16"
+              HorizontalAlignment="Stretch">
+
+            <!-- SERVICE STATUS -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource SteamPanel}"
+                    BorderBrush="{DynamicResource SteamBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="12">
+                <StackPanel>
+                    <TextBlock Text="Service Status"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamText}"
+                               Margin="0,0,0,6"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse x:Name="IconIscsid" Width="12" Height="12" Fill="{DynamicResource SteamBorder}"/>
+                        <TextBlock x:Name="TxtIscsid"
+                                   Text="Checking..."
+                                   Foreground="{DynamicResource SteamText}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- NETWORK STATUS -->
+            <Border Grid.Column="1"
+                    Background="{DynamicResource SteamPanel}"
+                    BorderBrush="{DynamicResource SteamBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="12">
+                <StackPanel>
+                    <TextBlock Text="Network Status"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamText}"
+                               Margin="0,0,0,6"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse x:Name="IconNetwork" Width="12" Height="12" Fill="{DynamicResource SteamBorder}"/>
+                        <TextBlock x:Name="TxtNetwork"
+                                   Text="Checking..."
+                                   Foreground="{DynamicResource SteamText}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- DAEMON STATUS -->
+            <Border Grid.Column="2"
+                    Background="{DynamicResource SteamPanel}"
+                    BorderBrush="{DynamicResource SteamBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="12">
+                <StackPanel>
+                    <TextBlock Text="Daemon Status"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamText}"
+                               Margin="0,0,0,6"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse x:Name="IconSocket" Width="12" Height="12" Fill="{DynamicResource SteamBorder}"/>
+                        <TextBlock x:Name="TxtSocket"
+                                   Text="Checking..."
+                                   Foreground="{DynamicResource SteamText}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+        </Grid>
+
+        <!-- SYSTEM INFO FULL-WIDTH -->
+        <Border Grid.Row="2"
+                Margin="0,16,0,0"
+                Background="{DynamicResource SteamPanel}"
+                BorderBrush="{DynamicResource SteamBorder}"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="12"
+                HorizontalAlignment="Stretch">
+
+            <Grid ColumnDefinitions="140,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="10"
+                  RowSpacing="6"
+                  HorizontalAlignment="Stretch">
+
+                <!-- Last Operation -->
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="Last Operation"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <TextBlock Grid.Row="0" Grid.Column="1"
+                           x:Name="TxtLastOp"
+                           Classes="mono"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <!-- Uptime -->
+                <TextBlock Grid.Row="1" Grid.Column="0"
+                           Text="Uptime:"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="1"
+                           x:Name="TxtUptime"
+                           Classes="mono"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <!-- Hostname -->
+                <TextBlock Grid.Row="2" Grid.Column="0"
+                           Text="Hostname:"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="1"
+                           x:Name="TxtHostname"
+                           Classes="mono"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <!-- IP Address -->
+                <TextBlock Grid.Row="3" Grid.Column="0"
+                           Text="IP Address:"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="1"
+                           x:Name="TxtIpAddress"
+                           Classes="mono"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <!-- Latency -->
+                <TextBlock Grid.Row="4" Grid.Column="0"
+                           Text="Latency:"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="1"
+                           x:Name="TxtLatency"
+                           Classes="mono"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"/>
+
+            </Grid>
+        </Border>
+
+        <!-- BUTTONS -->
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="8"
+                    Margin="0,16,0,0">
+
+            <Button x:Name="BtnReload" Content="Reload" Width="110"
+                    HorizontalContentAlignment="Center"/>
+            <Button x:Name="BtnRestart" Content="Restart Service" Width="130"
+                    HorizontalContentAlignment="Center"/>
+            <Button x:Name="BtnRefresh" Content="Refresh" Width="110"
+                    HorizontalContentAlignment="Center"/>
+        </StackPanel>
+
+    </Grid>
+</UserControl>

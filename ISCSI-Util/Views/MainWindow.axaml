@@ -1,326 +1,116 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:ISCSI_Util.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:models="clr-namespace:ISCSI_Util.Models"
-        mc:Ignorable="d"
-        d:DesignWidth="500"
-        d:DesignHeight="580"
-        x:Class="ISCSI_Util.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/icon.png"
-        Title="ISCSI_Util"
-        Background="{DynamicResource AppBackgroundBrush}">
+<Window
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="clr-namespace:ISCSI_Util.Views"
+    x:Class="ISCSI_Util.Views.MainWindow"
+    Width="500"
+    Height="580"
+    MinWidth="500"
+    MinHeight="580"
+    MaxWidth="500"
+    MaxHeight="580"
+    CanResize="False"
+    Title="iSCSI Management">
 
-    <Design.DataContext>
-        <vm:MainWindowViewModel />
-    </Design.DataContext>
+    <DockPanel>
 
-    <Grid Background="{DynamicResource AppBackgroundBrush}"
-          RowDefinitions="*,Auto">
+        <!-- TOP STATUS BAR -->
+        <Border Background="{DynamicResource SteamPanel}" Padding="10" DockPanel.Dock="Top">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
 
-        <Grid Grid.Row="0"
-              RowDefinitions="Auto,Auto,Auto,2*,*"
-              Background="{DynamicResource AppBackgroundBrush}">
+                <TextBlock 
+                    Grid.Row="0" 
+                    Grid.Column="0"
+                    Text="iSCSI Management"
+                    TextAlignment="Center"
+                    FontSize="26"
+                    FontWeight="Bold"
+                    VerticalAlignment="Center"
+                />
 
-            <!-- PANEL SUPERIOR -->
-            <Panel Grid.Row="0"
-                   Background="{DynamicResource AppForegroundBrush}"
-                   Height="60">
-                <TextBlock Text="Conectar iSCSI"
-                           FontWeight="Bold"
-                           FontSize="28"
-                           Foreground="{DynamicResource AppBackgroundBrush}"
-                           VerticalAlignment="Center"
-                           HorizontalAlignment="Center"/>
-            </Panel>
-
-            <!-- LABEL IP -->
-            <Grid Grid.Row="1" ColumnDefinitions="*,*">
-                <TextBlock Text="Dirección IP:"
-                           Foreground="{DynamicResource AppForegroundBrush}"
-                           FontWeight="Bold"
-                           FontSize="20"
-                           Margin="10 10 0 10"/>
+                <Button Content="Config"
+                        Grid.Column="1"
+                        Grid.Row="0"
+                        Margin="10"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Right" />
             </Grid>
+        </Border>
 
-            <!-- INPUT IP + BOTÓN DESCUBRIR -->
-            <Grid Grid.Row="2"
-                  RowDefinitions="Auto,Auto"
-                  ColumnDefinitions="Auto,*,Auto">
+        <!-- BOTTOM STATUS BAR (ÚNICA BARRA DE ESTADO) -->
+        <Border Background="{DynamicResource SteamPanel}" Padding="6" DockPanel.Dock="Bottom">
+            <TextBlock x:Name="StatusBarText"
+                       Text="Ready."
+                       TextAlignment="Center"
+                       FontSize="13"
+                       Foreground="{DynamicResource SteamText}"
+                       Opacity="0.85"/>
+        </Border>
 
-                <TextBox Grid.ColumnSpan="3"
-                         Text="{Binding IpServidor, Mode=TwoWay}"
-                         TextAlignment="Center"
-                         FontSize="15"
-                         FontWeight="Bold"
-                         Margin="5 0 5 10"
-                         Background="{DynamicResource AppBackgroundBrush}"
-                         Foreground="{DynamicResource AppForegroundBrush}"/>
+        <!-- MAIN CONTENT -->
+       
+        <TabControl x:Name="MainTabs">
 
-                <TextBlock Grid.Row="1"
-                           Grid.ColumnSpan="2"
-                           Text="{Binding Destinos.Count, StringFormat='[ Unidades Disponibles: {0} ]'}"
-                           FontWeight="Bold"
-                           FontSize="15"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Margin="5 5 5 0"/>
+            <!-- STATUS TAB -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="Status"
+                               Tag="0"
+                               PointerPressed="OnTabStatusClick"/>
+                </TabItem.Header>
 
+                <views:StatusView x:Name="StatusPanel"/>
+            </TabItem>
 
-                <Button Grid.Row="1"
-                        Grid.Column="2"
-                        Width="150"
-                        Height="45"
-                        Content="Descubrir Destinos"
-                        VerticalContentAlignment="Center"
-                        HorizontalAlignment="Center"
-                        Background="Yellow"
-                        Foreground="Black"
-                        FontWeight="Bold"
-                        Margin="5 5 5 0"
-                        Command="{Binding DescubrirDestinosCommand}"/>
-            </Grid>
+            <!-- TARGETS TAB -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="Targets"
+                               Tag="1"
+                              />
+                </TabItem.Header>
 
-            
-            
-            <!-- LISTA DE DESTINOS -->
-<ScrollViewer Grid.Row="3"
-              Margin="5 10 5 10"
-              MinHeight="210"
-              
-              VerticalScrollBarVisibility="Auto">
-    <ListBox ItemsSource="{Binding Destinos}"
-             Background="{DynamicResource AppBackgroundBrush}">
-        <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="models:IscsiDestino">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto"
-                      RowDefinitions="Auto,Auto"
-                      DoubleTapped="Destino_DoubleTapped"
-                      ToolTip.Tip="Doble click -> Abrir punto de montaje."
-                      Margin="3">
+                <Grid Margin="10">
+                    <StackPanel>
 
-                    <CheckBox Grid.RowSpan="2"
-                              IsChecked="{Binding Seleccionado, Mode=TwoWay}"
-                              Foreground="{DynamicResource AppForegroundBrush}"
-                              Margin="3"
-                              VerticalAlignment="Center"/>
+                        <Button Content="Discover Targets"
+                                Width="160"
+                                Margin="0,0,0,10" />
 
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding Iqn}"
-                               Foreground="{DynamicResource AppForegroundBrush}"
-                               FontWeight="Bold"
-                               Margin="3 0 0 0"
-                               VerticalAlignment="Center"/>
-
-                    <Button Grid.Column="2"
-                            Content="Init"
-                            ToolTip.Tip="Crea un sistema de archivos básico en el disco para permitir su gestión inicial."
-                            IsVisible="{Binding PuedeInicializar}"
-                            Command="{Binding $parent[Window].DataContext.InicializarDestinoCommand}"
-                            CommandParameter="{Binding}"
-                            Background="Orange"
-                            Foreground="Black"
-                            FontWeight="Bold"
-                            FontSize="10"
-                            Margin="2 0 10 0"
-                            Padding="4 2"
-                            
-                            VerticalAlignment="Center"/>
-
-                    <Path Grid.Column="3"
-                          Width="10"
-                          Height="10"
-                          Data="{Binding Conectado, Converter={StaticResource EstadoToGeometryConverter}}"
-                          Fill="{Binding Conectado, Converter={StaticResource BoolToColorConverter}}"
-                          Stroke="DarkGray"
-                          Margin="0 0 6 0"
-                          VerticalAlignment="Center"/>
-
-                    <StackPanel Grid.Row="1"
-                                Grid.Column="1"
-                                Grid.ColumnSpan="3"
-                                Orientation="Horizontal"
-                                Spacing="8"
-                                Margin="3 0 0 0">
-
-                        <ToggleSwitch Content="CHAP"
-                                      IsChecked="{Binding UsaChap, Mode=TwoWay}"
-                                      Foreground="#FF6F61"
-                                      ToolTip.Tip="CHAP Unidirectional."
-                                      MinHeight="20"/>
-
-                        <ToggleSwitch Content="Mutual"
-                                      IsChecked="{Binding UsaMutualChap, Mode=TwoWay}"
-                                      Foreground="#4DD0E1"
-                                      ToolTip.Tip="CHAP Mutual. Requiere activar CHAP Unidirectional."
-                                      MinHeight="20"/>
-
-                        <ToggleSwitch Content="Persistir"
-                                      IsChecked="{Binding Persistir, Mode=TwoWay}"
-                                      ToolTip.Tip="Mantener destino conectado cuando reinicie el sistema."
-                                      Foreground= "Orange"
-                                      MinHeight="20"/>
+                        <ListBox x:Name="TargetsList"
+                                 Height="350" />
                     </StackPanel>
-
                 </Grid>
-            </DataTemplate>
-        </ListBox.ItemTemplate>
-    </ListBox>
-</ScrollViewer>
+            </TabItem>
 
-            
-            
-         <!-- ÁREA DE AUTENTICACIÓN CON SCROLL -->
-<ScrollViewer Grid.Row="4"
-              MinHeight="120"
-              VerticalScrollBarVisibility="Auto"
-              HorizontalScrollBarVisibility="Disabled"
-              Margin="0 10 0 0">
+            <!-- SESSIONS TAB -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="Sessions"
+                               Tag="2"
+                               />
+                </TabItem.Header>
 
-    <Grid ColumnDefinitions="*,*"
-          ColumnSpacing="12">
-
-        <!-- PANEL CHAP -->
-        <StackPanel Grid.Column="0"
-                    IsVisible="{Binding HayChapActivo}">
-            <Border Background="{DynamicResource AppBackgroundBrush}"
-                    CornerRadius="6"
-                    Padding="6"
-                    ToolTip.Tip="Autenticar CHAP. Cliente en Servidor"
-                    BorderBrush="#FF6F61"
-                    BorderThickness="2">
-
-                <Grid RowDefinitions="Auto,Auto"
-                      ColumnDefinitions="Auto,*"
-                      Margin="0 2 0 2">
-
-                    <TextBlock Text="User (OUT):"
-                               Foreground="{DynamicResource AppForegroundBrush}"
-                               FontWeight="Bold"
-                               Margin="0 0 8 0"/>
-
-                    <TextBox Grid.Column="1"
-                             Text="{Binding Usuario, Mode=TwoWay}"
-                             Background="#20FFFFFF"
-                             Foreground="{DynamicResource AppForegroundBrush}"
-                             Height="26"/>
-
-                    <TextBlock Grid.Row="1"
-                               Text="Password (OUT):"
-                               Foreground="{DynamicResource AppForegroundBrush}"
-                               FontWeight="Bold"
-                               Margin="0 0 8 0"/>
-
-                    <TextBox Grid.Row="1"
-                             Grid.Column="1"
-                             PasswordChar="*"
-                             Text="{Binding Password, Mode=TwoWay}"
-                             Background="#20FFFFFF"
-                             Foreground="{DynamicResource AppForegroundBrush}"
-                             Height="26"/>
+                <Grid Margin="10">
+                    <ListBox x:Name="SessionsList" />
                 </Grid>
+            </TabItem>
 
-            </Border>
-        </StackPanel>
+            <!-- LOGS TAB -->
+            <TabItem>
+                <TabItem.Header>
+                    <TextBlock Text="Logs"
+                               Tag="3"
+                               />
+                </TabItem.Header>
 
-
-        <!-- PANEL MUTUAL CHAP -->
-        <StackPanel Grid.Column="1"
-                    IsVisible="{Binding HayMutualChapActivo}">
-            <Border Background="{DynamicResource AppBackgroundBrush}"
-                    CornerRadius="6"
-                    Padding="6"
-                    BorderBrush="#4DD0E1"
-                    ToolTip.Tip="Autenticar CHAP Mutual. Servidor en Cliente"
-                    BorderThickness="2">
-
-                <Grid RowDefinitions="Auto,Auto"
-                      ColumnDefinitions="Auto,*"
-                      Margin="0 2 0 2">
-
-                    <TextBlock Text="User (IN):"
-                               Foreground="{DynamicResource AppForegroundBrush}"
-                               FontWeight="Bold"
-                               Margin="0 0 8 0"/>
-
-                    <TextBox Grid.Column="1"
-                             Text="{Binding UsuarioMutualChap, Mode=TwoWay}"
-                             Background="#20FFFFFF"
-                             Foreground="{DynamicResource AppForegroundBrush}"
-                             Height="26"/>
-
-                    <TextBlock Grid.Row="1"
-                               Text="Password (IN):"
-                               Foreground="{DynamicResource AppForegroundBrush}"
-                               FontWeight="Bold"
-                               Margin="0 0 8 0"/>
-
-                    <TextBox Grid.Row="1"
-                             Grid.Column="1"
-                             PasswordChar="*"
-                             Text="{Binding PasswordMutualChap, Mode=TwoWay}"
-                             Background="#20FFFFFF"
-                             Foreground="{DynamicResource AppForegroundBrush}"
-                             Height="26"/>
+                <Grid Margin="10">
+                    <ListBox x:Name="LogsList" />
                 </Grid>
+            </TabItem>
 
-            </Border>
-        </StackPanel>
-
-    </Grid>
-</ScrollViewer>
+        </TabControl>
 
 
-        </Grid>
-
-        <!-- FOOTER -->
-        <Grid Grid.Row="1"
-              ColumnDefinitions="*,Auto,Auto"
-              Background="{DynamicResource AppBackgroundBrush}">
-
-            <Image Grid.Column="0"
-                   Height="45"
-                   Width="100"
-                   Margin="10 15 10 10"
-                   Source="../Assets/Linux-Logo.png"
-                   ToolTip.Tip="https://github.com/mijocecr"
-                   HorizontalAlignment="Left"
-                   VerticalAlignment="Bottom"/>
-
-            <TextBlock Grid.Column="0"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Bottom"
-                       Foreground="{DynamicResource AppForegroundBrush}"
-                       FontWeight="DemiBold"
-                       FontSize="25"
-                       Height="45"
-                       Padding="0 0 0 5"
-                       Text="Cerratonix"/>
-
-            <Button Grid.Column="1"
-                    Height="45"
-                    Content="Desconectar"
-                    VerticalContentAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Command="{Binding DesconectarSeleccionadosCommand}"
-                    Background="Red"
-                    Foreground="White"
-                    FontWeight="Bold"
-                    Margin="0 0 10 10"/>
-
-            <Button Grid.Column="2"
-                    Height="45"
-                    Content="Conectar"
-                    VerticalContentAlignment="Center"
-                    HorizontalAlignment="Center"
-                    Command="{Binding ConectarSeleccionadosCommand}"
-                    Background="#00aaa7"
-                    Foreground="White"
-                    FontWeight="Bold"
-                    Margin="0 0 10 10"/>
-        </Grid>
-
-    </Grid>
+    </DockPanel>
 </Window>
