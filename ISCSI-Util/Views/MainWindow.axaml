@@ -37,7 +37,7 @@
             </Grid>
         </Border>
 
-        <!-- BOTTOM STATUS BAR (ÚNICA BARRA DE ESTADO) -->
+        <!-- BOTTOM STATUS BAR -->
         <Border Background="{DynamicResource SteamPanel}" Padding="6" DockPanel.Dock="Bottom">
             <TextBlock x:Name="StatusBarText"
                        Text="Ready."
@@ -48,15 +48,12 @@
         </Border>
 
         <!-- MAIN CONTENT -->
-       
         <TabControl x:Name="MainTabs">
 
             <!-- STATUS TAB -->
-            <TabItem>
+            <TabItem PointerPressed="OnTabStatusClick">
                 <TabItem.Header>
-                    <TextBlock Text="Status"
-                               Tag="0"
-                               PointerPressed="OnTabStatusClick"/>
+                    <TextBlock Text="Status" Tag="0"/>
                 </TabItem.Header>
 
                 <views:StatusView x:Name="StatusPanel"/>
@@ -65,30 +62,16 @@
             <!-- TARGETS TAB -->
             <TabItem>
                 <TabItem.Header>
-                    <TextBlock Text="Targets"
-                               Tag="1"
-                              />
+                    <TextBlock Text="Targets" Tag="1"/>
                 </TabItem.Header>
 
-                <Grid Margin="10">
-                    <StackPanel>
-
-                        <Button Content="Discover Targets"
-                                Width="160"
-                                Margin="0,0,0,10" />
-
-                        <ListBox x:Name="TargetsList"
-                                 Height="350" />
-                    </StackPanel>
-                </Grid>
+                <views:TargetsView x:Name="TargetsView"/>
             </TabItem>
 
             <!-- SESSIONS TAB -->
             <TabItem>
                 <TabItem.Header>
-                    <TextBlock Text="Sessions"
-                               Tag="2"
-                               />
+                    <TextBlock Text="Sessions" Tag="2"/>
                 </TabItem.Header>
 
                 <Grid Margin="10">
@@ -99,9 +82,7 @@
             <!-- LOGS TAB -->
             <TabItem>
                 <TabItem.Header>
-                    <TextBlock Text="Logs"
-                               Tag="3"
-                               />
+                    <TextBlock Text="Logs" Tag="3"/>
                 </TabItem.Header>
 
                 <Grid Margin="10">
@@ -110,7 +91,6 @@
             </TabItem>
 
         </TabControl>
-
 
     </DockPanel>
 </Window>

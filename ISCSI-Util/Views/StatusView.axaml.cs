@@ -9,15 +9,55 @@ namespace ISCSI_Util.Views
 {
     public partial class StatusView : UserControl
     {
+        private bool _isRefreshing;
+
         public StatusView()
         {
             InitializeComponent();
             HookButtons();
         }
 
+        private void Trace(string message)
+        {
+            Console.WriteLine($"[StatusView] {DateTime.Now:HH:mm:ss} {message}");
+        }
+
         public async Task RefreshStatus()
         {
-            await LoadStatus();
+            if (_isRefreshing)
+            {
+                Trace("RefreshStatus() ignorado: ya hay un refresco en curso.");
+                return;
+            }
+
+            _isRefreshing = true;
+            SetButtonsEnabled(false);
+
+            try
+            {
+                Trace("RefreshStatus() → LoadStatus()");
+                await LoadStatus();
+                Trace("RefreshStatus() ← OK");
+            }
+            catch (Exception ex)
+            {
+                Trace($"[ERROR] RefreshStatus(): {ex}");
+                TxtLastOp.Text = $"Last update failed: {ex.Message}";
+                SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
+                TxtSummary.Text = "SYSTEM STATUS: Error";
+            }
+            finally
+            {
+                _isRefreshing = false;
+                SetButtonsEnabled(true);
+            }
+        }
+
+        private void SetButtonsEnabled(bool enabled)
+        {
+            BtnReload.IsEnabled = enabled;
+            BtnRefresh.IsEnabled = enabled;
+            BtnRestart.IsEnabled = enabled;
         }
 
         private void HookButtons()
@@ -27,26 +67,31 @@ namespace ISCSI_Util.Views
 
             BtnRestart.Click += async (_, _) =>
             {
-                // Reiniciar servicio
-                ShellHelper.EjecutarComoRoot("systemctl restart iscsid");
+                Trace("BtnRestart: systemctl restart iscsid");
+                try
+                {
+                    ShellHelper.EjecutarComoRoot("systemctl restart iscsid");
 
-                // Feedback inmediato
-                TxtLastOp.Text = "Service restarted.";
-                SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));
-                TxtSummary.Text = "SYSTEM STATUS: Warning";
+                    TxtLastOp.Text = "Service restarted.";
+                    SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));
+                    TxtSummary.Text = "SYSTEM STATUS: Warning";
 
-                // Esperar a que el daemon esté realmente listo
-                await WaitForDaemonReady();
-
-                //  Refrescar estado completo
-                await RefreshStatus();
+                    await WaitForDaemonReady();
+                    await RefreshStatus();
+                }
+                catch (Exception ex)
+                {
+                    Trace($"[ERROR] BtnRestart: {ex}");
+                    TxtLastOp.Text = $"Restart failed: {ex.Message}";
+                    SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
+                    TxtSummary.Text = "SYSTEM STATUS: Error";
+                }
             };
         }
 
-        
-        private async Task WaitForDaemonReady()
+        public async Task WaitForDaemonReady()
         {
-            // Intentos: 30 → ~3 segundos máximo
+            Trace("WaitForDaemonReady() → esperando iscsid listo...");
             for (int i = 0; i < 30; i++)
             {
                 var result = ShellHelper.EjecutarComoRoot(
@@ -54,65 +99,73 @@ namespace ISCSI_Util.Views
                 );
 
                 string status = result.Stdout.Trim();
+                Trace($"WaitForDaemonReady() intento {i + 1}: '{status}'");
 
-                // Cuando el daemon está listo, systemd devuelve:
-                // StatusText=Ready to process requests
                 if (status.Contains("Ready", StringComparison.OrdinalIgnoreCase))
+                {
+                    Trace("WaitForDaemonReady() ← daemon listo.");
                     return;
+                }
 
                 await Task.Delay(100);
             }
+
+            Trace("[WARN] WaitForDaemonReady() timeout: iscsid no reporta Ready.");
         }
 
-        
-        
-        
-        
         private async Task LoadStatus()
         {
-            await LoadServiceStatus();
-            await LoadNetworkStatus();
-            await LoadDaemonStatus();
+            Trace("LoadStatus() →");
 
-            await LoadUptime();
-            await LoadHostname();
-            await LoadIpAddress();
-            await LoadLatency();
+            // Cargar en paralelo lo que no depende entre sí
+            var tService  = LoadServiceStatus();
+            var tNetwork  = LoadNetworkStatus();
+            var tDaemon   = LoadDaemonStatus();
+            var tUptime   = LoadUptime();
+            var tHostname = LoadHostname();
+            var tIp       = LoadIpAddress();
+            var tLatency  = LoadLatency();
+
+            await Task.WhenAll(tService, tNetwork, tDaemon, tUptime, tHostname, tIp, tLatency);
 
             TxtLastOp.Text = $"Last update: {DateTime.Now:HH:mm:ss}";
             UpdateSummary();
+
+            Trace("LoadStatus() ← OK");
         }
 
         // ============================================================
-        // SERVICE STATUS (sin redirecciones, sin errores)
+        // SERVICE STATUS
         // ============================================================
         private async Task LoadServiceStatus()
         {
-            var result = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
-
-            string raw = result.Stdout.Trim().ToLower();
-
-            // systemctl puede devolver:
-            // active
-            // active (running)
-            // active (exited)
-            // inactive
-            // failed
-            // activating
-            // unknown
-
-            if (raw.Contains("active"))
+            try
             {
-                IconIscsid.Fill = Brushes.LimeGreen;
-                TxtIscsid.Text = "Running";
+                Trace("LoadServiceStatus() → systemctl is-active iscsid");
+                var result = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
+
+                string raw = result.Stdout.Trim().ToLower();
+                Trace($"LoadServiceStatus() raw='{raw}'");
+
+                if (raw.Contains("active"))
+                {
+                    IconIscsid.Fill = Brushes.LimeGreen;
+                    TxtIscsid.Text = "Running";
+                }
+                else if (raw.Contains("inactive") || raw.Contains("failed"))
+                {
+                    IconIscsid.Fill = Brushes.Red;
+                    TxtIscsid.Text = "Stopped";
+                }
+                else
+                {
+                    IconIscsid.Fill = Brushes.Goldenrod;
+                    TxtIscsid.Text = "Unknown";
+                }
             }
-            else if (raw.Contains("inactive") || raw.Contains("failed"))
+            catch (Exception ex)
             {
-                IconIscsid.Fill = Brushes.Red;
-                TxtIscsid.Text = "Stopped";
-            }
-            else
-            {
+                Trace($"[ERROR] LoadServiceStatus(): {ex}");
                 IconIscsid.Fill = Brushes.Goldenrod;
                 TxtIscsid.Text = "Unknown";
             }
@@ -123,14 +176,26 @@ namespace ISCSI_Util.Views
         // ============================================================
         private async Task LoadNetworkStatus()
         {
-            string output = await ShellHelper.RunCleanAsync("ip -o -4 addr show scope global");
+            try
+            {
+                Trace("LoadNetworkStatus() → ip -o -4 addr show scope global");
+                string output = await ShellHelper.RunCleanAsync("ip -o -4 addr show scope global");
 
-            bool connected = output
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                .Any();
+                bool connected = output
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Any();
 
-            IconNetwork.Fill = connected ? Brushes.LimeGreen : Brushes.Red;
-            TxtNetwork.Text = connected ? "Connected" : "Disconnected";
+                IconNetwork.Fill = connected ? Brushes.LimeGreen : Brushes.Red;
+                TxtNetwork.Text = connected ? "Connected" : "Disconnected";
+
+                Trace($"LoadNetworkStatus() ← connected={connected}");
+            }
+            catch (Exception ex)
+            {
+                Trace($"[ERROR] LoadNetworkStatus(): {ex}");
+                IconNetwork.Fill = Brushes.Goldenrod;
+                TxtNetwork.Text = "Unknown";
+            }
         }
 
         // ============================================================
@@ -138,13 +203,27 @@ namespace ISCSI_Util.Views
         // ============================================================
         private async Task LoadDaemonStatus()
         {
-            var result = ShellHelper.EjecutarComoRoot("systemctl show -p StatusText iscsid");
-            string status = result.Stdout.Trim();
+            try
+            {
+                Trace("LoadDaemonStatus() → systemctl show -p StatusText iscsid");
+                var result = ShellHelper.EjecutarComoRoot("systemctl show -p StatusText iscsid");
+                string status = result.Stdout.Trim();
 
-            bool ready = status.Contains("Ready", StringComparison.OrdinalIgnoreCase);
+                Trace($"LoadDaemonStatus() raw='{status}'");
 
-            IconSocket.Fill = ready ? Brushes.LimeGreen : Brushes.Red;
-            TxtSocket.Text = ready ? "Operational" : "Not operational";
+                bool ready = status.Contains("Ready", StringComparison.OrdinalIgnoreCase);
+
+                IconSocket.Fill = ready ? Brushes.LimeGreen : Brushes.Red;
+                TxtSocket.Text = ready ? "Operational" : "Not operational";
+
+                Trace($"LoadDaemonStatus() ← ready={ready}");
+            }
+            catch (Exception ex)
+            {
+                Trace($"[ERROR] LoadDaemonStatus(): {ex}");
+                IconSocket.Fill = Brushes.Goldenrod;
+                TxtSocket.Text = "Unknown";
+            }
         }
 
         // ============================================================
@@ -152,15 +231,26 @@ namespace ISCSI_Util.Views
         // ============================================================
         private async Task LoadUptime()
         {
-            string raw = await ShellHelper.RunCleanAsync("uptime -p");
-
-            if (string.IsNullOrWhiteSpace(raw))
+            try
             {
-                TxtUptime.Text = "Unknown";
-                return;
-            }
+                Trace("LoadUptime() → uptime -p");
+                string raw = await ShellHelper.RunCleanAsync("uptime -p");
 
-            TxtUptime.Text = raw.Replace("up ", "").Trim();
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    TxtUptime.Text = "Unknown";
+                    Trace("LoadUptime() ← vacío");
+                    return;
+                }
+
+                TxtUptime.Text = raw.Replace("up ", "").Trim();
+                Trace($"LoadUptime() ← '{TxtUptime.Text}'");
+            }
+            catch (Exception ex)
+            {
+                Trace($"[ERROR] LoadUptime(): {ex}");
+                TxtUptime.Text = "Unknown";
+            }
         }
 
         // ============================================================
@@ -168,93 +258,114 @@ namespace ISCSI_Util.Views
         // ============================================================
         private async Task LoadHostname()
         {
-            string raw = await ShellHelper.RunCleanAsync("hostname");
-            TxtHostname.Text = raw.Trim();
+            try
+            {
+                Trace("LoadHostname() → hostname");
+                string raw = await ShellHelper.RunCleanAsync("hostname");
+                TxtHostname.Text = raw.Trim();
+                Trace($"LoadHostname() ← '{TxtHostname.Text}'");
+            }
+            catch (Exception ex)
+            {
+                Trace($"[ERROR] LoadHostname(): {ex}");
+                TxtHostname.Text = "Unknown";
+            }
         }
 
         // ============================================================
-        // IP ADDRESS (filtrado de múltiples IPs)
+        // IP ADDRESS
         // ============================================================
         private async Task LoadIpAddress()
         {
-            string raw = await ShellHelper.RunCleanAsync(
-                "ip -o -4 addr show scope global | awk '{print $4}' | cut -d/ -f1"
-            );
+            try
+            {
+                Trace("LoadIpAddress() → ip -o -4 addr show scope global | awk ...");
+                string raw = await ShellHelper.RunCleanAsync(
+                    "ip -o -4 addr show scope global | awk '{print $4}' | cut -d/ -f1"
+                );
 
-            var ips = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                         .Select(ip => ip.Trim())
-                         .Where(ip =>
-                             !string.IsNullOrWhiteSpace(ip) &&
-                             !ip.StartsWith("127.") &&
-                             !ip.StartsWith("172.16.") &&
-                             !ip.StartsWith("172.17.") &&
-                             !ip.StartsWith("172.18.") &&
-                             !ip.StartsWith("172.19.") &&
-                             !ip.StartsWith("192.168.194.") &&
-                             !ip.StartsWith("172.16.206.")
-                         )
-                         .ToList();
+                var ips = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                             .Select(ip => ip.Trim())
+                             .Where(ip =>
+                                 !string.IsNullOrWhiteSpace(ip) &&
+                                 !ip.StartsWith("127.") &&
+                                 !ip.StartsWith("172.16.") &&
+                                 !ip.StartsWith("172.17.") &&
+                                 !ip.StartsWith("172.18.") &&
+                                 !ip.StartsWith("172.19.") &&
+                                 !ip.StartsWith("192.168.194.") &&
+                                 !ip.StartsWith("172.16.206.")
+                             )
+                             .ToList();
 
-            TxtIpAddress.Text = ips.FirstOrDefault() ?? "Unknown";
+                TxtIpAddress.Text = ips.FirstOrDefault() ?? "Unknown";
+                Trace($"LoadIpAddress() ← '{TxtIpAddress.Text}'");
+            }
+            catch (Exception ex)
+            {
+                Trace($"[ERROR] LoadIpAddress(): {ex}");
+                TxtIpAddress.Text = "Unknown";
+            }
         }
 
         // ============================================================
         // LATENCY
         // ============================================================
-       
-        
         private async Task LoadLatency()
         {
-            // 1) Obtener gateway usando bash -c (para que funcione el pipe)
-            var gwResult = ShellHelper.EjecutarComoRoot(
-                "bash -c \"ip route | awk '/default/ {print $3; exit}'\""
-            );
-
-            string gateway = gwResult.Stdout.Trim();
-
-            // 2) Comando de ping con fallback, usando SIEMPRE bash -c
-            string pingCommand;
-
-            if (!string.IsNullOrWhiteSpace(gateway))
+            try
             {
-                pingCommand =
-                    $"bash -c \"ping -c 1 -w 1 {gateway} || ping -c 1 -w 1 8.8.8.8\"";
+                Trace("LoadLatency() → obtener gateway");
+                string gateway = await ShellHelper.RunCleanAsync(
+                    "ip route | awk '/default/ {print $3; exit}'"
+                );
+                gateway = gateway.Trim();
+                Trace($"LoadLatency() gateway='{gateway}'");
+
+                string pingCmd;
+
+                if (!string.IsNullOrWhiteSpace(gateway))
+                    pingCmd = $"ping -c 1 -w 1 {gateway} || ping -c 1 -w 1 8.8.8.8";
+                else
+                    pingCmd = "ping -c 1 -w 1 8.8.8.8";
+
+                Trace($"LoadLatency() → {pingCmd}");
+                string raw = await ShellHelper.RunCleanAsync(pingCmd);
+
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    TxtLatency.Text = "Timeout";
+                    Trace("LoadLatency() ← vacío → Timeout");
+                    return;
+                }
+
+                int idx = raw.IndexOf("time=", StringComparison.OrdinalIgnoreCase);
+                if (idx == -1)
+                    idx = raw.IndexOf("tiempo=", StringComparison.OrdinalIgnoreCase);
+
+                if (idx != -1)
+                {
+                    bool spanish = raw.IndexOf("tiempo=", StringComparison.OrdinalIgnoreCase) == idx;
+                    int offset = spanish ? 7 : 5;
+
+                    string sub = raw[(idx + offset)..];
+                    string ms = sub.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+                    TxtLatency.Text = ms;
+                    Trace($"LoadLatency() ← '{ms}'");
+                }
+                else
+                {
+                    TxtLatency.Text = "Timeout";
+                    Trace("LoadLatency() ← sin 'time=' → Timeout");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                pingCommand =
-                    "bash -c \"ping -c 1 -w 1 8.8.8.8\"";
-            }
-
-            var pingResult = ShellHelper.EjecutarComoRoot(pingCommand);
-
-            string raw = pingResult.Stdout + pingResult.Stderr; // por si el ping escribe en stderr
-
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                TxtLatency.Text = "Timeout";
-                return;
-            }
-
-            // 3) Buscar time= (inglés) o tiempo= (español)
-            int idx = raw.IndexOf("time=", StringComparison.OrdinalIgnoreCase);
-            if (idx == -1)
-                idx = raw.IndexOf("tiempo=", StringComparison.OrdinalIgnoreCase);
-
-            if (idx != -1)
-            {
-                string sub = raw[(idx + (raw.Contains("tiempo=") ? 7 : 5))..];
-                string ms = sub.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-                TxtLatency.Text = ms;
-            }
-            else
-            {
+                Trace($"[ERROR] LoadLatency(): {ex}");
                 TxtLatency.Text = "Timeout";
             }
         }
 
-        
-        
         // ============================================================
         // SUMMARY
         // ============================================================
@@ -263,6 +374,8 @@ namespace ISCSI_Util.Views
             bool serviceOk = TxtIscsid.Text == "Running";
             bool networkOk = TxtNetwork.Text == "Connected";
             bool daemonOk  = TxtSocket.Text  == "Operational";
+
+            Trace($"UpdateSummary() serviceOk={serviceOk}, networkOk={networkOk}, daemonOk={daemonOk}");
 
             if (!serviceOk || !networkOk || !daemonOk)
             {

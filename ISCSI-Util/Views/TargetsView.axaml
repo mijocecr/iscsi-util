@@ -1,0 +1,69 @@
+<UserControl
+    x:Class="ISCSI_Util.Views.TargetsView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+
+        <!-- ============================================================
+             DISCOVER ROW
+        ============================================================ -->
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
+                    Spacing="10">
+
+            <TextBox x:Name="PortalBox"
+                     Width="260"
+                     Classes="steam-textbox"
+                     Watermark="Portal (e.g. 10.0.0.10)" />
+
+            <Button x:Name="DiscoverButton"
+                    Classes="steam-button"
+                    Content="Discover"
+                    Click="DiscoverButton_Click" />
+        </StackPanel>
+
+        <!-- ============================================================
+             TARGET LIST
+        ============================================================ -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      Margin="0,12,0,12">
+
+            <StackPanel x:Name="TargetsList"
+                        Spacing="10"
+                        Classes="steam-list" />
+        </ScrollViewer>
+
+        <!-- ============================================================
+             TARGET DETAILS
+        ============================================================ -->
+        <Border Grid.Row="2"
+                Classes="steam-card"
+                Padding="16"
+                Margin="0,12,0,0"
+                CornerRadius="8">
+
+            <Grid ColumnDefinitions="*,Auto">
+
+                <!-- LEFT SIDE: INFO -->
+                <StackPanel x:Name="DetailsInfoPanel"
+                            Spacing="10"
+                            Margin="0,0,16,0"
+                            Classes="steam-details" />
+
+                <!-- RIGHT SIDE: BIG ICON -->
+                <Image x:Name="DetailsIcon"
+                       Grid.Column="1"
+                       Width="180"
+                       Height="180"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Classes="steam-icon" />
+
+            </Grid>
+
+        </Border>
+
+    </Grid>
+</UserControl>

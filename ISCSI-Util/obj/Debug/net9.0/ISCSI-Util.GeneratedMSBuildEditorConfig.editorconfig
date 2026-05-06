@@ -43,3 +43,6 @@ build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/StatusView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
+[/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/TargetsView.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
