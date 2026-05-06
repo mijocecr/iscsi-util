@@ -13,6 +13,10 @@ public partial class IscsiDestino : ObservableObject
     [ObservableProperty]
     private string ip;
 
+    
+    public string FsType { get; set; }
+
+    
     /// <summary>IQN (iSCSI Qualified Name) identifier of the target.</summary>
     [ObservableProperty]
     private string iqn;

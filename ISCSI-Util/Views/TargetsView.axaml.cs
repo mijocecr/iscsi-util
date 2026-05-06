@@ -22,17 +22,19 @@ public partial class TargetsView : UserControl
     }
 
     // ============================================================
-    // DISCOVER REAL
+    // DISCOVER REAL (ASYNC)
     // ============================================================
 
-    private void DiscoverButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void DiscoverButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         string portal = PortalBox.Text?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(portal))
             return;
 
         _targets.Clear();
-        _targets.AddRange(IscsiHelper.Descubrir(portal));
+
+        var lista = await IscsiHelper.Descubrir(portal);
+        _targets.AddRange(lista);
 
         RefreshTargetsList();
     }
@@ -79,12 +81,12 @@ public partial class TargetsView : UserControl
             Width = 120
         };
 
-        btn.Click += (_, _) =>
+        btn.Click += async (_, _) =>
         {
             if (!destino.Conectado)
-                IscsiHelper.Conectar(destino);
+                await IscsiHelper.Conectar(destino);
             else
-                IscsiHelper.Desconectar(destino);
+                await IscsiHelper.Desconectar(destino);
 
             RefreshTargetsList();
             LoadTargetDetails(destino);
@@ -148,25 +150,25 @@ public partial class TargetsView : UserControl
         DetailsIcon.Source = LoadIcon(GetIconForChap(chapMode));
 
         // ============================================================
-        // TOGGLE PERSISTENCIA
+        // PERSISTENCIA
         // ============================================================
 
         var toggle = new CheckBox
         {
             Content = "Persistent mount",
-            // De momento no lo ligamos a una propiedad del modelo
-            IsChecked = false
+            IsChecked = destino.Persistir
         };
 
         toggle.Checked += (_, _) =>
         {
-            if (destino.TieneFilesystem)
-                IscsiHelper.ConfigurarPersistencia(destino, "ext4");
+            destino.Persistir = true;
+            IscsiHelper.AplicarPersistencia(destino);
         };
 
         toggle.Unchecked += (_, _) =>
         {
-            IscsiHelper.EliminarServicioPersistencia(destino);
+            destino.Persistir = false;
+            IscsiHelper.AplicarPersistencia(destino);
         };
 
         DetailsInfoPanel.Children.Add(toggle);
@@ -188,9 +190,9 @@ public partial class TargetsView : UserControl
                     Content = "Unmount",
                     Classes = { "steam-button" }
                 };
-                unmountBtn.Click += (_, _) =>
+                unmountBtn.Click += async (_, _) =>
                 {
-                    IscsiHelper.Desconectar(destino, eliminarPersistencia: false);
+                    await IscsiHelper.Desconectar(destino);
                     LoadTargetDetails(destino);
                 };
                 mountRow.Children.Add(unmountBtn);
@@ -219,9 +221,9 @@ public partial class TargetsView : UserControl
                     Content = "Mount",
                     Classes = { "steam-button" }
                 };
-                mountBtn.Click += (_, _) =>
+                mountBtn.Click += async (_, _) =>
                 {
-                    IscsiHelper.Conectar(destino);
+                    await IscsiHelper.Conectar(destino);
                     LoadTargetDetails(destino);
                 };
                 mountRow.Children.Add(mountBtn);
@@ -231,7 +233,7 @@ public partial class TargetsView : UserControl
         DetailsInfoPanel.Children.Add(mountRow);
 
         // ============================================================
-        // INITIALIZE DISK
+        // INITIALIZE DISK (DIÁLOGO NUEVO)
         // ============================================================
 
         var initBtn = new Button
@@ -240,9 +242,10 @@ public partial class TargetsView : UserControl
             Classes = { "steam-button" }
         };
 
-        initBtn.Click += (_, _) =>
+        initBtn.Click += async (_, _) =>
         {
-            IscsiHelper.InicializarDestino(destino);
+            var dlg = new InitializeDiskDialog(destino);
+            await dlg.ShowDialog((Window)this.VisualRoot);
             LoadTargetDetails(destino);
         };
 
