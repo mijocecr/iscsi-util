@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views;
 
@@ -22,9 +23,8 @@ public partial class MainWindow : Window
         MinHeight = 580;
         MaxWidth = 500;
         MaxHeight = 580;
-        Title = "iSCSI Management";
+        Title = "iscsi-util";
 
-        InitializeFakeData();
         Log("Main window initialized.");
     }
 
@@ -68,13 +68,12 @@ public partial class MainWindow : Window
             StatusBarText.Text = "Validating password...";
             var result = ShellHelper.EjecutarComoRoot("echo OK");
 
-            // sudo incorrecto → stderr contiene "incorrect" o "failure"
             if (!string.IsNullOrWhiteSpace(result.Stderr) &&
                 (result.Stderr.Contains("incorrect", StringComparison.OrdinalIgnoreCase) ||
                  result.Stderr.Contains("failure", StringComparison.OrdinalIgnoreCase)))
             {
                 await MostrarPasswordIncorrecta();
-                continue; // volver a pedir
+                continue;
             }
 
             if (result.ExitCode != 0)
@@ -83,7 +82,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            break; // contraseña correcta
+            break;
         }
 
         // ============================================================
@@ -92,7 +91,6 @@ public partial class MainWindow : Window
         StatusBarText.Text = "Ensuring iSCSI service...";
         ShellHelper.EjecutarComoRoot("systemctl start iscsid");
 
-        // Esperar a que esté realmente listo
         await Task.Delay(200);
         await WaitForDaemonReady();
 
@@ -124,9 +122,7 @@ public partial class MainWindow : Window
                 "systemctl show -p StatusText iscsid"
             );
 
-            string status = result.Stdout.Trim();
-
-            if (status.Contains("Ready", StringComparison.OrdinalIgnoreCase))
+            if (result.Stdout.Contains("Ready", StringComparison.OrdinalIgnoreCase))
                 return;
 
             await Task.Delay(100);
@@ -145,8 +141,7 @@ public partial class MainWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
-        var pass = await dialog.ShowDialog<string?>(this);
-        Credenciales.AdminPassword = pass ?? string.Empty;
+        Credenciales.AdminPassword = await dialog.ShowDialog<string?>(this) ?? string.Empty;
     }
 
     private async Task MostrarPasswordIncorrecta()
@@ -189,17 +184,68 @@ public partial class MainWindow : Window
     }
 
     //---------------------------------------------------------
-    // LOAD SESSIONS
+    // LOAD SESSIONS (con LoadingDialog)
     //---------------------------------------------------------
     private async Task LoadSessionsAsync()
     {
-        await Task.Delay(200);
-        Log("Loading sessions...");
+        using (LoadingService.Show("Loading sessions..."))
+        {
+            await Task.Delay(200);
 
-        SessionsList.Items.Clear();
-        SessionsList.Items.Add("iqn.2024-01.com.example:storage02   10.0.0.20   /dev/sdb   Active");
+            SessionsList.Items.Clear();
+            SessionsList.Items.Add("iqn.2024-01.com.example:storage02   10.0.0.20   /dev/sdb   Active");
 
-        Log("Sessions loaded.");
+            Log("Sessions loaded.");
+        }
+    }
+
+  
+
+    //---------------------------------------------------------
+    // MÉTODOS ICSI (limpios)
+    //---------------------------------------------------------
+    public async Task DiscoverTargets(string ip)
+    {
+        using (LoadingService.Show("Discovering targets..."))
+        {
+            await IscsiHelper.Descubrir(ip);
+        }
+    }
+
+    public async Task ConnectTarget(IscsiDestino d)
+    {
+        using (LoadingService.Show("Connecting to target..."))
+        {
+            await IscsiHelper.Conectar(d);
+            await Task.Delay(3000);
+
+            if (StatusPanel is StatusView status)
+                await status.RefreshStatus();
+        }
+    }
+
+    public async Task DisconnectTarget(IscsiDestino d)
+    {
+        using (LoadingService.Show("Disconnecting target..."))
+        {
+            await IscsiHelper.Desconectar(d);
+            await Task.Delay(3000);
+
+            if (StatusPanel is StatusView status)
+                await status.RefreshStatus();
+        }
+    }
+
+    public async Task InitializeDisk(IscsiDestino d, string label, string fsType)
+    {
+        using (LoadingService.Show("Initializing disk..."))
+        {
+            await IscsiHelper.InicializarDestino(d, label, fsType);
+            await Task.Delay(3000);
+
+            if (StatusPanel is StatusView status)
+                await status.RefreshStatus();
+        }
     }
 
     //---------------------------------------------------------
@@ -207,14 +253,9 @@ public partial class MainWindow : Window
     //---------------------------------------------------------
     private void Destino_DoubleTapped(object? sender, RoutedEventArgs e)
     {
-        if (sender is not ListBoxItem item)
-            return;
-
-        if (item.Tag is not IscsiDestino destino)
-            return;
-
-        if (!destino.Conectado || string.IsNullOrWhiteSpace(destino.MountPoint))
-            return;
+        if (sender is not ListBoxItem item) return;
+        if (item.Tag is not IscsiDestino destino) return;
+        if (!destino.Conectado || string.IsNullOrWhiteSpace(destino.MountPoint)) return;
 
         try
         {
@@ -239,18 +280,7 @@ public partial class MainWindow : Window
     private void Log(string message)
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        string line = $"[{timestamp}] {message}";
-
-        LogsList.Items.Add(line);
-        Debug.WriteLine(line);
-    }
-
-    //---------------------------------------------------------
-    // FAKE DATA
-    //---------------------------------------------------------
-    private void InitializeFakeData()
-    {
-        LogsList.Items.Add("[INFO] UI initialized.");
+        LogsList.Items.Add($"[{timestamp}] {message}");
     }
 
     private void OnTabStatusClick(object? sender, PointerPressedEventArgs e)
@@ -261,5 +291,10 @@ public partial class MainWindow : Window
     private void OnTabTargetClick(object? sender, PointerPressedEventArgs e)
     {
         StatusBarText.Text = "All discoverable targets";
+    }
+
+    private void OnTabStatusBarClick(object? sender, PointerPressedEventArgs e)
+    {
+        StatusBarText.Text = "Cerratonix  |  https://github.com/mijocecr";
     }
 }

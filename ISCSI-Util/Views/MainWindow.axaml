@@ -10,7 +10,7 @@
     MaxWidth="500"
     MaxHeight="580"
     CanResize="False"
-    Title="iSCSI Management">
+    Title="iscsi-util">
 
     <DockPanel>
 
@@ -44,6 +44,7 @@
                        TextAlignment="Center"
                        FontSize="13"
                        Foreground="{DynamicResource SteamText}"
+                       PointerPressed="OnTabStatusBarClick"
                        Opacity="0.85"/>
         </Border>
 

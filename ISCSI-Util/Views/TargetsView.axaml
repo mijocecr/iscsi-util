@@ -46,6 +46,7 @@
         <!-- DISCOVER -->
         <StackPanel Grid.Row="0"
                     Orientation="Horizontal"
+                    HorizontalAlignment="Center"
                     Spacing="10">
 
             <TextBox x:Name="PortalBox"
@@ -53,7 +54,9 @@
                      TextAlignment="Center"
                      
                      HorizontalAlignment="Center"
-                     Watermark="Portal (e.g. 192.168.1.10)" />
+                     Watermark="Portal (e.g. 192.168.1.10)" 
+                     KeyUp="PortalBox_KeyUp"
+                     />
 
             <Button Classes="SteamButton"
                     x:Name="DiscoverButton"
@@ -66,8 +69,8 @@
         <!-- TARGET LIST -->
         <Border Grid.Row="1"
                 Classes="SteamCard"
-                MinHeight="90"
-                Margin="0,12,0,12">
+                MinHeight="100"
+                Margin="0,12,0,5">
 
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="TargetsList"

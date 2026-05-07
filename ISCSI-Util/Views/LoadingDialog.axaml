@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ISCSI_Util.Views.LoadingDialog"
+        Width="360"
+        Height="160"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#AA000000"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True">
+
+    <Border Background="#1A1A1A"
+            BorderBrush="#3A7BFF"
+            BorderThickness="2"
+            CornerRadius="10"
+            Padding="20"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center">
+
+        <StackPanel Spacing="14" HorizontalAlignment="Center">
+
+            <TextBlock x:Name="MessageText"
+                       Text="Loading..."
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Foreground="White"
+                       HorizontalAlignment="Center"/>
+
+            <ProgressBar IsIndeterminate="True"
+                         Width="260"
+                         Height="6"
+                         Foreground="#3A7BFF"
+                         Background="#333"/>
+
+        </StackPanel>
+
+    </Border>
+</Window>

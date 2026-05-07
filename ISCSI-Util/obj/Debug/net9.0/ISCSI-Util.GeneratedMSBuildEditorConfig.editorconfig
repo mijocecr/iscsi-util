@@ -38,6 +38,9 @@ build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/InitializeDiskDialogService.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
+[/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/LoadingDialog.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/MainWindow.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 

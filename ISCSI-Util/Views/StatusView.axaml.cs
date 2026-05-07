@@ -4,6 +4,7 @@ using ISCSI_Util.Helpers;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Interactivity;
 
 namespace ISCSI_Util.Views
 {
@@ -53,6 +54,14 @@ namespace ISCSI_Util.Views
             }
         }
 
+        // ⭐ Fuerza un refresh aunque haya uno en curso
+        private async Task ForceRefreshStatus()
+        {
+            Trace("ForceRefreshStatus() → forzando refresco");
+            _isRefreshing = false;
+            await RefreshStatus();
+        }
+
         private void SetButtonsEnabled(bool enabled)
         {
             BtnReload.IsEnabled = enabled;
@@ -68,16 +77,21 @@ namespace ISCSI_Util.Views
             BtnRestart.Click += async (_, _) =>
             {
                 Trace("BtnRestart: systemctl restart iscsid");
+
                 try
                 {
                     ShellHelper.EjecutarComoRoot("systemctl restart iscsid");
 
                     TxtLastOp.Text = "Service restarted.";
                     SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));
-                    TxtSummary.Text = "SYSTEM STATUS: Warning";
+                    TxtSummary.Text = "SYSTEM STATUS: Updating";
 
-                    await WaitForDaemonReady();
-                    await RefreshStatus();
+                    // Esperar 4 segundos
+                    await Task.Delay(4000);
+
+                    // ⭐ Forzar refresh
+                    Trace("BtnRestart: llamando a ForceRefreshStatus() tras 4s");
+                    await ForceRefreshStatus();
                 }
                 catch (Exception ex)
                 {
@@ -92,7 +106,8 @@ namespace ISCSI_Util.Views
         public async Task WaitForDaemonReady()
         {
             Trace("WaitForDaemonReady() → esperando iscsid listo...");
-            for (int i = 0; i < 30; i++)
+
+            for (int i = 0; i < 60; i++)
             {
                 var result = ShellHelper.EjecutarComoRoot(
                     "systemctl show -p StatusText iscsid"
@@ -101,23 +116,25 @@ namespace ISCSI_Util.Views
                 string status = result.Stdout.Trim();
                 Trace($"WaitForDaemonReady() intento {i + 1}: '{status}'");
 
-                if (status.Contains("Ready", StringComparison.OrdinalIgnoreCase))
+                string clean = status.Replace("StatusText=", "").Trim();
+                bool ready = clean.Contains("Ready", StringComparison.OrdinalIgnoreCase);
+
+                if (ready)
                 {
-                    Trace("WaitForDaemonReady() ← daemon listo.");
+                    Trace("WaitForDaemonReady() ← daemon listo (READY).");
                     return;
                 }
 
-                await Task.Delay(100);
+                await Task.Delay(500);
             }
 
-            Trace("[WARN] WaitForDaemonReady() timeout: iscsid no reporta Ready.");
+            Trace("[WARN] WaitForDaemonReady() timeout: iscsid no llegó a READY.");
         }
 
         private async Task LoadStatus()
         {
             Trace("LoadStatus() →");
 
-            // Cargar en paralelo lo que no depende entre sí
             var tService  = LoadServiceStatus();
             var tNetwork  = LoadNetworkStatus();
             var tDaemon   = LoadDaemonStatus();
@@ -134,9 +151,6 @@ namespace ISCSI_Util.Views
             Trace("LoadStatus() ← OK");
         }
 
-        // ============================================================
-        // SERVICE STATUS
-        // ============================================================
         private async Task LoadServiceStatus()
         {
             try
@@ -171,9 +185,6 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // NETWORK STATUS
-        // ============================================================
         private async Task LoadNetworkStatus()
         {
             try
@@ -198,9 +209,7 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // DAEMON STATUS
-        // ============================================================
+        // ⭐ ACTUALIZADO: ahora distingue Syncing
         private async Task LoadDaemonStatus()
         {
             try
@@ -211,12 +220,25 @@ namespace ISCSI_Util.Views
 
                 Trace($"LoadDaemonStatus() raw='{status}'");
 
-                bool ready = status.Contains("Ready", StringComparison.OrdinalIgnoreCase);
+                string clean = status.Replace("StatusText=", "").Trim();
 
-                IconSocket.Fill = ready ? Brushes.LimeGreen : Brushes.Red;
-                TxtSocket.Text = ready ? "Operational" : "Not operational";
+                if (clean.Contains("Ready", StringComparison.OrdinalIgnoreCase))
+                {
+                    IconSocket.Fill = Brushes.LimeGreen;
+                    TxtSocket.Text = "Operational";
+                }
+                else if (clean.Contains("Syncing", StringComparison.OrdinalIgnoreCase))
+                {
+                    IconSocket.Fill = Brushes.Goldenrod;
+                    TxtSocket.Text = "Syncing";
+                }
+                else
+                {
+                    IconSocket.Fill = Brushes.Red;
+                    TxtSocket.Text = "Not operational";
+                }
 
-                Trace($"LoadDaemonStatus() ← ready={ready}");
+                Trace($"LoadDaemonStatus() ← estado='{TxtSocket.Text}'");
             }
             catch (Exception ex)
             {
@@ -226,9 +248,6 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // UPTIME (sesión)
-        // ============================================================
         private async Task LoadUptime()
         {
             try
@@ -253,9 +272,6 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // HOSTNAME
-        // ============================================================
         private async Task LoadHostname()
         {
             try
@@ -272,9 +288,6 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // IP ADDRESS
-        // ============================================================
         private async Task LoadIpAddress()
         {
             try
@@ -308,9 +321,6 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // LATENCY
-        // ============================================================
         private async Task LoadLatency()
         {
             try
@@ -366,14 +376,13 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ============================================================
-        // SUMMARY
-        // ============================================================
+        // ⭐ ACTUALIZADO: Syncing ya no es crítico
         private void UpdateSummary()
         {
             bool serviceOk = TxtIscsid.Text == "Running";
             bool networkOk = TxtNetwork.Text == "Connected";
-            bool daemonOk  = TxtSocket.Text  == "Operational";
+            bool daemonOk  = TxtSocket.Text == "Operational" 
+                          || TxtSocket.Text == "Syncing";
 
             Trace($"UpdateSummary() serviceOk={serviceOk}, networkOk={networkOk}, daemonOk={daemonOk}");
 
