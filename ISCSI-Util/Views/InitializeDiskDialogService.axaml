@@ -1,45 +1,82 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ISCSI_Util.Views.InitializeDiskDialog"
-        Width="420"
-        Height="320"
+        Width="340"
+        Height="150"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Title="Initialize Disk">
+        Title="Initialize Disk"
+        Background="{DynamicResource SteamBackground}"
+        BorderBrush="{DynamicResource SteamBorderStrong}"
+        BorderThickness="1.4">
 
-    <StackPanel Margin="20" Spacing="14">
+    <StackPanel Margin="10" Spacing="4">
 
         <TextBlock Text="Initialize iSCSI Disk"
-                   FontSize="20"
-                   FontWeight="Bold"/>
+                   FontSize="15"
+                   FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource SteamText}"/>
 
-        <TextBlock Text="Label:"/>
-        <TextBox x:Name="LabelBox"
-                 Width="260"
-                 Watermark="Volume label"/>
+        <!-- GRID ULTRA COMPACTO -->
+        <Grid ColumnDefinitions="100, *"
+              RowDefinitions="Auto,Auto"
+              RowSpacing="3">
 
-        <TextBlock Text="Filesystem:"/>
-        <ComboBox x:Name="FsCombo"
-                  Width="260">
-            <ComboBoxItem Content="ext4"/>
-            <ComboBoxItem Content="xfs"/>
-            <ComboBoxItem Content="btrfs"/>
-            <ComboBoxItem Content="f2fs"/>
-            <ComboBoxItem Content="ntfs"/>
-            <ComboBoxItem Content="exfat"/>
-        </ComboBox>
+            <!-- Label -->
+            <TextBlock Text="Label:"
+                       Foreground="{DynamicResource SteamBlue}"
+                       VerticalAlignment="Center"
+                       Grid.Row="0" Grid.Column="0"/>
 
+            <TextBox x:Name="LabelBox"
+                     Classes="SteamTextBox"
+                     Height="20"
+                     Watermark="Volume label"
+                     Grid.Row="0" Grid.Column="1"/>
+
+            <!-- Filesystem -->
+            <TextBlock Text="Filesystem:"
+                       Foreground="{DynamicResource SteamBlue}"
+                       VerticalAlignment="Center"
+                       Grid.Row="1" Grid.Column="0"/>
+
+            <ComboBox x:Name="FsCombo"
+                      Classes="SteamTextBox"
+                      Height="20"
+                      Width="220"
+                      PlaceholderText="Select a Filesystem"
+                      
+                      Grid.Row="1" Grid.Column="1">
+                <ComboBoxItem Content="ext4"/>
+                <ComboBoxItem Content="xfs"/>
+                <ComboBoxItem Content="btrfs"/>
+                <ComboBoxItem Content="f2fs"/>
+                <ComboBoxItem Content="ntfs"/>
+                <ComboBoxItem Content="exfat"/>
+            </ComboBox>
+
+        </Grid>
+
+        <!-- BOTONES ULTRA COMPACTOS -->
         <StackPanel Orientation="Horizontal"
                     HorizontalAlignment="Right"
-                    Spacing="10">
+                    Spacing="6"
+                    Margin="0,4,0,0">
 
             <Button x:Name="ApplyBtn"
                     Content="Initialize"
-                    Width="120"/>
+                    HorizontalContentAlignment="Center"
+                    Width="75"
+                    Height="30"
+                    Classes="SteamButton"/>
 
             <Button x:Name="CancelBtn"
                     Content="Cancel"
-                    Width="120"/>
+                    HorizontalContentAlignment="Center"
+                    Width="75"
+                    Height="30"
+                    Classes="SteamButton"/>
         </StackPanel>
 
     </StackPanel>

@@ -1,53 +1,110 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ISCSI_Util.Views.MutualChapDialog"
-        Width="420"
-        Height="360"
+        Width="380"
+        Height="260"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Title="Configure Mutual CHAP">
+        Title="Configure Mutual CHAP"
+        Background="{DynamicResource SteamBackground}"
+        BorderBrush="{DynamicResource SteamBorderStrong}"
+        BorderThickness="1.4">
 
-    <StackPanel Margin="20" Spacing="14">
+    <StackPanel Margin="14 0 14 5" Spacing="6">
 
         <TextBlock Text="Mutual CHAP Authentication"
-                   FontSize="20"
-                   FontWeight="Bold"/>
+                   FontSize="16"
+                   Margin="0 20 0 10"
+                   FontWeight="Bold"
+                   TextAlignment="Center"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource SteamText}"/>
 
-        <!-- Normal CHAP -->
-        <TextBlock Text="Username:"/>
-        <TextBox x:Name="UserBox"
-                 Width="260"
-                 Watermark="CHAP username"/>
+        <!-- GRID ULTRA COMPACTO -->
+        <Grid ColumnDefinitions="120, *"
+              RowDefinitions="Auto,Auto,Auto,Auto"
+              RowSpacing="3">
 
-        <TextBlock Text="Password:"/>
-        <TextBox x:Name="PassBox"
-                 Width="260"
-                 Watermark="CHAP password"
-                 PasswordChar="●"/>
+            <!-- Username -->
+            <TextBlock Text="Username:"
+                       Foreground="{DynamicResource SteamBlue}"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
+                       Grid.Row="0" Grid.Column="0"/>
 
-        <!-- Reverse CHAP -->
-        <TextBlock Text="Reverse Username:"/>
-        <TextBox x:Name="UserInBox"
-                 Width="260"
-                 Watermark="Mutual CHAP username"/>
+            <TextBox x:Name="UserBox"
+                     Classes="SteamTextBox"
+                     Height="24"
+                     TextAlignment="Center"
+                     Watermark="CHAP username (This PC)"
+                     Grid.Row="0" Grid.Column="1"/>
 
-        <TextBlock Text="Reverse Password:"/>
-        <TextBox x:Name="PassInBox"
-                 Width="260"
-                 Watermark="Mutual CHAP password"
-                 PasswordChar="●"/>
+            <!-- Password -->
+            <TextBlock Text="Password:"
+                       Foreground="{DynamicResource SteamBlue}"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
+                       Grid.Row="1" Grid.Column="0"/>
 
+            <TextBox x:Name="PassBox"
+                     Classes="SteamTextBox"
+                     Height="24"
+                     TextAlignment="Center"
+                     PasswordChar="*"
+                     Watermark="CHAP password (This PC)"
+                     Grid.Row="1" Grid.Column="1"/>
+
+            <!-- Reverse Username -->
+            <TextBlock Text="Reverse User:"
+                       Foreground="{DynamicResource SteamBlue}"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
+                       Grid.Row="2" Grid.Column="0"/>
+
+            <TextBox x:Name="UserInBox"
+                     Classes="SteamTextBox"
+                     Height="24"
+                     TextAlignment="Center"
+                     Watermark="CHAP username (Server)"
+                     Grid.Row="2" Grid.Column="1"/>
+
+            <!-- Reverse Password -->
+            <TextBlock Text="Reverse Pass:"
+                       Foreground="{DynamicResource SteamBlue}"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
+                       Grid.Row="3" Grid.Column="0"/>
+
+            <TextBox x:Name="PassInBox"
+                     Classes="SteamTextBox"
+                     Height="24"
+                     TextAlignment="Center"
+                     PasswordChar="*"
+                     Watermark="CHAP password (Server)"
+                     Grid.Row="3" Grid.Column="1"/>
+
+        </Grid>
+
+        <!-- BOTONES ULTRA COMPACTOS -->
         <StackPanel Orientation="Horizontal"
                     HorizontalAlignment="Right"
-                    Spacing="10">
+                    
+                    Spacing="6"
+                    Margin="0,6,0,0">
 
             <Button x:Name="ApplyBtn"
                     Content="Apply"
-                    Width="100"/>
+                    HorizontalContentAlignment="Center"
+                    Width="80"
+                    Height="30"
+                    Classes="SteamButton"/>
 
             <Button x:Name="CancelBtn"
                     Content="Cancel"
-                    Width="100"/>
+                    HorizontalContentAlignment="Center"
+                    Width="80"
+                    Height="30"
+                    Classes="SteamButton"/>
         </StackPanel>
 
     </StackPanel>

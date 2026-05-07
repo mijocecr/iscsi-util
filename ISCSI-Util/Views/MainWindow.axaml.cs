@@ -257,4 +257,9 @@ public partial class MainWindow : Window
     {
         StatusBarText.Text = "System summary";
     }
+
+    private void OnTabTargetClick(object? sender, PointerPressedEventArgs e)
+    {
+        StatusBarText.Text = "All discoverable targets";
+    }
 }

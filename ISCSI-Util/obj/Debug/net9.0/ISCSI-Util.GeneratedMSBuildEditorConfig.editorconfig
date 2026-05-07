@@ -26,9 +26,6 @@ build_property.EnableCodeStyleSeverity =
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/App.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
-[/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Styles/Colors.axaml]
-build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
-
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Styles/SteamColors.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 

@@ -62,7 +62,8 @@
             <!-- TARGETS TAB -->
             <TabItem>
                 <TabItem.Header>
-                    <TextBlock Text="Targets" Tag="1"/>
+                    <TextBlock Text="Targets" Tag="1"
+                               PointerPressed="OnTabTargetClick"/>
                 </TabItem.Header>
 
                 <views:TargetsView x:Name="TargetsView"/>

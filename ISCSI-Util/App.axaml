@@ -14,7 +14,7 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceInclude Source="avares://ISCSI-Util/Styles/Colors.axaml"/>
+                <ResourceInclude Source="avares://ISCSI-Util/Styles/SteamColors.axaml"/>
             </ResourceDictionary.MergedDictionaries>
 
             <!-- Recursos existentes -->

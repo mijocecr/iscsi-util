@@ -1,8 +1,9 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
   <ResourceDictionary.ThemeDictionaries>
 
-    <!-- LIGHT THEME (opcional, por arquitectura) -->
+    <!-- LIGHT THEME -->
     <ResourceDictionary x:Key="Light">
 
       <!-- Base Colors -->
@@ -17,9 +18,13 @@
       <Color x:Key="SteamAccentHoverColor">#8CD6FF</Color>
       <Color x:Key="SteamAccentPressedColor">#4AA8D8</Color>
 
+      <!-- Extra (para StatusView) -->
+      <Color x:Key="SteamGreenColor">#6BBE45</Color>
+      <Color x:Key="SteamBlueColor">#1A9FFF</Color>
+
     </ResourceDictionary>
 
-    <!-- DARK THEME (tema principal Steam) -->
+    <!-- DARK THEME (principal Steam) -->
     <ResourceDictionary x:Key="Dark">
 
       <!-- Base Colors -->
@@ -34,20 +39,37 @@
       <Color x:Key="SteamAccentHoverColor">#8CD6FF</Color>
       <Color x:Key="SteamAccentPressedColor">#4AA8D8</Color>
 
+      <!-- Extra (para StatusView) -->
+      <Color x:Key="SteamGreenColor">#8BC53F</Color>
+      <Color x:Key="SteamBlueColor">#66C0F4</Color>
+
     </ResourceDictionary>
 
   </ResourceDictionary.ThemeDictionaries>
 
-  <!-- Brushes -->
+  <!-- Brushes base -->
   <SolidColorBrush x:Key="SteamBackground" Color="{DynamicResource SteamBackgroundColor}" />
-  <SolidColorBrush x:Key="SteamPanel" Color="{DynamicResource SteamPanelColor}" />
-  <SolidColorBrush x:Key="SteamCard" Color="{DynamicResource SteamCardColor}" />
-  <SolidColorBrush x:Key="SteamBorder" Color="{DynamicResource SteamBorderColor}" />
-  <SolidColorBrush x:Key="SteamText" Color="{DynamicResource SteamTextColor}" />
+  <SolidColorBrush x:Key="SteamPanel"      Color="{DynamicResource SteamPanelColor}" />
+  <SolidColorBrush x:Key="SteamCard"       Color="{DynamicResource SteamCardColor}" />
+  <SolidColorBrush x:Key="SteamBorder"     Color="{DynamicResource SteamBorderColor}" />
+  <SolidColorBrush x:Key="SteamText"       Color="{DynamicResource SteamTextColor}" />
 
   <!-- Accent Brushes -->
-  <SolidColorBrush x:Key="SteamAccent" Color="{DynamicResource SteamAccentColor}" />
-  <SolidColorBrush x:Key="SteamAccentHover" Color="{DynamicResource SteamAccentHoverColor}" />
+  <SolidColorBrush x:Key="SteamAccent"        Color="{DynamicResource SteamAccentColor}" />
+  <SolidColorBrush x:Key="SteamAccentHover"   Color="{DynamicResource SteamAccentHoverColor}" />
   <SolidColorBrush x:Key="SteamAccentPressed" Color="{DynamicResource SteamAccentPressedColor}" />
+
+  <!-- Extras usados en StatusView -->
+  <SolidColorBrush x:Key="SteamCardBackground"
+                   Color="{DynamicResource SteamCardColor}" />
+
+  <SolidColorBrush x:Key="SteamBorderStrong"
+                   Color="{DynamicResource SteamCardColor}" />
+
+  <SolidColorBrush x:Key="SteamGreen"
+                   Color="{DynamicResource SteamGreenColor}" />
+
+  <SolidColorBrush x:Key="SteamBlue"
+                   Color="{DynamicResource SteamBlueColor}" />
 
 </ResourceDictionary>

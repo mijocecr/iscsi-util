@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Avalonia;
+using Avalonia.Input;
 using Avalonia.Platform;
 
 namespace ISCSI_Util.Views;
@@ -57,47 +58,84 @@ public partial class TargetsView : UserControl
     }
 
     // ============================================================
-    // TARGET CARD (ACTUALIZADO)
+    // TARGET CARD (ESTILO STEAM)
     // ============================================================
 
-  private Control CreateTargetCard(IscsiDestino destino)
+ private Control CreateTargetCard(IscsiDestino destino)
 {
     var border = new Border
     {
-        Classes = { "steam-card" },
-        Padding = new Thickness(10),
-        CornerRadius = new Avalonia.CornerRadius(6),
-        Height = 110,
-        Margin = new Thickness(0, 0, 0, 2)
+        Classes = { "SteamCard" },
+        Padding = new Thickness(12, 10),
+        CornerRadius = new CornerRadius(8),
+        Margin = new Thickness(0, 0, 0, 8),
+
+        // Borde estilo lista (sin sombra)
+        BoxShadow = new BoxShadows(),
+        BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
+        BorderThickness = new Thickness(1.4)
     };
 
-    var root = new StackPanel
+    // GRID PRINCIPAL (2 columnas)
+    var grid = new Grid
     {
-        Spacing = 6,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        ColumnDefinitions = new ColumnDefinitions("60, *"), // 🔥 icono grande a la izquierda
+        RowDefinitions = new RowDefinitions("Auto,Auto"),
+        RowSpacing = 6
     };
 
-    // IQN compacto sin romper altura
-    root.Children.Add(new TextBlock
+    // ============================
+    // ICONO GRANDE A LA IZQUIERDA
+    // ============================
+   
+    var icon = new Image
     {
+        Source = LoadIcon("avares://ISCSI-Util/Assets/Icons/target.jpeg"),
+        Stretch = Stretch.Uniform,   
+        MaxWidth = 80,
+        MaxHeight = 80,
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        Margin = new Thickness(0, 4, 10, 0)
+    };
+
+    
+    grid.Children.Add(icon);
+    Grid.SetColumn(icon, 0);
+    Grid.SetRowSpan(icon, 2); 
+
+    // ============================
+    // FILA 1 — IQN
+    // ============================
+    var iqnText = new TextBlock
+    {
+        Cursor = new Cursor(StandardCursorType.Hand),
         Text = destino.Iqn,
         FontSize = 14,
         FontWeight = FontWeight.SemiBold,
         TextWrapping = TextWrapping.NoWrap,
-        TextTrimming = TextTrimming.CharacterEllipsis
-    });
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
+    };
 
-    // Fila de botones compacta
-    var grid = new Grid
+    grid.Children.Add(iqnText);
+    Grid.SetColumn(iqnText, 1);
+    Grid.SetRow(iqnText, 0);
+
+    // ============================
+    // FILA 2 — BOTONES
+    // ============================
+    var btnRow = new StackPanel
     {
-        ColumnDefinitions = new ColumnDefinitions("Auto,6,Auto,6,Auto,6,Auto"),
+        Orientation = Avalonia.Layout.Orientation.Horizontal,
+        Spacing = 8,
         VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
     };
 
     // CONNECT / DISCONNECT
     var connectBtn = new Button
     {
-        Classes = { "steam-button" },
+        Classes = { "SteamButton" },
         Content = destino.Conectado ? "Disconnect" : "Connect",
         Width = 100,
         Height = 28
@@ -112,27 +150,25 @@ public partial class TargetsView : UserControl
         RefreshTargetsList();
         LoadTargetDetails(destino);
     };
-    grid.Children.Add(connectBtn);
-    Grid.SetColumn(connectBtn, 0);
+    btnRow.Children.Add(connectBtn);
 
-    // CHAP NORMAL
+    // CHAP
     if (destino.UsaChap && !destino.UsaMutualChap)
     {
         var chapBtn = new Button
         {
             Content = "CHAP",
-            Classes = { "steam-button" },
-            Width = 80,
+            Classes = { "SteamButton" },
+            Width = 70,
             Height = 28
         };
         chapBtn.Click += async (_, _) =>
         {
             var dlg = new ChapDialog(destino);
-            await dlg.ShowDialog((Window)this.VisualRoot);
+            await dlg.ShowDialog((Window)VisualRoot);
             LoadTargetDetails(destino);
         };
-        grid.Children.Add(chapBtn);
-        Grid.SetColumn(chapBtn, 2);
+        btnRow.Children.Add(chapBtn);
     }
 
     // MUTUAL CHAP
@@ -141,145 +177,232 @@ public partial class TargetsView : UserControl
         var mutualBtn = new Button
         {
             Content = "Mutual",
-            Classes = { "steam-button" },
+            Classes = { "SteamButton" },
             Width = 90,
             Height = 28
         };
         mutualBtn.Click += async (_, _) =>
         {
             var dlg = new MutualChapDialog(destino);
-            await dlg.ShowDialog((Window)this.VisualRoot);
+            await dlg.ShowDialog((Window)VisualRoot);
             LoadTargetDetails(destino);
         };
-        grid.Children.Add(mutualBtn);
-        Grid.SetColumn(mutualBtn, 2);
+        btnRow.Children.Add(mutualBtn);
     }
 
-    // 🔥 INIT SOLO SI ESTÁ CONECTADO Y NO TIENE FS
+    // INIT
     if (destino.Conectado && !destino.TieneFilesystem)
     {
         var initBtn = new Button
         {
             Content = "Init",
-            Classes = { "steam-button" },
-            Background = Brushes.DarkOrange,
+            Classes = { "SteamButton" },
             Width = 60,
-            Height = 28
+            Height = 28,
+            Background = new SolidColorBrush(Colors.DarkOrange)
         };
         initBtn.Click += async (_, _) =>
         {
             var dlg = new InitializeDiskDialog(destino);
-            await dlg.ShowDialog((Window)this.VisualRoot);
+            await dlg.ShowDialog((Window)VisualRoot);
             LoadTargetDetails(destino);
         };
-        grid.Children.Add(initBtn);
-        Grid.SetColumn(initBtn, 4);
+        btnRow.Children.Add(initBtn);
     }
 
-    root.Children.Add(grid);
+    grid.Children.Add(btnRow);
+    Grid.SetColumn(btnRow, 1);
+    Grid.SetRow(btnRow, 1);
 
+    // SELECCIÓN DE TARJETA
     border.PointerPressed += (_, _) =>
     {
         _selected = destino;
         LoadTargetDetails(destino);
     };
 
-    border.Child = root;
+    border.Child = grid;
     return border;
 }
 
+
+
     // ============================================================
-    // DETAILS PANEL (ACTUALIZADO CON ICONO)
+    // DETAILS PANEL (ESTILO STATUSVIEW)
     // ============================================================
 
-    private async void LoadTargetDetails(IscsiDestino destino)
+  private async void LoadTargetDetails(IscsiDestino destino)
+{
+    DetailsInfoPanel.Children.Clear();
+
+    IscsiHelper.DetectarChap(destino);
+
+    if (destino.Conectado)
+        await IscsiHelper.CompletarInformacionDestino(destino, 0);
+
+    destino.Persistir = IscsiHelper.DetectarPersistencia(destino);
+
+    // GRID COMPACTO DE INFORMACIÓN
+    var infoGrid = new Grid
     {
-        DetailsInfoPanel.Children.Clear();
+        ColumnDefinitions = new ColumnDefinitions("80, *"),
+        RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto"),
+        RowSpacing = 2   
+    };
 
-        IscsiHelper.DetectarChap(destino);
+    // --- IQN ---
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = "IQN:",
+        TextAlignment = TextAlignment.Center,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
+        FontWeight = FontWeight.SemiBold,
+        Margin = new Thickness(0,0,0,1)
+    });
+    Grid.SetRow(infoGrid.Children[^1], 0);
 
-        if (destino.Conectado)
-            await IscsiHelper.CompletarInformacionDestino(destino, 0);
+    infoGrid.Children.Add(new TextBlock
+    {
+        
+        Text = destino.Iqn,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamText")!,
+        TextWrapping = TextWrapping.Wrap
+        
+    });
+    Grid.SetColumn(infoGrid.Children[^1], 1);
+    Grid.SetRow(infoGrid.Children[^1], 0);
 
-        destino.Persistir = IscsiHelper.DetectarPersistencia(destino);
+    // --- Portal ---
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = "Portal:",
+        TextAlignment = TextAlignment.Center,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
+        FontWeight = FontWeight.SemiBold,
+        Margin = new Thickness(0,0,0,1)
+    });
+    Grid.SetRow(infoGrid.Children[^1], 1);
 
-        DetailsInfoPanel.Children.Add(new TextBlock
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = destino.Ip,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
+    });
+    Grid.SetColumn(infoGrid.Children[^1], 1);
+    Grid.SetRow(infoGrid.Children[^1], 1);
+
+    // --- Status ---
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = "Status:",
+        TextAlignment = TextAlignment.Center,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
+        FontWeight = FontWeight.SemiBold,
+        Margin = new Thickness(0,0,0,1)
+    });
+    Grid.SetRow(infoGrid.Children[^1], 2);
+
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = destino.Conectado ? "Connected" : "Disconnected",
+        Foreground = destino.Conectado
+            ? (IBrush)Application.Current!.FindResource("SteamGreen")!
+            : Brushes.OrangeRed
+    });
+    Grid.SetColumn(infoGrid.Children[^1], 1);
+    Grid.SetRow(infoGrid.Children[^1], 2);
+
+    // --- Filesystem ---
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = "Filesystem:",
+        Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
+        FontWeight = FontWeight.SemiBold
+    });
+    Grid.SetRow(infoGrid.Children[^1], 3);
+
+    infoGrid.Children.Add(new TextBlock
+    {
+        Text = destino.TieneFilesystem ? "Yes" : "No",
+        Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
+    });
+    Grid.SetColumn(infoGrid.Children[^1], 1);
+    Grid.SetRow(infoGrid.Children[^1], 3);
+
+    DetailsInfoPanel.Children.Add(infoGrid);
+
+    // ICONO (ya alineado por XAML)
+    DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
+
+    // PERSISTENCIA
+    var toggle = new CheckBox
+    {
+        Content = "Persistent mount",
+        IsChecked = destino.Persistir,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamText")!,
+        Margin = new Thickness(0,4,0,0) 
+    };
+    toggle.Checked += (_, _) =>
+    {
+        destino.Persistir = true;
+        IscsiHelper.AplicarPersistencia(destino);
+    };
+    toggle.Unchecked += (_, _) =>
+    {
+        destino.Persistir = false;
+        IscsiHelper.AplicarPersistencia(destino);
+    };
+    DetailsInfoPanel.Children.Add(toggle);
+
+    // BOTONES MOUNT / OPEN / UNMOUNT
+    var mountRow = new StackPanel
+    {
+        Orientation = Avalonia.Layout.Orientation.Horizontal,
+        Spacing = 8, // 🔥 antes 12
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        Margin = new Thickness(0,4,0,0)
+    };
+
+    if (destino.Conectado)
+    {
+        if (!string.IsNullOrEmpty(destino.MountPoint) &&
+            Directory.Exists(destino.MountPoint))
         {
-            Text = $"IQN: {destino.Iqn}",
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 400
-        });
-
-        DetailsInfoPanel.Children.Add(new TextBlock { Text = $"Portal: {destino.Ip}" });
-        DetailsInfoPanel.Children.Add(new TextBlock { Text = $"Status: {(destino.Conectado ? "Connected" : "Disconnected")}" });
-        DetailsInfoPanel.Children.Add(new TextBlock { Text = $"Filesystem: {(destino.TieneFilesystem ? "Yes" : "No")}" });
-
-        // 🔥 ICONO ACTIVADO
-        DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
-
-        var toggle = new CheckBox
-        {
-            Content = "Persistent mount",
-            IsChecked = destino.Persistir
-        };
-        toggle.Checked += (_, _) =>
-        {
-            destino.Persistir = true;
-            IscsiHelper.AplicarPersistencia(destino);
-        };
-        toggle.Unchecked += (_, _) =>
-        {
-            destino.Persistir = false;
-            IscsiHelper.AplicarPersistencia(destino);
-        };
-        DetailsInfoPanel.Children.Add(toggle);
-
-        var mountRow = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 12,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
-        };
-
-        if (destino.Conectado)
-        {
-            if (!string.IsNullOrEmpty(destino.MountPoint) &&
-                Directory.Exists(destino.MountPoint))
+            var unmountBtn = new Button { Content = "Unmount", Classes = { "SteamButton" } };
+            unmountBtn.Click += async (_, _) =>
             {
-                var unmountBtn = new Button { Content = "Unmount", Classes = { "steam-button" } };
-                unmountBtn.Click += async (_, _) =>
-                {
-                    await IscsiHelper.Desconectar(destino);
-                    LoadTargetDetails(destino);
-                };
-                mountRow.Children.Add(unmountBtn);
+                await IscsiHelper.Desconectar(destino);
+                LoadTargetDetails(destino);
+            };
+            mountRow.Children.Add(unmountBtn);
 
-                var openBtn = new Button { Content = "Open", Classes = { "steam-button" } };
-                openBtn.Click += (_, _) =>
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = destino.MountPoint,
-                        UseShellExecute = true
-                    });
-                };
-                mountRow.Children.Add(openBtn);
-            }
-            else
+            var openBtn = new Button { Content = "Open", Classes = { "SteamButton" } };
+            openBtn.Click += (_, _) =>
             {
-                var mountBtn = new Button { Content = "Mount", Classes = { "steam-button" } };
-                mountBtn.Click += async (_, _) =>
+                Process.Start(new ProcessStartInfo
                 {
-                    await IscsiHelper.Conectar(destino);
-                    LoadTargetDetails(destino);
-                };
-                mountRow.Children.Add(mountBtn);
-            }
+                    FileName = destino.MountPoint,
+                    UseShellExecute = true
+                });
+            };
+            mountRow.Children.Add(openBtn);
         }
-
-        DetailsInfoPanel.Children.Add(mountRow);
+        else
+        {
+            var mountBtn = new Button { Content = "Mount", Classes = { "SteamButton" } };
+            mountBtn.Click += async (_, _) =>
+            {
+                await IscsiHelper.Conectar(destino);
+                LoadTargetDetails(destino);
+            };
+            mountRow.Children.Add(mountBtn);
+        }
     }
 
+    DetailsInfoPanel.Children.Add(mountRow);
+}
+
+    
     // ============================================================
     // ICONOS
     // ============================================================

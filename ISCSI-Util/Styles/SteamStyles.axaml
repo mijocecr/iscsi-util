@@ -10,7 +10,7 @@
     <Setter Property="Foreground" Value="{DynamicResource SteamText}" />
   </Style>
 
-  <!-- BUTTON -->
+  <!-- BUTTON (base Steam) -->
   <Style Selector="Button">
     <Setter Property="Background" Value="{DynamicResource SteamCard}" />
     <Setter Property="Foreground" Value="{DynamicResource SteamText}" />
@@ -29,8 +29,6 @@
     <Setter Property="Background" Value="{DynamicResource SteamAccentPressed}" />
     <Setter Property="Foreground" Value="White" />
   </Style>
-
-
 
   <!-- LISTBOX -->
   <Style Selector="ListBox">
@@ -64,13 +62,15 @@
     <Setter Property="Foreground" Value="White" />
   </Style>
 
-  <!-- CARD -->
-  <Style Selector="Border.steam-card">
-    <Setter Property="Background" Value="{DynamicResource SteamCard}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource SteamBorder}" />
-    <Setter Property="BorderThickness" Value="1" />
+  <!-- CARD / PANEL ELEVADO STEAM -->
+  <Style Selector="Border.SteamCard">
+    <Setter Property="Background" Value="{DynamicResource SteamCardBackground}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SteamBorderStrong}" />
+    <Setter Property="BorderThickness" Value="1.5" />
     <Setter Property="CornerRadius" Value="6" />
     <Setter Property="Padding" Value="10" />
+    <!-- Sombra solo si el control la soporta (Border sí la tiene) -->
+    <Setter Property="BoxShadow" Value="0 4 12 #80000000" />
   </Style>
 
 </Styles>
