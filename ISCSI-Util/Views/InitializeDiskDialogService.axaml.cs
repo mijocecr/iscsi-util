@@ -1,7 +1,9 @@
-using Avalonia.Controls;
-using ISCSI_Util.Helpers;
-using ISCSI_Util.Models;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using ISCSI_Util.Models;
+using ISCSI_Util.Helpers;
 
 namespace ISCSI_Util.Views;
 
@@ -14,37 +16,71 @@ public partial class InitializeDiskDialog : Window
         InitializeComponent();
         _destino = destino;
 
-        DeviceInfo.Text = $"Device: {destino.PartitionPath}";
-
-        LoadFilesystems();
-
         CancelBtn.Click += (_, _) => Close();
-        OkBtn.Click += async (_, _) => await OnInitialize();
+        ApplyBtn.Click += ApplyChanges;
     }
 
-    private void LoadFilesystems()
+    private async void ApplyChanges(object? sender, RoutedEventArgs e)
     {
-        var fsCandidates = new[] { "ext4", "xfs", "btrfs", "f2fs", "ntfs", "exfat" };
+        string label = LabelBox.Text?.Trim() ?? "";
+        string fs = (FsCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
 
-        foreach (var fs in fsCandidates)
+        if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(fs))
+            return;
+
+        // Validar soporte del FS
+        if (!IscsiHelper.SoportaFs(fs))
         {
-            if (IscsiHelper.SoportaFs(fs))
-                FsCombo.Items.Add(fs);
+            await MessageBox("Filesystem not supported on this system.");
+            return;
         }
 
-        if (FsCombo.Items.Count == 0)
-            FsCombo.Items.Add("ext4");
-
-        FsCombo.SelectedIndex = 0;
-    }
-
-    private async Task OnInitialize()
-    {
-        string label = LabelBox.Text?.Trim() ?? "NewDisk";
-        string fs = FsCombo.SelectedItem?.ToString() ?? "ext4";
-
+        // Inicializar
         await IscsiHelper.InicializarDestino(_destino, label, fs);
+
+        // Refrescar estado real
+        _destino.Persistir = IscsiHelper.DetectarPersistencia(_destino);
+        IscsiHelper.DetectarChap(_destino);
 
         Close();
     }
+
+    private async Task MessageBox(string msg)
+    {
+        var dlg = new Window
+        {
+            Width = 300,
+            Height = 150,
+            Title = "Info",
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        var panel = new StackPanel
+        {
+            Margin = new Thickness(20)
+        };
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = msg,
+            Margin = new Thickness(0, 0, 0, 20)
+        });
+
+        var okBtn = new Button
+        {
+            Content = "OK",
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Width = 80
+        };
+
+        okBtn.Click += (_, _) => dlg.Close();
+
+        panel.Children.Add(okBtn);
+
+        dlg.Content = panel;
+
+        await dlg.ShowDialog(this);
+    }
+
+   
 }

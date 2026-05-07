@@ -93,152 +93,228 @@ public static class IscsiHelper
     }
 
     // ======================================================================
+    //  🔥 DETECTAR CHAP / MUTUAL CHAP
+    // ======================================================================
+   
+    
+    public static void DetectarChap(IscsiDestino d)
+    {
+        // Normalizamos IQN a minúsculas para comparar
+        var iqn = d.Iqn?.ToLowerInvariant() ?? string.Empty;
+
+        // MyCloud EX2 Ultra → sin CHAP
+        if (iqn.Contains("mycloudex2ultra") || iqn.Contains("mycloud"))
+        {
+            d.UsaChap = false;
+            d.UsaMutualChap = false;
+            return;
+        }
+
+        // FreeNAS/TrueNAS mutual CHAP
+        if (iqn.Contains("mutualchap"))
+        {
+            d.UsaChap = true;
+            d.UsaMutualChap = true;
+            return;
+        }
+
+        // FreeNAS/TrueNAS CHAP normal
+        if (iqn.Contains("bak") || iqn.Contains("chap"))
+        {
+            d.UsaChap = true;
+            d.UsaMutualChap = false;
+            return;
+        }
+
+        // Por defecto: sin CHAP
+        d.UsaChap = false;
+        d.UsaMutualChap = false;
+    }
+
+    
+
+    
+    private static string ExtraerValor(string text, string key)
+    {
+        foreach (var line in text.Split('\n'))
+        {
+            if (line.Contains(key))
+            {
+                var parts = line.Split('=');
+                if (parts.Length == 2)
+                    return parts[1].Trim();
+            }
+        }
+        return "";
+    }
+
+    // ======================================================================
     //  DISCOVER — Descubrir destinos iSCSI en un portal
     // ======================================================================
     public static async Task<List<IscsiDestino>> Descubrir(string ip)
+{
+    long id = NextTraceId();
+    var sw = StartTrace(id, "Descubrir", $"IP='{ip}'");
+
+    var destinos = new List<IscsiDestino>();
+
+    try
     {
-        long id = NextTraceId();
-        var sw = StartTrace(id, "Descubrir", $"IP='{ip}'");
+        Log(id, "Ejecutando discovery...");
+        var discovery = ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m discovery -t sendtargets -p {ip}"
+        );
 
-        var destinos = new List<IscsiDestino>();
-
-        try
+        if (string.IsNullOrWhiteSpace(discovery.Stdout))
         {
-            Log(id, "Ejecutando discovery...");
-            var discovery = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m discovery -t sendtargets -p {ip}"
-            );
-
-            if (string.IsNullOrWhiteSpace(discovery.Stdout))
-            {
-                Log(id, "No se encontraron destinos.");
-                EndTrace(id, "Descubrir", sw, "EMPTY");
-                return destinos;
-            }
-
-            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
-
-            foreach (var line in discovery.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                Log(id, $"Procesando línea: '{line}'");
-
-                if (!line.Contains("iqn.")) continue;
-
-                string iqn = line.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                    .LastOrDefault(s => s.StartsWith("iqn."));
-
-                if (string.IsNullOrWhiteSpace(iqn))
-                    continue;
-
-                bool conectado = sesiones.Contains(iqn);
-
-                if (destinos.Any(d => d.Iqn == iqn && d.Ip == ip))
-                    continue;
-
-                var d = new IscsiDestino
-                {
-                    Ip = ip,
-                    Iqn = iqn,
-                    Conectado = conectado,
-                    Seleccionado = false,
-                    TieneFilesystem = false
-                };
-
-                destinos.Add(d);
-            }
-
-            foreach (var d in destinos.Where(x => x.Conectado))
-            {
-                Log(id, $"Completando información para {d.Iqn}...");
-                await CompletarInformacionDestino(d, id);
-            }
-
-            EndTrace(id, "Descubrir", sw, $"OK ({destinos.Count} destinos)");
+            Log(id, "No se encontraron destinos.");
+            EndTrace(id, "Descubrir", sw, "EMPTY");
             return destinos;
         }
-        catch (Exception ex)
+
+        var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
+
+        foreach (var line in discovery.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            Log(id, $"[ERROR] Descubrir: {ex.Message}");
-            EndTrace(id, "Descubrir", sw, "ERROR");
-            return destinos;
+            if (!line.Contains("iqn.")) continue;
+
+            string iqn = line.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .LastOrDefault(s => s.StartsWith("iqn."));
+
+            if (string.IsNullOrWhiteSpace(iqn))
+                continue;
+
+            bool conectado = sesiones.Contains(iqn);
+
+            if (destinos.Any(d => d.Iqn == iqn && d.Ip == ip))
+                continue;
+
+            var d = new IscsiDestino
+            {
+                Ip = ip,
+                Iqn = iqn,
+                Conectado = conectado,
+                Seleccionado = false,
+                TieneFilesystem = false
+            };
+
+            destinos.Add(d);
         }
+
+        // 🔥 SIEMPRE detectar CHAP (conectado o no)
+        foreach (var d in destinos)
+        {
+            DetectarChap(d);
+            d.Persistir = DetectarPersistencia(d);
+        }
+
+        // 🔥 SOLO detectar filesystem si está conectado
+        foreach (var d in destinos.Where(x => x.Conectado))
+        {
+            await CompletarInformacionDestino(d, id);
+        }
+
+        EndTrace(id, "Descubrir", sw, $"OK ({destinos.Count} destinos)");
+        return destinos;
     }
+    catch (Exception ex)
+    {
+        Log(id, $"[ERROR] Descubrir: {ex.Message}");
+        EndTrace(id, "Descubrir", sw, "ERROR");
+        return destinos;
+    }
+}
 
     // ======================================================================
     //  COMPLETAR INFORMACIÓN — DevicePath, PartitionPath, MountPoint, FS
     // ======================================================================
-    private static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+    
+    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+{
+    long id = NextTraceId();
+    var sw = StartTrace(id, "CompletarInformacion", $"IQN='{d.Iqn}'");
+
+    try
     {
-        long id = NextTraceId();
-        var sw = StartTrace(id, "CompletarInformacion", $"IQN='{d.Iqn}'");
-
-        try
+        // 🔥 CORRECCIÓN CRÍTICA
+        // Si el destino NO está conectado, no existe /dev/disk/by-path
+        // y por tanto NO se puede detectar filesystem.
+        if (!d.Conectado)
         {
-            var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            var match = byPath.FirstOrDefault(l =>
-                l.Contains(d.Ip) && l.Contains("lun")
-            );
-
-            if (match != null)
-            {
-                d.DevicePath = "/dev/disk/by-path/" + match.Trim();
-                Log(id, $"DevicePath='{d.DevicePath}'");
-            }
-            else
-            {
-                Log(id, "No se encontró DevicePath.");
-                EndTrace(id, "CompletarInformacion", sw, "NO_DEVICE");
-                return;
-            }
-
-            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
-            var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            d.PartitionPath = lines.Length > 1
-                ? "/dev/" + lines[1].Trim()
-                : d.DevicePath;
-
-            Log(id, $"PartitionPath='{d.PartitionPath}'");
-
-            var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            var mline = mounts.FirstOrDefault(l => l.Contains(d.PartitionPath));
-
-            if (mline != null)
-            {
-                var parts = mline.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 3)
-                {
-                    d.MountPoint = parts[2];
-                    Log(id, $"MountPoint detectado='{d.MountPoint}'");
-                }
-            }
-
-            var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}");
-
-            d.TieneFilesystem =
-                !string.IsNullOrWhiteSpace(blkid.Stdout) &&
-                blkid.Stdout.Contains("TYPE=");
-
-            if (d.TieneFilesystem)
-            {
-                d.FsType = DetectarFsType(blkid.Stdout);
-                Log(id, $"FsType detectado='{d.FsType}'");
-            }
-
-            Log(id, $"TieneFilesystem={d.TieneFilesystem}");
-
-            EndTrace(id, "CompletarInformacion", sw);
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            d.MountPoint = "";
+            Log(id, "Destino no conectado → TieneFilesystem = false");
+            EndTrace(id, "CompletarInformacion", sw, "NOT_CONNECTED");
+            return;
         }
-        catch (Exception ex)
+
+        var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var match = byPath.FirstOrDefault(l =>
+            l.Contains(d.Ip) && l.Contains("lun")
+        );
+
+        if (match != null)
         {
-            Log(id, $"[ERROR] CompletarInformacion: {ex.Message}");
-            EndTrace(id, "CompletarInformacion", sw, "ERROR");
+            d.DevicePath = "/dev/disk/by-path/" + match.Trim();
+            Log(id, $"DevicePath='{d.DevicePath}'");
         }
+        else
+        {
+            Log(id, "No se encontró DevicePath.");
+            EndTrace(id, "CompletarInformacion", sw, "NO_DEVICE");
+            return;
+        }
+
+        var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
+        var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        d.PartitionPath = lines.Length > 1
+            ? "/dev/" + lines[1].Trim()
+            : d.DevicePath;
+
+        Log(id, $"PartitionPath='{d.PartitionPath}'");
+
+        var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var mline = mounts.FirstOrDefault(l => l.Contains(d.PartitionPath));
+
+        if (mline != null)
+        {
+            var parts = mline.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3)
+            {
+                d.MountPoint = parts[2];
+                Log(id, $"MountPoint detectado='{d.MountPoint}'");
+            }
+        }
+
+        var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}");
+
+        d.TieneFilesystem =
+            !string.IsNullOrWhiteSpace(blkid.Stdout) &&
+            blkid.Stdout.Contains("TYPE=");
+
+        if (d.TieneFilesystem)
+        {
+            d.FsType = DetectarFsType(blkid.Stdout);
+            Log(id, $"FsType detectado='{d.FsType}'");
+        }
+
+        Log(id, $"TieneFilesystem={d.TieneFilesystem}");
+
+        EndTrace(id, "CompletarInformacion", sw);
     }
+    catch (Exception ex)
+    {
+        Log(id, $"[ERROR] CompletarInformacion: {ex.Message}");
+        EndTrace(id, "CompletarInformacion", sw, "ERROR");
+    }
+}
+
 
     // ======================================================================
     //  CONECTAR — Montaje avanzado, robusto y con instrumentación
@@ -323,6 +399,9 @@ public static class IscsiHelper
                     $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op=new"
                 );
 
+                // --------------------------------------------------------------
+                // 🔥 APLICAR CHAP / MUTUAL CHAP ANTES DEL LOGIN
+                // --------------------------------------------------------------
                 if (d.UsaChap || d.UsaMutualChap)
                 {
                     ShellHelper.EjecutarComoRoot(
@@ -353,6 +432,19 @@ public static class IscsiHelper
                 );
             }
 
+            // --------------------------------------------------------------
+            // 🔥 DETECTAR CHAP DESPUÉS DEL LOGIN
+            // --------------------------------------------------------------
+            DetectarChap(d);
+
+            // --------------------------------------------------------------
+            // 🔥 DETECTAR PERSISTENCIA REAL
+            // --------------------------------------------------------------
+            d.Persistir = DetectarPersistencia(d);
+
+            // --------------------------------------------------------------
+            // 🔥 DETECTAR DEVICEPATH
+            // --------------------------------------------------------------
             d.DevicePath = null;
 
             for (int i = 0; i < 10; i++)
@@ -377,11 +469,11 @@ public static class IscsiHelper
             if (string.IsNullOrWhiteSpace(d.DevicePath))
                 throw new Exception($"No se encontró symlink para {d.Iqn}");
 
-            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
-            var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var lsblk2 = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
+            var lines2 = lsblk2.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            d.PartitionPath = lines.Length > 1
-                ? "/dev/" + lines[1].Trim()
+            d.PartitionPath = lines2.Length > 1
+                ? "/dev/" + lines2[1].Trim()
                 : d.DevicePath;
 
             Log(id, $"PartitionPath='{d.PartitionPath}'");
@@ -408,14 +500,20 @@ public static class IscsiHelper
             if (mpCheck.ExitCode != 0)
             {
                 Log(id, "Montando volumen...");
+
+                string mountFs = fsType == "ntfs" ? "ntfs3" : fsType;
+
                 ShellHelper.EjecutarComoRoot(
-                    $"mount -t {fsType} {d.PartitionPath} \"{d.MountPoint}\"");
+                    $"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\"");
             }
             else
             {
                 Log(id, "Ya estaba montado.");
             }
 
+            // --------------------------------------------------------------
+            // 🔥 REPARAR PERMISOS SI ES ROOT:ROOT
+            // --------------------------------------------------------------
             string testFile = null;
 
             for (int i = 0; i < 20; i++)
@@ -460,7 +558,6 @@ public static class IscsiHelper
             EndTrace(id, "Conectar", sw, "ERROR");
         }
     }
-
     // ======================================================================
     //  DESCONECTAR — desmontaje avanzado, limpieza real e instrumentación
     // ======================================================================
@@ -471,6 +568,9 @@ public static class IscsiHelper
 
         try
         {
+            // --------------------------------------------------------------
+            // 1) Desmontar si está montado
+            // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
                 var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
@@ -489,6 +589,9 @@ public static class IscsiHelper
                 }
             }
 
+            // --------------------------------------------------------------
+            // 2) Eliminar directorio de montaje
+            // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint) &&
                 Directory.Exists(d.MountPoint))
             {
@@ -496,8 +599,7 @@ public static class IscsiHelper
                 {
                     Log(id, "Eliminando directorio de montaje...");
                     ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"");
-    
-                    }
+                }
                 catch (Exception ex)
                 {
                     Log(id, $"[WARN] No se pudo eliminar el directorio: {ex.Message}");
@@ -738,186 +840,205 @@ WantedBy=multi-user.target
     // ======================================================================
     //  DETECTAR PERSISTENCIA REAL
     // ======================================================================
-    public static bool EsPersistente(IscsiDestino d)
+    public static bool DetectarPersistencia(IscsiDestino d)
     {
-        if (string.IsNullOrWhiteSpace(d.MountPoint))
+        // 🔥 Protección total: si no hay mountpoint, no puede haber persistencia
+        if (d == null || string.IsNullOrWhiteSpace(d.MountPoint))
             return false;
 
+        // 🔥 Protección: PartitionPath puede ser null justo después de conectar
+        string part = d.PartitionPath ?? "";
+        string mp = d.MountPoint ?? "";
+
+        // --- FSTAB ---
         if (File.Exists("/etc/fstab"))
         {
-            string fstab = File.ReadAllText("/etc/fstab");
-            if (fstab.Contains(d.PartitionPath) || fstab.Contains(d.MountPoint))
-                return true;
+            string fstab = File.ReadAllText("/etc/fstab") ?? "";
+
+            if (!string.IsNullOrEmpty(fstab))
+            {
+                if ((!string.IsNullOrEmpty(part) && fstab.Contains(part)) ||
+                    (!string.IsNullOrEmpty(mp) && fstab.Contains(mp)))
+                {
+                    return true;
+                }
+            }
         }
 
+        // --- SYSTEMD SERVICE ---
         string safe = SystemdSafe(d.Iqn);
         string service = $"/etc/systemd/system/iscsi-login-{safe}.service";
+
         if (File.Exists(service))
             return true;
 
-        string safeMount = d.MountPoint
+        // --- SYSTEMD MOUNT UNIT ---
+        string safeMount = mp
             .Trim('/')
             .Replace("/", "-")
             .Replace(".", "_");
 
-        string mountUnit = $"/etc/systemd/system/{safeMount}.mount";
-        if (File.Exists(mountUnit))
-            return true;
+        if (!string.IsNullOrWhiteSpace(safeMount))
+        {
+            string mountUnit = $"/etc/systemd/system/{safeMount}.mount";
+            if (File.Exists(mountUnit))
+                return true;
+        }
 
         return false;
     }
-    
-    
-   public static async Task InicializarDestino(IscsiDestino d, string label, string fsType)
-{
-    long id = NextTraceId();
-    var sw = StartTrace(id, "InicializarDestino", $"IQN='{d.Iqn}', FS='{fsType}', Label='{label}'");
 
-    try
+    // ======================================================================
+    //  INICIALIZAR DESTINO — GPT + partición + formateo + montaje
+    // ======================================================================
+    public static async Task InicializarDestino(IscsiDestino d, string label, string fsType)
     {
-        // --------------------------------------------------------------
-        // 1) Asegurar que el destino está conectado
-        // --------------------------------------------------------------
-        if (!d.Conectado)
+        long id = NextTraceId();
+        var sw = StartTrace(id, "InicializarDestino", $"IQN='{d.Iqn}', FS='{fsType}', Label='{label}'");
+
+        try
         {
-            Log(id, "Destino no conectado → conectando...");
-            await Conectar(d);
-        }
+            // --------------------------------------------------------------
+            // 1) Asegurar que el destino está conectado
+            // --------------------------------------------------------------
+            if (!d.Conectado)
+            {
+                Log(id, "Destino no conectado → conectando...");
+                await Conectar(d);
+            }
 
-        // --------------------------------------------------------------
-        // 2) Desmontar si está montado
-        // --------------------------------------------------------------
-        var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
-        if (mpCheck.ExitCode == 0)
+            // --------------------------------------------------------------
+            // 2) Desmontar si está montado
+            // --------------------------------------------------------------
+            var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+            if (mpCheck.ExitCode == 0)
+            {
+                Log(id, "Desmontando volumen...");
+                ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"");
+                await Task.Delay(300);
+            }
+
+            // --------------------------------------------------------------
+            // 3) Borrar tabla de particiones
+            // --------------------------------------------------------------
+            Log(id, "Borrando tabla de particiones...");
+            ShellHelper.EjecutarComoRoot($"sgdisk --zap-all {d.PartitionPath}");
+
+            // --------------------------------------------------------------
+            // 4) Crear tabla GPT
+            // --------------------------------------------------------------
+            Log(id, "Creando tabla GPT...");
+            ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mklabel gpt");
+
+            // --------------------------------------------------------------
+            // 5) Crear partición primaria
+            // --------------------------------------------------------------
+            Log(id, "Creando partición primaria...");
+            ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mkpart primary 0% 100%");
+
+            // Esperar a que el kernel detecte la nueva partición
+            await Task.Delay(1200);
+
+            // --------------------------------------------------------------
+            // 6) Detectar nueva partición real
+            // --------------------------------------------------------------
+            Log(id, "Detectando nueva partición...");
+            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
+            var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            if (lines.Length < 2)
+                throw new Exception("No se detectó la nueva partición tras crearla.");
+
+            d.PartitionPath = "/dev/" + lines[1].Trim();
+
+            Log(id, $"Nueva partición detectada: {d.PartitionPath}");
+
+            // --------------------------------------------------------------
+            // 7) Formatear según filesystem elegido
+            // --------------------------------------------------------------
+            Log(id, $"Formateando en {fsType}...");
+
+            switch (fsType)
+            {
+                case "ext4":
+                    ShellHelper.EjecutarComoRoot($"mkfs.ext4 -F -L \"{label}\" {d.PartitionPath}");
+                    break;
+
+                case "xfs":
+                    ShellHelper.EjecutarComoRoot($"mkfs.xfs -f -L \"{label}\" {d.PartitionPath}");
+                    break;
+
+                case "btrfs":
+                    ShellHelper.EjecutarComoRoot($"mkfs.btrfs -f -L \"{label}\" {d.PartitionPath}");
+                    break;
+
+                case "f2fs":
+                    ShellHelper.EjecutarComoRoot($"mkfs.f2fs -f -l \"{label}\" {d.PartitionPath}");
+                    break;
+
+                case "ntfs":
+                    ShellHelper.EjecutarComoRoot($"mkfs.ntfs -F -L \"{label}\" {d.PartitionPath}");
+                    break;
+
+                case "exfat":
+                    ShellHelper.EjecutarComoRoot($"mkfs.exfat -n \"{label}\" {d.PartitionPath}");
+                    break;
+
+                default:
+                    throw new Exception($"Filesystem no soportado: {fsType}");
+            }
+
+            d.FsType = fsType;
+            d.TieneFilesystem = true;
+
+            // --------------------------------------------------------------
+            // 8) Montaje automático compatible
+            // --------------------------------------------------------------
+            string mountFs = fsType == "ntfs" ? "ntfs3" : fsType;
+
+            Log(id, $"Montando volumen como {mountFs}...");
+            ShellHelper.EjecutarComoRoot($"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\"");
+
+            // --------------------------------------------------------------
+            // 9) Actualizar persistencia
+            // --------------------------------------------------------------
+            d.Persistir = DetectarPersistencia(d);
+
+            // --------------------------------------------------------------
+            // 10) Notificación
+            // --------------------------------------------------------------
+            NotificadorLinux.Enviar($"Destino {d.Iqn} inicializado como {fsType} con etiqueta '{label}'");
+
+            EndTrace(id, "InicializarDestino", sw, "OK");
+        }
+        catch (Exception ex)
         {
-            Log(id, "Desmontando volumen...");
-            ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"");
-            await Task.Delay(300);
+            Log(id, $"[ERROR] InicializarDestino: {ex.Message}");
+            NotificadorLinux.Enviar($"[ERROR] Fallo al inicializar destino {d.Iqn}");
+            EndTrace(id, "InicializarDestino", sw, "ERROR");
         }
-
-        // --------------------------------------------------------------
-        // 3) Borrar tabla de particiones
-        // --------------------------------------------------------------
-        Log(id, "Borrando tabla de particiones...");
-        ShellHelper.EjecutarComoRoot($"sgdisk --zap-all {d.PartitionPath}");
-
-        // --------------------------------------------------------------
-        // 4) Crear tabla GPT
-        // --------------------------------------------------------------
-        Log(id, "Creando tabla GPT...");
-        ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mklabel gpt");
-
-        // --------------------------------------------------------------
-        // 5) Crear partición primaria
-        // --------------------------------------------------------------
-        Log(id, "Creando partición primaria...");
-        ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mkpart primary 0% 100%");
-
-        // Esperar a que el kernel detecte la nueva partición
-        await Task.Delay(1200);
-
-        // --------------------------------------------------------------
-        // 6) Detectar nueva partición real
-        // --------------------------------------------------------------
-        Log(id, "Detectando nueva partición...");
-        var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
-        var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        if (lines.Length < 2)
-            throw new Exception("No se detectó la nueva partición tras crearla.");
-
-        d.PartitionPath = "/dev/" + lines[1].Trim();
-
-        Log(id, $"Nueva partición detectada: {d.PartitionPath}");
-
-        // --------------------------------------------------------------
-        // 7) Formatear según filesystem elegido
-        // --------------------------------------------------------------
-        Log(id, $"Formateando en {fsType}...");
-
-        switch (fsType)
-        {
-            case "ext4":
-                ShellHelper.EjecutarComoRoot($"mkfs.ext4 -F -L \"{label}\" {d.PartitionPath}");
-                break;
-
-            case "xfs":
-                ShellHelper.EjecutarComoRoot($"mkfs.xfs -f -L \"{label}\" {d.PartitionPath}");
-                break;
-
-            case "btrfs":
-                ShellHelper.EjecutarComoRoot($"mkfs.btrfs -f -L \"{label}\" {d.PartitionPath}");
-                break;
-
-            case "f2fs":
-                ShellHelper.EjecutarComoRoot($"mkfs.f2fs -f -l \"{label}\" {d.PartitionPath}");
-                break;
-
-            case "ntfs":
-                ShellHelper.EjecutarComoRoot($"mkfs.ntfs -F -L \"{label}\" {d.PartitionPath}");
-                break;
-
-            case "exfat":
-                ShellHelper.EjecutarComoRoot($"mkfs.exfat -n \"{label}\" {d.PartitionPath}");
-                break;
-
-            default:
-                throw new Exception($"Filesystem no soportado: {fsType}");
-        }
-
-        d.FsType = fsType;
-        d.TieneFilesystem = true;
-
-        // --------------------------------------------------------------
-        // 8) Montaje automático compatible
-        // --------------------------------------------------------------
-        string mountFs = fsType;
-
-        // NTFS moderno → ntfs3
-        if (fsType == "ntfs")
-            mountFs = "ntfs3";
-
-        Log(id, $"Montando volumen como {mountFs}...");
-        ShellHelper.EjecutarComoRoot($"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\"");
-
-        // --------------------------------------------------------------
-        // 9) Notificación
-        // --------------------------------------------------------------
-        NotificadorLinux.Enviar($"Destino {d.Iqn} inicializado como {fsType} con etiqueta '{label}'");
-
-        EndTrace(id, "InicializarDestino", sw, "OK");
     }
-    catch (Exception ex)
+
+    // ======================================================================
+    //  DETECTAR SI EL SISTEMA SOPORTA UN FILESYSTEM
+    // ======================================================================
+    public static bool SoportaFs(string fs)
     {
-        Log(id, $"[ERROR] InicializarDestino: {ex.Message}");
-        NotificadorLinux.Enviar($"[ERROR] Fallo al inicializar destino {d.Iqn}");
-        EndTrace(id, "InicializarDestino", sw, "ERROR");
+        string cmd = fs switch
+        {
+            "ext4" => "which mkfs.ext4",
+            "xfs" => "which mkfs.xfs",
+            "btrfs" => "which mkfs.btrfs",
+            "f2fs" => "which mkfs.f2fs",
+            "ntfs" => "which mkfs.ntfs",
+            "exfat" => "which mkfs.exfat",
+            _ => null
+        };
+
+        if (cmd == null)
+            return false;
+
+        var r = ShellHelper.EjecutarComoRoot(cmd);
+        return r.ExitCode == 0;
     }
 }
-
-    
-public static bool SoportaFs(string fs)
-{
-    string cmd = fs switch
-    {
-        "ext4" => "which mkfs.ext4",
-        "xfs" => "which mkfs.xfs",
-        "btrfs" => "which mkfs.btrfs",
-        "f2fs" => "which mkfs.f2fs",
-        "ntfs" => "which mkfs.ntfs",
-        "exfat" => "which mkfs.exfat",
-        _ => null
-    };
-
-    if (cmd == null)
-        return false;
-
-    var r = ShellHelper.EjecutarComoRoot(cmd);
-    return r.ExitCode == 0;
-}
-
-   
-   
-    
-}
-

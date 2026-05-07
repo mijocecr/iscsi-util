@@ -35,10 +35,16 @@ build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Styles/SteamStyles.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
+[/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/ChapDialog.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/InitializeDiskDialogService.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/MainWindow.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
+[/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/MutualChapDialog.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/PasswordDialog.axaml]
