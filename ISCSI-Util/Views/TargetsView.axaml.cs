@@ -76,7 +76,7 @@ public partial class TargetsView : UserControl
             }
         }
 
-        // Si todo es válido, guardar como última IP válida parcial
+        
         _lastValidIp = input;
     }
 
