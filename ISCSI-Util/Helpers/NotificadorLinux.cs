@@ -22,7 +22,7 @@ public static class NotificadorLinux
         string mensaje,
         int duracionMs = 5000,
         string urgencia = "normal",
-        string? icono = null)
+        string? icono = "iscsi-util")
     {
         try
         {
@@ -33,7 +33,7 @@ public static class NotificadorLinux
             }
 
             string iconArg = icono != null ? $"-i \"{icono}\"" : "";
-            string args = $"-t {duracionMs} -u {urgencia} {iconArg} \"ISCSI Util\" \"{mensaje}\"";
+            string args = $"-t {duracionMs} -u {urgencia} {iconArg} \"iSCSI Management\" \"{mensaje}\"";
 
             Process.Start(new ProcessStartInfo
             {

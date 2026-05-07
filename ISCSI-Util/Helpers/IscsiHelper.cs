@@ -199,8 +199,9 @@ public static class IscsiHelper
             };
 
             destinos.Add(d);
+            
         }
-
+        NotificadorLinux.Enviar($"There were found: {destinos.Count} targets",5000,"normal");
         // 🔥 SIEMPRE detectar CHAP (conectado o no)
         foreach (var d in destinos)
         {
@@ -223,6 +224,8 @@ public static class IscsiHelper
         EndTrace(id, "Descubrir", sw, "ERROR");
         return destinos;
     }
+    
+    
 }
 
     // ======================================================================
@@ -507,14 +510,14 @@ public static class IscsiHelper
         }
 
         d.Conectado = true;
-        NotificadorLinux.Enviar($"Destino {d.Iqn} montado en {d.MountPoint}");
+        NotificadorLinux.Enviar($"Target {d.Iqn} mounted in {d.MountPoint}");
 
         EndTrace(id, "Conectar", sw, "OK");
     }
     catch (Exception ex)
     {
         Log(id, $"[ERROR] {ex.Message}");
-        NotificadorLinux.Enviar($"[ERROR] Fallo al conectar destino {d.Iqn}");
+        NotificadorLinux.Enviar($"[ERROR] Failed to connect target {d.Iqn}");
         EndTrace(id, "Conectar", sw, "ERROR");
     }
 }
@@ -608,14 +611,14 @@ public static class IscsiHelper
         d.FsType = null;
         
 
-        NotificadorLinux.Enviar($"Destino {d.Iqn} desconectado");
+        NotificadorLinux.Enviar($"Target {d.Iqn} disconnected");
 
         EndTrace(id, "Desconectar", sw, "OK");
     }
     catch (Exception ex)
     {
         Log(id, $"[ERROR] {ex.Message}");
-        NotificadorLinux.Enviar($"[ERROR] Fallo al desconectar destino {d.Iqn}");
+        NotificadorLinux.Enviar($"[ERROR] Failed to disconnect target {d.Iqn}");
         EndTrace(id, "Desconectar", sw, "ERROR");
     }
 }
@@ -987,14 +990,14 @@ WantedBy=multi-user.target
             // --------------------------------------------------------------
             // 10) Notificación
             // --------------------------------------------------------------
-            NotificadorLinux.Enviar($"Destino {d.Iqn} inicializado como {fsType} con etiqueta '{label}'");
+            NotificadorLinux.Enviar($"Target {d.Iqn} initialized  as {fsType} with label '{label}'");
 
             EndTrace(id, "InicializarDestino", sw, "OK");
         }
         catch (Exception ex)
         {
             Log(id, $"[ERROR] InicializarDestino: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Fallo al inicializar destino {d.Iqn}");
+            NotificadorLinux.Enviar($"[ERROR] Failed to initialize target {d.Iqn}");
             EndTrace(id, "InicializarDestino", sw, "ERROR");
         }
     }
