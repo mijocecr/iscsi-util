@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
@@ -44,18 +45,14 @@ public partial class SessionsView : UserControl
 
         try
         {
-            // Vista Global limpia (Opción B)
             var nuevos = await Iscsi_Sessions_Helper.ObtenerVistaGlobal();
-
             _destinos = nuevos ?? new List<IscsiDestino>();
 
-            // Si el seleccionado ya no existe → reset
-            if (_selected != null && !_destinos.Contains(_selected))
-                _selected = null;
+            if (_selected != null)
+                _selected = _destinos.Find(x => x.Iqn == _selected.Iqn && x.Ip == _selected.Ip);
 
             PintarLista();
 
-            // Si había seleccionado, repintar detalles
             if (_selected != null)
                 PintarDetalles(_selected);
 
@@ -82,7 +79,6 @@ public partial class SessionsView : UserControl
         {
             var card = CrearTarjeta(d);
 
-            // Resaltar seleccionado
             if (_selected == d)
                 card.BorderBrush = Brushes.Gold;
 
@@ -97,7 +93,6 @@ public partial class SessionsView : UserControl
         var border = new Border
         {
             Cursor = new Cursor(StandardCursorType.Hand),
-
             Classes = { "SteamCard" },
             BorderBrush = d.Conectado
                 ? (IBrush)Resources["SteamGreen"]!
@@ -121,7 +116,7 @@ public partial class SessionsView : UserControl
         panel.Children.Add(new TextBlock
         {
             Text = d.Ip,
-            Foreground = (IBrush)Resources["SteamBlue"]!,
+            Foreground = Brushes.WhiteSmoke,
             FontSize = 12
         });
 
@@ -138,17 +133,21 @@ public partial class SessionsView : UserControl
 
         border.PointerPressed += (_, _) =>
         {
-            _selected = d;
-            Console.WriteLine($"[SESSIONS] Seleccionado: {d.Iqn} @ {d.Ip}");
-            PintarLista();      // Resaltar tarjeta
-            PintarDetalles(d);  // Mostrar detalles
+            _selected = _destinos.Find(x => x.Iqn == d.Iqn && x.Ip == d.Ip);
+
+            Console.WriteLine($"[SESSIONS] Seleccionado: {_selected?.Iqn} @ {_selected?.Ip}");
+
+            PintarLista();
+
+            if (_selected != null)
+                PintarDetalles(_selected);
         };
 
         return border;
     }
 
     // ============================================================
-    //   PINTAR DETALLES
+    //   PINTAR DETALLES (CORREGIDO)
     // ============================================================
     private void PintarDetalles(IscsiDestino d)
     {
@@ -169,15 +168,34 @@ public partial class SessionsView : UserControl
         AddDetail("Persist:", d.Persistir ? "Yes" : "No");
 
         // ============================
-        // BOTONES
+        // ESTADO REAL DEL DESTINO
         // ============================
 
-        BtnOpen.IsEnabled       = d.MountPoint != null && Directory.Exists(d.MountPoint);
-        BtnInit.IsEnabled       = d.Conectado && !d.TieneFilesystem;
-        BtnMount.IsEnabled      = d.Conectado && d.TieneFilesystem && string.IsNullOrEmpty(d.MountPoint);
-        BtnDisconnect.IsEnabled = d.Conectado;
+        bool isConnected   = d.Conectado;
+        bool hasFs         = d.TieneFilesystem;
+        bool hasDevice     = !string.IsNullOrWhiteSpace(d.DevicePath);
+        bool hasPartition  = !string.IsNullOrWhiteSpace(d.PartitionPath);
+        bool hasMountPoint = !string.IsNullOrWhiteSpace(d.MountPoint);
 
-        // Limpieza de eventos (evita fugas)
+        bool isMounted = false;
+
+        if (hasMountPoint)
+        {
+            var mp = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+            isMounted = mp.ExitCode == 0;
+        }
+
+        // ============================
+        // BOTONES (LÓGICA CORRECTA)
+        // ============================
+
+        BtnOpen.IsEnabled       = isMounted;
+        BtnInit.IsEnabled       = isConnected && !hasFs && hasDevice && hasPartition;
+        BtnMount.IsEnabled      = isConnected && hasFs;
+        BtnDisconnect.IsEnabled = isConnected;
+
+        BtnMount.Content = isMounted ? "Unmount" : "Mount";
+
         BtnOpen.Click       -= OnOpen;
         BtnInit.Click       -= OnInit;
         BtnMount.Click      -= OnMount;
@@ -222,6 +240,7 @@ public partial class SessionsView : UserControl
     // ============================================================
     //  ACCIONES
     // ============================================================
+
     private void OnOpen(object? s, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_selected?.MountPoint == null) return;
@@ -248,16 +267,25 @@ public partial class SessionsView : UserControl
         if (_selected == null) return;
 
         Console.WriteLine($"[SESSIONS] OnInit → {_selected.Iqn}");
-        await IscsiHelper.InicializarDestino(_selected, "VOLUME", "ext4");
+
+        var dlg = new InitializeDiskDialog(_selected);
+        await dlg.ShowDialog((Window)VisualRoot);
+
         await CargarSesiones();
     }
 
     private async void OnMount(object? s, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_selected == null) return;
+        if (_selected == null)
+            return;
 
         Console.WriteLine($"[SESSIONS] OnMount → {_selected.Iqn}");
-        await IscsiHelper.Conectar(_selected);
+
+        if (_selected.Conectado)
+            await IscsiHelper.Desconectar(_selected);
+        else
+            await IscsiHelper.Conectar(_selected);
+
         await CargarSesiones();
     }
 

@@ -133,7 +133,7 @@ public partial class MainWindow : Window
     {
         var dialog = new PasswordDialog
         {
-            WindowStartupLocation = WindowStartupLocation.CenterOwner
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
         };
 
         Credenciales.AdminPassword = await dialog.ShowDialog<string?>(this) ?? string.Empty;
@@ -310,8 +310,9 @@ public partial class MainWindow : Window
         StatusBarText.Text = "Cerratonix  |  https://github.com/mijocecr";
     }
 
-    private void OnTabSessionsClick(object? sender, PointerPressedEventArgs e)
+    private async void OnTabSessionsClick(object? sender, PointerPressedEventArgs e)
     {
+       await LoadSessionsAsync();
         StatusBarText.Text = "Sessions overview";
     }
 }

@@ -90,30 +90,33 @@
                 </LinearGradientBrush>
             </Border.Background>
 
-            <!-- 🔥 StackPanel compactado -->
+         
             <StackPanel Spacing="2">
 
                 <!-- BOTONES ARRIBA -->
                 <Grid ColumnDefinitions="Auto,Auto,Auto"
                       HorizontalAlignment="Right"
-                      ColumnSpacing="8"
+                      ColumnSpacing="2"
                       Margin="0,0,0,2">
 
-                    <Button x:Name="BtnHeaderUnmount"
+                    <Button  x:Name="BtnHeaderUnmount"
+                             Grid.Column="0"
                             Content="Unmount"
                             Classes="SteamButton"
-                            Width="85"
+                            Width="90"
                             IsVisible="False"/>
 
                     <Button x:Name="BtnHeaderOpen"
+                            Grid.Column="1"
                             Content="Open"
                             Classes="SteamButton"
                             Width="60"
                             IsVisible="False"/>
 
                     <Button x:Name="BtnDeleteNode"
+                            Grid.Column="2"
                             Content="Delete Node"
-                            ToolTip.Tip="Eliminates the iSCSI node from system's records"
+                            ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
                             Classes="SteamButton"
                             Width="120"
                             IsVisible="False"

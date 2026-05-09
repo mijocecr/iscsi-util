@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ISCSI_Util.Models;
 using ISCSI_Util.Helpers;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views;
 
@@ -35,12 +36,16 @@ public partial class InitializeDiskDialog : Window
             return;
         }
 
-        // Inicializar
-        await IscsiHelper.InicializarDestino(_destino, label, fs);
+        // ⭐ USAR TU DIÁLOGO DE CARGA REAL ⭐
+        using (LoadingService.Show($"Initializing disk ({fs})..."))
+        {
+            // Inicializar
+            await IscsiHelper.InicializarDestino(_destino, label, fs);
 
-        // Refrescar estado real
-        _destino.Persistir = IscsiHelper.DetectarPersistencia(_destino);
-        IscsiHelper.DetectarChap(_destino);
+            // Refrescar estado real
+            _destino.Persistir = IscsiHelper.DetectarPersistencia(_destino);
+            IscsiHelper.DetectarChap(_destino);
+        }
 
         Close();
     }
@@ -81,6 +86,4 @@ public partial class InitializeDiskDialog : Window
 
         await dlg.ShowDialog(this);
     }
-
-   
 }

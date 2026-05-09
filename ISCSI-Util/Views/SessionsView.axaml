@@ -96,7 +96,7 @@
                 Classes="SteamCard"
                 Padding="8">
 
-            <!-- 🔥 COLUMNAS FIJAS PARA EVITAR QUE LOS BOTONES SE MUEVAN -->
+            <!--  COLUMNAS FIJAS PARA EVITAR QUE LOS BOTONES SE MUEVAN -->
             <Grid ColumnDefinitions="300,120"
                   ColumnSpacing="8">
 
@@ -152,6 +152,7 @@
 
                     <Button x:Name="BtnDisconnect"
                             Content="Unplug"
+                            ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
                             Classes="SteamButton"
                             Width="80"
                             Background="{StaticResource SteamBlue}"
