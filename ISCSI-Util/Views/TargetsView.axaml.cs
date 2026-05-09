@@ -12,6 +12,8 @@ using Avalonia;
 using Avalonia.Input;
 using Avalonia.Platform;
 using System.Linq;
+using System.Threading.Tasks;
+using Avalonia.Interactivity;
 
 namespace ISCSI_Util.Views;
 
@@ -20,17 +22,20 @@ public partial class TargetsView : UserControl
     private readonly List<IscsiDestino> _targets = new();
     private IscsiDestino? _selected;
 
-    // Última IP válida parcial
     private string _lastValidIp = "";
 
     public TargetsView()
     {
         InitializeComponent();
-        DiscoverButton.IsEnabled = false; // 🔥 Solo se habilita con IP válida
+        DiscoverButton.IsEnabled = false;
+
+        BtnDeleteNode.Click += OnDeleteNode;
+        BtnHeaderUnmount.Click += OnHeaderUnmount;
+        BtnHeaderOpen.Click += OnHeaderOpen;
     }
 
     // ============================================================
-    // VALIDACIÓN DE IP EN TIEMPO REAL
+    // VALIDACIÓN DE IP
     // ============================================================
 
     private void PortalBox_TextChanging(object? sender, TextChangingEventArgs e)
@@ -40,7 +45,6 @@ public partial class TargetsView : UserControl
 
         string input = tb.Text ?? "";
 
-        // Solo permitir dígitos y puntos
         foreach (char c in input)
         {
             if (!(char.IsDigit(c) || c == '.'))
@@ -52,7 +56,6 @@ public partial class TargetsView : UserControl
             }
         }
 
-        // No permitir más de 3 puntos
         if (input.Count(c => c == '.') > 3)
         {
             int pos = tb.CaretIndex;
@@ -61,7 +64,6 @@ public partial class TargetsView : UserControl
             return;
         }
 
-        // Validar octetos (0–255)
         var parts = input.Split('.', StringSplitOptions.RemoveEmptyEntries);
         foreach (var p in parts)
         {
@@ -76,7 +78,6 @@ public partial class TargetsView : UserControl
             }
         }
 
-        
         _lastValidIp = input;
     }
 
@@ -143,7 +144,7 @@ public partial class TargetsView : UserControl
     // DISCOVER
     // ============================================================
 
-    private async void DiscoverButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void DiscoverButton_Click(object? sender, RoutedEventArgs e)
     {
         string portal = PortalBox.Text?.Trim() ?? "";
         if (!EsIpCompletaValida(portal))
@@ -177,7 +178,7 @@ public partial class TargetsView : UserControl
     }
 
     // ============================================================
-    // TARGET CARD (ESTILO STEAM)
+    // TARGET CARD
     // ============================================================
 
     private Control CreateTargetCard(IscsiDestino destino)
@@ -200,7 +201,6 @@ public partial class TargetsView : UserControl
             RowSpacing = 6
         };
 
-        // ICONO
         var icon = new Image
         {
             Source = LoadIcon("avares://ISCSI-Util/Assets/Icons/target.jpeg"),
@@ -216,7 +216,6 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(icon, 0);
         Grid.SetRowSpan(icon, 2);
 
-        // IQN
         var iqnText = new TextBlock
         {
             Cursor = new Cursor(StandardCursorType.Hand),
@@ -232,7 +231,6 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(iqnText, 1);
         Grid.SetRow(iqnText, 0);
 
-        // BOTONES
         var btnRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
@@ -240,7 +238,6 @@ public partial class TargetsView : UserControl
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
         };
 
-        // CONNECT / DISCONNECT
         var connectBtn = new Button
         {
             Classes = { "SteamButton" },
@@ -266,7 +263,6 @@ public partial class TargetsView : UserControl
         };
         btnRow.Children.Add(connectBtn);
 
-        // CHAP
         if (destino.UsaChap && !destino.UsaMutualChap)
         {
             var chapBtn = new Button
@@ -285,7 +281,6 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(chapBtn);
         }
 
-        // MUTUAL CHAP
         if (destino.UsaMutualChap)
         {
             var mutualBtn = new Button
@@ -304,7 +299,6 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(mutualBtn);
         }
 
-        // INIT
         if (destino.Conectado && !destino.TieneFilesystem)
         {
             var initBtn = new Button
@@ -344,7 +338,13 @@ public partial class TargetsView : UserControl
 
     private async void LoadTargetDetails(IscsiDestino destino)
     {
+        _selected = destino;
+
         DetailsInfoPanel.Children.Clear();
+        TextBlock_Header.IsVisible = true;
+        BtnDeleteNode.IsVisible = true;
+        BtnHeaderUnmount.IsVisible = false;
+        BtnHeaderOpen.IsVisible = false;
 
         IscsiHelper.DetectarChap(destino);
 
@@ -363,7 +363,6 @@ public partial class TargetsView : UserControl
             RowSpacing = 2
         };
 
-        // IQN
         infoGrid.Children.Add(new TextBlock
         {
             Text = "IQN:",
@@ -383,7 +382,6 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(infoGrid.Children[^1], 1);
         Grid.SetRow(infoGrid.Children[^1], 0);
 
-        // Portal
         infoGrid.Children.Add(new TextBlock
         {
             Text = "Portal:",
@@ -402,7 +400,6 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(infoGrid.Children[^1], 1);
         Grid.SetRow(infoGrid.Children[^1], 1);
 
-        // Status
         infoGrid.Children.Add(new TextBlock
         {
             Text = "Status:",
@@ -423,7 +420,6 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(infoGrid.Children[^1], 1);
         Grid.SetRow(infoGrid.Children[^1], 2);
 
-        // Filesystem
         infoGrid.Children.Add(new TextBlock
         {
             Text = "Filesystem:",
@@ -445,7 +441,29 @@ public partial class TargetsView : UserControl
         // ICONO
         DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
 
+        // ============================================================
+        // BOTONES DEL HEADER
+        // ============================================================
+
+        if (destino.Conectado)
+        {
+            if (!string.IsNullOrEmpty(destino.MountPoint) &&
+                Directory.Exists(destino.MountPoint))
+            {
+                BtnHeaderUnmount.IsVisible = true;
+                BtnHeaderOpen.IsVisible = true;
+            }
+            else
+            {
+                BtnHeaderUnmount.IsVisible = true;
+                BtnHeaderOpen.IsVisible = false;
+            }
+        }
+
+        // ============================================================
         // PERSISTENCIA
+        // ============================================================
+
         var toggle = new CheckBox
         {
             Content = "Persistent mount",
@@ -464,57 +482,65 @@ public partial class TargetsView : UserControl
             IscsiHelper.AplicarPersistencia(destino);
         };
         DetailsInfoPanel.Children.Add(toggle);
+    }
 
-        // MOUNT / UNMOUNT / OPEN
-        var mountRow = new StackPanel
+    // ============================================================
+    // EVENTOS DEL HEADER
+    // ============================================================
+
+    private async void OnHeaderUnmount(object? sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+            return;
+
+        using (LoadingService.Show("Unmounting..."))
+            await IscsiHelper.Desconectar(_selected);
+
+        LoadTargetDetails(_selected);
+    }
+
+    private void OnHeaderOpen(object? sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+            return;
+
+        if (!string.IsNullOrEmpty(_selected.MountPoint) &&
+            Directory.Exists(_selected.MountPoint))
         {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0)
-        };
-
-        if (destino.Conectado)
-        {
-            if (!string.IsNullOrEmpty(destino.MountPoint) &&
-                Directory.Exists(destino.MountPoint))
+            Process.Start(new ProcessStartInfo
             {
-                var unmountBtn = new Button { Content = "Unmount", Classes = { "SteamButton" } };
-                unmountBtn.Click += async (_, _) =>
-                {
-                    using (LoadingService.Show("Unmounting..."))
-                        await IscsiHelper.Desconectar(destino);
-
-                    LoadTargetDetails(destino);
-                };
-                mountRow.Children.Add(unmountBtn);
-
-                var openBtn = new Button { Content = "Open", Classes = { "SteamButton" } };
-                openBtn.Click += (_, _) =>
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = destino.MountPoint,
-                        UseShellExecute = true
-                    });
-                };
-                mountRow.Children.Add(openBtn);
-            }
-            else
-            {
-                var mountBtn = new Button { Content = "Mount", Classes = { "SteamButton" } };
-                mountBtn.Click += async (_, _) =>
-                {
-                    using (LoadingService.Show("Mounting..."))
-                        await IscsiHelper.Conectar(destino);
-
-                    LoadTargetDetails(destino);
-                };
-                mountRow.Children.Add(mountBtn);
-            }
+                FileName = _selected.MountPoint,
+                UseShellExecute = true
+            });
         }
+    }
 
-        DetailsInfoPanel.Children.Add(mountRow);
+    // ============================================================
+    // DELETE NODE
+    // ============================================================
+
+    private async void OnDeleteNode(object? sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+            return;
+
+        await EliminarNodo(_selected);
+    }
+
+    private async Task EliminarNodo(IscsiDestino d)
+    {
+        ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --logout");
+        ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op=delete");
+        ShellHelper.EjecutarComoRoot($"iscsiadm -m discoverydb -t sendtargets -p {d.Ip} --op=delete");
+
+        _targets.Remove(d);
+        RefreshTargetsList();
+
+        DetailsInfoPanel.Children.Clear();
+        DetailsIcon.Source = null;
+
+        BtnHeaderUnmount.IsVisible = false;
+        BtnHeaderOpen.IsVisible = false;
     }
 
     // ============================================================

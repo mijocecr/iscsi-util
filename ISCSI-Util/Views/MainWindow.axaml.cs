@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
@@ -28,9 +29,9 @@ public partial class MainWindow : Window
         Log("Main window initialized.");
     }
 
-    //---------------------------------------------------------
-    // MAIN STATUS BAR
-    //---------------------------------------------------------
+    // ============================================================
+    // STATUS BAR
+    // ============================================================
     public void UpdateMainStatus(string state)
     {
         StatusBarText.Text = state switch
@@ -42,19 +43,19 @@ public partial class MainWindow : Window
         };
     }
 
-    //---------------------------------------------------------
-    // OnOpened → flujo robusto
-    //---------------------------------------------------------
+    // ============================================================
+    // FLUJO PRINCIPAL OnOpened
+    // ============================================================
     protected override async void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
 
         StatusBarText.Text = "Initializing...";
-        await Task.Delay(300);
+        await Task.Delay(120);
 
-        // ============================================================
-        // 1) BUCLE DE CONTRASEÑA
-        // ============================================================
+        // ------------------------------------------------------------
+        // 1) VALIDACIÓN DE CONTRASEÑA
+        // ------------------------------------------------------------
         while (true)
         {
             await SolicitarPassword();
@@ -66,74 +67,68 @@ public partial class MainWindow : Window
             }
 
             StatusBarText.Text = "Validating password...";
-            var result = ShellHelper.EjecutarComoRoot("echo OK");
 
-            if (!string.IsNullOrWhiteSpace(result.Stderr) &&
-                (result.Stderr.Contains("incorrect", StringComparison.OrdinalIgnoreCase) ||
-                 result.Stderr.Contains("failure", StringComparison.OrdinalIgnoreCase)))
-            {
-                await MostrarPasswordIncorrecta();
-                continue;
-            }
+            var result = ShellHelper.EjecutarComoRoot("bash -c \"echo OK\"");
 
-            if (result.ExitCode != 0)
-            {
-                StatusBarText.Text = "Admin password validation failed.";
-                return;
-            }
+            if (result.ExitCode == 0)
+                break;
 
-            break;
+            await MostrarPasswordIncorrecta();
         }
 
-        // ============================================================
-        // 2) Asegurar servicio iscsid
-        // ============================================================
-        StatusBarText.Text = "Ensuring iSCSI service...";
-        ShellHelper.EjecutarComoRoot("systemctl start iscsid");
+        // ------------------------------------------------------------
+        // 2) ARRANCAR ISCSID SOLO SI ES NECESARIO
+        // ------------------------------------------------------------
+        StatusBarText.Text = "Checking iSCSI service...";
 
-        await Task.Delay(200);
+        var statusCheck = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
+
+        if (!statusCheck.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusBarText.Text = "Starting iSCSI service...";
+            ShellHelper.EjecutarComoRoot("systemctl start iscsid");
+        }
+
         await WaitForDaemonReady();
 
-        // ============================================================
-        // 3) Cargar sesiones
-        // ============================================================
+        // ------------------------------------------------------------
+        // 3) CARGAR SESSIONS (Vista Global Completa)
+        // ------------------------------------------------------------
         StatusBarText.Text = "Loading iSCSI information...";
         await LoadSessionsAsync();
 
-        await Task.Delay(200);
-
-        // ============================================================
+        // ------------------------------------------------------------
         // 4) REFRESCAR STATUSVIEW
-        // ============================================================
+        // ------------------------------------------------------------
         if (StatusPanel is StatusView status)
             await status.RefreshStatus();
 
         StatusBarText.Text = "Ready.";
     }
 
-    //---------------------------------------------------------
+    // ============================================================
     // ESPERAR A QUE ISCSID ESTÉ LISTO
-    //---------------------------------------------------------
+    // ============================================================
     private async Task WaitForDaemonReady()
     {
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 40; i++)
         {
             var result = ShellHelper.EjecutarComoRoot(
-                "systemctl show -p StatusText iscsid"
+                "systemctl show -p ActiveState iscsid"
             );
 
-            if (result.Stdout.Contains("Ready", StringComparison.OrdinalIgnoreCase))
+            if (result.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            await Task.Delay(100);
+            await Task.Delay(120);
         }
 
-        Log("[WARN] iscsid did not report Ready within timeout.");
+        Log("[WARN] iscsid did not reach active state within timeout.");
     }
 
-    //---------------------------------------------------------
-    // PASSWORD DIALOG
-    //---------------------------------------------------------
+    // ============================================================
+    // DIÁLOGO DE CONTRASEÑA
+    // ============================================================
     private async Task SolicitarPassword()
     {
         var dialog = new PasswordDialog
@@ -144,66 +139,80 @@ public partial class MainWindow : Window
         Credenciales.AdminPassword = await dialog.ShowDialog<string?>(this) ?? string.Empty;
     }
 
+    // ============================================================
+    // DIÁLOGO DE CONTRASEÑA INCORRECTA
+    // ============================================================
     private async Task MostrarPasswordIncorrecta()
     {
         var dialog = new Window
         {
-            Width = 320,
-            Height = 140,
+            Width = 380,
+            Height = 180,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Title = "Authentication error",
-            Content = new StackPanel
-            {
-                Margin = new Thickness(15),
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = "The administrator password is incorrect.",
-                        TextWrapping = Avalonia.Media.TextWrapping.Wrap
-                    },
-                    new Button
-                    {
-                        Content = "OK",
-                        Width = 80,
-                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                        Margin = new Thickness(0,10,0,0)
-                    }
-                }
-            }
+            Background = (IBrush)Application.Current!.FindResource("SteamPanel")!,
+            Padding = new Thickness(0),
+            Title = "Authentication error"
         };
 
-        if (dialog.Content is StackPanel sp &&
-            sp.Children[1] is Button btn)
+        var border = new Border
         {
-            btn.Click += (_, _) => dialog.Close();
-        }
+            Background = (IBrush)Application.Current!.FindResource("SteamCard")!,
+            BorderBrush = (IBrush)Application.Current!.FindResource("SteamAccent")!,
+            BorderThickness = new Thickness(2),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(18),
+            Margin = new Thickness(6)
+        };
+
+        var stack = new StackPanel { Spacing = 14 };
+
+        var text = new TextBlock
+        {
+            Text = "The administrator password is incorrect.",
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Foreground = Brushes.Red,
+            FontSize = 14
+        };
+
+        var okButton = new Button
+        {
+            Content = "OK",
+            Width = 90,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Classes = { "SteamButton" },
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
+        };
+
+        okButton.Click += (_, _) => dialog.Close();
+
+        stack.Children.Add(text);
+        stack.Children.Add(okButton);
+
+        border.Child = stack;
+        dialog.Content = border;
 
         await dialog.ShowDialog(this);
     }
 
-    //---------------------------------------------------------
-    // LOAD SESSIONS (con LoadingDialog)
-    //---------------------------------------------------------
+    // ============================================================
+    // CARGAR SESSIONS (Vista Global Completa)
+    // ============================================================
     private async Task LoadSessionsAsync()
     {
         using (LoadingService.Show("Loading sessions..."))
         {
-            await Task.Delay(200);
-
-            SessionsList.Items.Clear();
-            SessionsList.Items.Add("iqn.2024-01.com.example:storage02   10.0.0.20   /dev/sdb   Active");
+            if (SessionsPanel is SessionsView sessions)
+                await sessions.CargarSesiones();
 
             Log("Sessions loaded.");
         }
     }
 
-  
-
-    //---------------------------------------------------------
-    // MÉTODOS ICSI (limpios)
-    //---------------------------------------------------------
+    // ============================================================
+    // MÉTODOS ISCSI (siguen funcionando igual)
+    // ============================================================
     public async Task DiscoverTargets(string ip)
     {
         using (LoadingService.Show("Discovering targets..."))
@@ -217,7 +226,7 @@ public partial class MainWindow : Window
         using (LoadingService.Show("Connecting to target..."))
         {
             await IscsiHelper.Conectar(d);
-            await Task.Delay(3000);
+            await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
                 await status.RefreshStatus();
@@ -229,7 +238,7 @@ public partial class MainWindow : Window
         using (LoadingService.Show("Disconnecting target..."))
         {
             await IscsiHelper.Desconectar(d);
-            await Task.Delay(3000);
+            await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
                 await status.RefreshStatus();
@@ -241,16 +250,16 @@ public partial class MainWindow : Window
         using (LoadingService.Show("Initializing disk..."))
         {
             await IscsiHelper.InicializarDestino(d, label, fsType);
-            await Task.Delay(3000);
+            await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
                 await status.RefreshStatus();
         }
     }
 
-    //---------------------------------------------------------
-    // DOUBLE TAP → OPEN MOUNTPOINT
-    //---------------------------------------------------------
+    // ============================================================
+    // DOBLE CLICK → Abrir mountpoint
+    // ============================================================
     private void Destino_DoubleTapped(object? sender, RoutedEventArgs e)
     {
         if (sender is not ListBoxItem item) return;
@@ -274,15 +283,18 @@ public partial class MainWindow : Window
         }
     }
 
-    //---------------------------------------------------------
+    // ============================================================
     // LOGGING
-    //---------------------------------------------------------
+    // ============================================================
     private void Log(string message)
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
         LogsList.Items.Add($"[{timestamp}] {message}");
     }
 
+    // ============================================================
+    // EVENTOS DE PESTAÑAS
+    // ============================================================
     private void OnTabStatusClick(object? sender, PointerPressedEventArgs e)
     {
         StatusBarText.Text = "System summary";
@@ -296,5 +308,10 @@ public partial class MainWindow : Window
     private void OnTabStatusBarClick(object? sender, PointerPressedEventArgs e)
     {
         StatusBarText.Text = "Cerratonix  |  https://github.com/mijocecr";
+    }
+
+    private void OnTabSessionsClick(object? sender, PointerPressedEventArgs e)
+    {
+        StatusBarText.Text = "Sessions overview";
     }
 }

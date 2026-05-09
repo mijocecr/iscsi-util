@@ -14,6 +14,7 @@
         <entry key="ISCSI-Util/Views/MainWindow.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/MutualChapDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/PasswordDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
+        <entry key="ISCSI-Util/Views/SessionsView.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/StatusView.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/TargetsView.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
       </map>

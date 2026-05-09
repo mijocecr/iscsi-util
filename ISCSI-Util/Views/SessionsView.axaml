@@ -1,0 +1,167 @@
+<UserControl
+    x:Class="ISCSI_Util.Views.SessionsView"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ============================================================
+         PALETA STEAM
+    ============================================================ -->
+    <UserControl.Resources>
+
+        <SolidColorBrush x:Key="SteamCardBackground" Color="#1B2838"/>
+        <SolidColorBrush x:Key="SteamBorderStrong"   Color="#2A475E"/>
+        <SolidColorBrush x:Key="SteamGreen"          Color="#8BC53F"/>
+        <SolidColorBrush x:Key="SteamBlue"           Color="#66C0F4"/>
+        <SolidColorBrush x:Key="SteamText"           Color="#C7D5E0"/>
+
+    </UserControl.Resources>
+
+    <!-- ============================================================
+         ESTILOS STEAM
+    ============================================================ -->
+    <UserControl.Styles>
+
+        <!-- Tarjetas Steam -->
+        <Style Selector="Border.SteamCard">
+            <Setter Property="Background" Value="{StaticResource SteamCardBackground}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource SteamBorderStrong}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BoxShadow" Value="0 4 12 #80000080"/>
+        </Style>
+
+        <!-- Botón Steam -->
+        <Style Selector="Button.SteamButton">
+            <Setter Property="Background" Value="#1B2838"/>
+            <Setter Property="BorderBrush" Value="#2A475E"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Foreground" Value="{StaticResource SteamText}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style Selector="Button.SteamButton:pointerover">
+            <Setter Property="Background" Value="#223B54"/>
+            <Setter Property="BorderBrush" Value="{StaticResource SteamBlue}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+
+        <Style Selector="Button.SteamButton:pressed">
+            <Setter Property="Background" Value="#0F1A24"/>
+            <Setter Property="BorderBrush" Value="#1A9FFF"/>
+        </Style>
+
+        <!-- Texto general Steam -->
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource SteamText}"/>
+        </Style>
+
+        <!-- IQN en lista -->
+        <Style Selector="TextBlock.IqnList">
+            <Setter Property="Foreground" Value="{StaticResource SteamGreen}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- Label en detalles -->
+        <Style Selector="TextBlock.DetailLabel">
+            <Setter Property="Foreground" Value="{StaticResource SteamBlue}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- Valor en detalles -->
+        <Style Selector="TextBlock.DetailValue">
+            <Setter Property="Foreground" Value="{StaticResource SteamGreen}"/>
+        </Style>
+
+    </UserControl.Styles>
+
+    <!-- ============================================================
+         LAYOUT PRINCIPAL
+    ============================================================ -->
+    <Grid RowDefinitions="*,*" Margin="15" RowSpacing="5">
+
+        <!-- LISTA DE SESIONES -->
+        <Border Classes="SteamCard" Padding="5">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="SessionsList"
+                            Spacing="5"
+                            Margin="2"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- PANEL DE DETALLES -->
+        <Border Grid.Row="1"
+                Classes="SteamCard"
+                Padding="8">
+
+            <!-- 🔥 COLUMNAS FIJAS PARA EVITAR QUE LOS BOTONES SE MUEVAN -->
+            <Grid ColumnDefinitions="300,120"
+                  ColumnSpacing="8">
+
+                <!-- COLUMNA IZQUIERDA -->
+                <Grid RowDefinitions="Auto,Auto,*">
+
+                    <TextBlock Grid.Row="0"
+                               Text="Session Details"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               HorizontalAlignment="Center"
+                               Foreground="{StaticResource SteamBlue}"/>
+
+                    <Rectangle Grid.Row="1"
+                               Height="1"
+                               Fill="{StaticResource SteamBlue}"
+                               Opacity="0.4"
+                               Margin="0,4"/>
+
+                    <ScrollViewer Grid.Row="2"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="DetailsPanel"
+                                    Spacing="4"
+                                    Width="300"
+                                    MaxWidth="300"/>
+                    </ScrollViewer>
+
+                </Grid>
+
+                <!-- COLUMNA DERECHA (BOTONES FIJOS) -->
+                <StackPanel Grid.Column="1"
+                            Spacing="5"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+
+                    <Button x:Name="BtnOpen"
+                            Content="Open"
+                            Classes="SteamButton"
+                            Width="80"/>
+
+                    <Button x:Name="BtnInit"
+                            Content="Init"
+                            Classes="SteamButton"
+                            Width="80"
+                            ToolTip.Tip="Caution - Disk initialization"
+                            Background="Orange"
+                            Foreground="Black"/>
+
+                    <Button x:Name="BtnMount"
+                            Content="Mount"
+                            Classes="SteamButton"
+                            Width="80"/>
+
+                    <Button x:Name="BtnDisconnect"
+                            Content="Unplug"
+                            Classes="SteamButton"
+                            Width="80"
+                            Background="{StaticResource SteamBlue}"
+                            Foreground="White"/>
+                </StackPanel>
+
+            </Grid>
+
+        </Border>
+
+    </Grid>
+
+</UserControl>

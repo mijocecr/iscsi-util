@@ -72,5 +72,68 @@
     <!-- Sombra solo si el control la soporta (Border sí la tiene) -->
     <Setter Property="BoxShadow" Value="0 4 12 #80000000" />
   </Style>
+  
+  
+    <!-- ============================================================
+       PASSWORD DIALOG — estilo original Steam
+  ============================================================ -->
+
+  <!-- Ventana del diálogo -->
+  <Style Selector="Window.PasswordDialog">
+    <Setter Property="Background" Value="{DynamicResource SteamPanel}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SteamAccent}" />
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="16" />
+    <Setter Property="Width" Value="360" />
+    <Setter Property="Height" Value="200" />
+  </Style>
+
+  <!-- Título -->
+  <Style Selector="TextBlock.PasswordDialogTitle">
+    <Setter Property="Foreground" Value="{DynamicResource SteamText}" />
+    <Setter Property="FontSize" Value="16" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Margin" Value="0,0,0,8" />
+  </Style>
+
+  <!-- Mensaje -->
+  <Style Selector="TextBlock.PasswordDialogMessage">
+    <Setter Property="Foreground" Value="{DynamicResource SteamText}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Margin" Value="0,0,0,12" />
+  </Style>
+
+  <!-- Input -->
+  <Style Selector="TextBox.PasswordDialogInput">
+    <Setter Property="Background" Value="{DynamicResource SteamCard}" />
+    <Setter Property="Foreground" Value="{DynamicResource SteamText}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SteamAccent}" />
+    <Setter Property="BorderThickness" Value="1.4" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="6" />
+    <Setter Property="FontSize" Value="14" />
+  </Style>
+
+  <!-- Botones -->
+  <Style Selector="Button.PasswordDialogButton">
+    <Setter Property="Background" Value="{DynamicResource SteamAccent}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SteamAccentPressed}" />
+    <Setter Property="BorderThickness" Value="1.2" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <Style Selector="Button.PasswordDialogButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SteamAccentHover}" />
+  </Style>
+
+  <Style Selector="Button.PasswordDialogButton:pressed">
+    <Setter Property="Background" Value="{DynamicResource SteamAccentPressed}" />
+  </Style>
+
+  
 
 </Styles>

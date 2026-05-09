@@ -73,12 +73,11 @@
             <!-- SESSIONS TAB -->
             <TabItem>
                 <TabItem.Header>
-                    <TextBlock Text="Sessions" Tag="2"/>
+                    <TextBlock Text="Sessions" Tag="2"
+                               PointerPressed="OnTabSessionsClick"/>
                 </TabItem.Header>
 
-                <Grid Margin="10">
-                    <ListBox x:Name="SessionsList" />
-                </Grid>
+                <views:SessionsView x:Name="SessionsPanel"/>
             </TabItem>
 
             <!-- LOGS TAB -->

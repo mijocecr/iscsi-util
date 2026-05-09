@@ -50,6 +50,9 @@ build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/PasswordDialog.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
+[/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/SessionsView.axaml]
+build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
+
 [/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/Views/StatusView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 

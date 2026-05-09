@@ -52,11 +52,9 @@
             <TextBox x:Name="PortalBox"
                      Width="260"
                      TextAlignment="Center"
-                     
                      HorizontalAlignment="Center"
                      Watermark="Portal (e.g. 192.168.1.10)" 
-                     KeyUp="PortalBox_KeyUp"
-                     />
+                     KeyUp="PortalBox_KeyUp"/>
 
             <Button Classes="SteamButton"
                     x:Name="DiscoverButton"
@@ -78,14 +76,13 @@
             </ScrollViewer>
         </Border>
 
-        <!-- DETAILS PANEL (compactado y alineado) -->
+        <!-- DETAILS PANEL -->
         <Border Grid.Row="2"
                 Classes="SteamCard"
                 Margin="0,10,0,0"
                 MaxHeight="250"
                 CornerRadius="10">
 
-            <!-- Fondo con degradado Steam -->
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="#102A475E" Offset="0"/>
@@ -93,42 +90,70 @@
                 </LinearGradientBrush>
             </Border.Background>
 
-            <StackPanel Spacing="4">
+            <!-- 🔥 StackPanel compactado -->
+            <StackPanel Spacing="2">
 
-                <!-- HEADER -->
-                <StackPanel Margin="0,0,0,4">
-                    <TextBlock Text="Target Details"
-                               FontSize="15"
-                               TextAlignment="Center"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}" />
-                    <Rectangle Height="1"
-                               Fill="#40FFFFFF"
-                               Margin="0,2,0,0"/>
-                </StackPanel>
+                <!-- BOTONES ARRIBA -->
+                <Grid ColumnDefinitions="Auto,Auto,Auto"
+                      HorizontalAlignment="Right"
+                      ColumnSpacing="8"
+                      Margin="0,0,0,2">
+
+                    <Button x:Name="BtnHeaderUnmount"
+                            Content="Unmount"
+                            Classes="SteamButton"
+                            Width="85"
+                            IsVisible="False"/>
+
+                    <Button x:Name="BtnHeaderOpen"
+                            Content="Open"
+                            Classes="SteamButton"
+                            Width="60"
+                            IsVisible="False"/>
+
+                    <Button x:Name="BtnDeleteNode"
+                            Content="Delete Node"
+                            ToolTip.Tip="Eliminates the iSCSI node from system's records"
+                            Classes="SteamButton"
+                            Width="120"
+                            IsVisible="False"
+                            Background="DarkRed"
+                            Foreground="White"/>
+                </Grid>
+
+                <!-- TÍTULO MÁS PEGADO -->
+                <TextBlock Text="Target Details"
+                           FontSize="15"
+                           FontWeight="Bold"
+                           x:Name="TextBlock_Header"
+                           IsVisible="False"
+                           Foreground="{DynamicResource SteamBlue}"
+                           HorizontalAlignment="Left"
+                           Margin="0,0,0,1"/>
+
+                <!-- SEPARADOR MÁS FINO -->
+                <Rectangle Height="1"
+                           Fill="#40FFFFFF"
+                           Margin="0,1,0,1"/>
 
                 <!-- CONTENIDO -->
                 <Grid ColumnDefinitions="230,Auto"
                       ColumnSpacing="10">
 
-                    <!-- INFO -->
                     <StackPanel x:Name="DetailsInfoPanel"
                                 Spacing="3"
                                 Margin="0,0,8,0"
                                 VerticalAlignment="Center" />
 
-                    <!-- ICON -->
                     <Image x:Name="DetailsIcon"
                            Grid.Column="1"
                            Width="200"
                            Height="200"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Margin="10,18,10,0"
-                           IsHitTestVisible="False" />
-
+                           Margin="10,5,10,0"
+                           IsHitTestVisible="False"/>
                 </Grid>
-
 
             </StackPanel>
 
