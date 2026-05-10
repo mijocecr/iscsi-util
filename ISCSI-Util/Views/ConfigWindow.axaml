@@ -1,0 +1,99 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ISCSI_Util.Views.ConfigWindow"
+        Width="420" Height="280"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Title="Configuration">
+
+    <Border Padding="12"
+            Background="{DynamicResource SteamBackground}"
+            BorderBrush="{DynamicResource SteamBorderStrong}"
+            BorderThickness="1.4"
+            CornerRadius="10">
+
+        <StackPanel Spacing="10">
+
+            <!-- PERMISSIONS -->
+            <StackPanel>
+                <TextBlock Text="Default permissions (chmod)"
+                           Foreground="{DynamicResource SteamBlue}"
+                           FontWeight="SemiBold"/>
+
+                <ComboBox x:Name="PermCombo"
+                          Width="395"
+                          Classes="SteamCombo">
+
+                    <ComboBoxItem Content="755 – Owner rwx, Group r-x, Others r-x" Tag="755"/>
+                    <ComboBoxItem Content="775 – Owner rwx, Group rwx, Others r-x" Tag="775"/>
+                    <ComboBoxItem Content="770 – Owner rwx, Group rwx, Others ---" Tag="770"/>
+                    <ComboBoxItem Content="777 – Owner rwx, Group rwx, Others rwx" Tag="777"/>
+
+                </ComboBox>
+            </StackPanel>
+
+            <!-- MOUNT BASE PATH -->
+            <StackPanel>
+                <TextBlock Text="Mount base path"
+                           Foreground="{DynamicResource SteamBlue}"
+                           FontWeight="SemiBold"/>
+                <DockPanel>
+                    <TextBox x:Name="MountBaseBox"
+                             Classes="SteamTextBox"
+                             IsReadOnly="True"
+                             Width="350"/>
+                    <Button x:Name="BtnBrowseMount"
+                            Content="..."
+                            HorizontalContentAlignment="Center"
+                            Width="40"
+                            Classes="SteamButton"
+                            Margin="6,0,0,0"/>
+                </DockPanel>
+            </StackPanel>
+
+            <!-- LOG PATH -->
+            <StackPanel>
+                <TextBlock Text="Log path"
+                           Foreground="{DynamicResource SteamBlue}"
+                           FontWeight="SemiBold"/>
+                <DockPanel>
+                    <TextBox x:Name="LogPathBox"
+                             Classes="SteamTextBox"
+                             IsReadOnly="True"
+                             Width="350"/>
+                    <Button x:Name="BtnBrowseLog"
+                            Content="..."
+                            Width="40"
+                            HorizontalContentAlignment="Center"
+                            Classes="SteamButton"
+                            Margin="6,0,0,0"/>
+                </DockPanel>
+            </StackPanel>
+
+            <!-- VERBOSE -->
+            <CheckBox x:Name="VerboseCheck"
+                      Content="Verbose logging"
+                      Foreground="{DynamicResource SteamText}"/>
+
+            <!-- BUTTONS -->
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="10"
+                        Margin="0,10,0,0">
+
+                <Button x:Name="BtnCancel"
+                        Content="Cancel"
+                        Width="90"
+                        HorizontalContentAlignment="Center"
+                        Classes="SteamButton"/>
+
+                <Button x:Name="BtnSave"
+                        Content="Save"
+                        HorizontalContentAlignment="Center"
+                        Width="90"
+                        Classes="SteamButtonAccent"/>
+            </StackPanel>
+
+        </StackPanel>
+    </Border>
+</Window>

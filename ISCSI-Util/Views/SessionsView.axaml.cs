@@ -9,6 +9,7 @@ using Avalonia.Media;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
+using System.IO;
 
 namespace ISCSI_Util.Views;
 
@@ -150,16 +151,34 @@ public partial class SessionsView : UserControl
         // BOTONES (LÓGICA CORRECTA)
         // ============================
 
-        BtnOpen.IsEnabled = false;
+        // OPEN solo si está conectado y el mountpoint existe
+        if (d.Conectado &&
+            !string.IsNullOrWhiteSpace(d.MountPoint) &&
+            Directory.Exists(d.MountPoint))
+        {
+            BtnOpen.IsEnabled = true;
+        }
+        else
+        {
+            BtnOpen.IsEnabled = false;
+        }
+
+        // INIT nunca en Sessions
         BtnInit.IsEnabled = false;
 
+        // MOUNT siempre habilitado
         BtnMount.IsEnabled = true;
         BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
 
+        // Disconnect no existe en Sessions
         BtnDisconnect.IsVisible = false;
 
+        // Eventos
         BtnMount.Click -= OnMount;
         BtnMount.Click += OnMount;
+
+        BtnOpen.Click -= OnOpen;
+        BtnOpen.Click += OnOpen;
     }
 
     private void AddDetail(string label, string value, bool wrap = false)
@@ -210,5 +229,21 @@ public partial class SessionsView : UserControl
         }
 
         await CargarSesiones();
+    }
+
+    private void OnOpen(object? s, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_selected == null)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(_selected.MountPoint) &&
+            Directory.Exists(_selected.MountPoint))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _selected.MountPoint,
+                UseShellExecute = true
+            });
+        }
     }
 }

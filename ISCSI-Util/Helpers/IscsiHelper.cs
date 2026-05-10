@@ -153,23 +153,20 @@ public static class IscsiHelper
     //  DISCOVER — Descubrir destinos iSCSI en un portal
     // ======================================================================
     
-    public static async Task<List<IscsiDestino>> Descubrir(string ip)
+   public static async Task<List<IscsiDestino>> Descubrir(string ip)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "Descubrir", $"IP='{ip}'");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → Descubrir IP='{ip}'");
 
     var destinos = new List<IscsiDestino>();
 
-    // ⭐ Loading dialog visible durante toda la operación
     using (LoadingService.Show($"Discovering targets at {ip}..."))
     {
         try
         {
-            Log(id, "Ejecutando discovery...");
+            LogService.Debug($"[ISCSI] #{id} Ejecutando discovery...");
 
-            // ============================================================
-            //  TIMEOUT REAL (5 segundos) + EJECUCIÓN EN HILO SEPARADO
-            // ============================================================
             var discoveryTask = Task.Run(() =>
                 ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
             );
@@ -178,28 +175,20 @@ public static class IscsiHelper
 
             if (completed != discoveryTask)
             {
-                Log(id, "[TIMEOUT] Discovery tardó demasiado.");
+                LogService.Error($"[ISCSI] #{id} TIMEOUT en discovery");
                 NotificadorLinux.Enviar($"[TIMEOUT] Discovery to {ip} took too long.", 6000, "critical");
-                EndTrace(id, "Descubrir", sw, "TIMEOUT");
-                return destinos; // ← devuelve control inmediatamente
+                return destinos;
             }
 
             var discovery = discoveryTask.Result;
 
-            // ============================================================
-            //  SIN RESULTADOS
-            // ============================================================
             if (string.IsNullOrWhiteSpace(discovery.Stdout))
             {
-                Log(id, "No se encontraron destinos.");
+                LogService.Write($"[ISCSI] #{id} No se encontraron destinos.");
                 NotificadorLinux.Enviar($"No targets found at {ip}.", 4000, "normal");
-                EndTrace(id, "Descubrir", sw, "EMPTY");
                 return destinos;
             }
 
-            // ============================================================
-            //  SESIONES ACTIVAS (también en hilo separado)
-            // ============================================================
             var sesiones = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout
             );
@@ -229,27 +218,14 @@ public static class IscsiHelper
                 });
             }
 
-            // ============================================================
-            //  NOTIFICACIÓN DE RESULTADOS
-            // ============================================================
-            NotificadorLinux.Enviar(
-                $"Found {destinos.Count} targets at {ip}",
-                5000,
-                "normal"
-            );
+            NotificadorLinux.Enviar($"Found {destinos.Count} targets at {ip}", 5000, "normal");
 
-            // ============================================================
-            //  DETECTAR CHAP Y PERSISTENCIA
-            // ============================================================
             foreach (var d in destinos)
             {
                 DetectarChap(d);
                 d.Persistir = DetectarPersistencia(d);
             }
 
-            // ============================================================
-            //  COMPLETAR INFO SOLO SI ESTÁ CONECTADO
-            // ============================================================
             foreach (var d in destinos.Where(x => x.Conectado))
             {
                 try
@@ -258,22 +234,22 @@ public static class IscsiHelper
                 }
                 catch (Exception ex)
                 {
-                    Log(id, $"[WARN] No se pudo completar info de {d.Iqn}: {ex.Message}");
+                    LogService.Error($"[ISCSI] #{id} WARN al completar info de {d.Iqn}: {ex.Message}");
                 }
             }
 
-            EndTrace(id, "Descubrir", sw, $"OK ({destinos.Count} destinos)");
+            LogService.Debug($"[ISCSI] #{id} ← Descubrir OK ({destinos.Count} destinos)");
             return destinos;
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] Descubrir: {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR Descubrir: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Discovery failed: {ex.Message}", 6000, "critical");
-            EndTrace(id, "Descubrir", sw, "ERROR");
-            return destinos; // ← nunca congela
+            return destinos;
         }
     }
 }
+
 
     
 
@@ -283,10 +259,11 @@ public static class IscsiHelper
     
    
     
-    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+   public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "CompletarInformacion", $"IQN='{d.Iqn}'");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → CompletarInformacion IQN='{d.Iqn}'");
 
     try
     {
@@ -295,15 +272,13 @@ public static class IscsiHelper
             d.TieneFilesystem = false;
             d.FsType = "";
             d.MountPoint = "";
-            Log(id, "Destino no conectado → TieneFilesystem = false");
-            EndTrace(id, "CompletarInformacion", sw, "NOT_CONNECTED");
+            LogService.Debug($"[ISCSI] #{id} Destino no conectado");
             return;
         }
 
         var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        // FIX: filtrar por IP + IQN + lun
         var match = byPath.FirstOrDefault(l =>
             l.Contains(d.Ip, StringComparison.OrdinalIgnoreCase) &&
             l.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase) &&
@@ -313,12 +288,11 @@ public static class IscsiHelper
         if (match != null)
         {
             d.DevicePath = "/dev/disk/by-path/" + match.Trim();
-            Log(id, $"DevicePath='{d.DevicePath}'");
+            LogService.Debug($"[ISCSI] #{id} DevicePath='{d.DevicePath}'");
         }
         else
         {
-            Log(id, "No se encontró DevicePath.");
-            EndTrace(id, "CompletarInformacion", sw, "NO_DEVICE");
+            LogService.Error($"[ISCSI] #{id} No se encontró DevicePath");
             return;
         }
 
@@ -329,7 +303,7 @@ public static class IscsiHelper
             ? "/dev/" + lines[1].Trim()
             : d.DevicePath;
 
-        Log(id, $"PartitionPath='{d.PartitionPath}'");
+        LogService.Debug($"[ISCSI] #{id} PartitionPath='{d.PartitionPath}'");
 
         var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -342,7 +316,7 @@ public static class IscsiHelper
             if (parts.Length >= 3)
             {
                 d.MountPoint = parts[2];
-                Log(id, $"MountPoint detectado='{d.MountPoint}'");
+                LogService.Debug($"[ISCSI] #{id} MountPoint='{d.MountPoint}'");
             }
         }
 
@@ -355,19 +329,17 @@ public static class IscsiHelper
         if (d.TieneFilesystem)
         {
             d.FsType = DetectarFsType(blkid.Stdout);
-            Log(id, $"FsType detectado='{d.FsType}'");
+            LogService.Debug($"[ISCSI] #{id} FsType='{d.FsType}'");
         }
 
-        Log(id, $"TieneFilesystem={d.TieneFilesystem}");
-
-        EndTrace(id, "CompletarInformacion", sw);
+        LogService.Debug($"[ISCSI] #{id} TieneFilesystem={d.TieneFilesystem}");
     }
     catch (Exception ex)
     {
-        Log(id, $"[ERROR] CompletarInformacion: {ex.Message}");
-        EndTrace(id, "CompletarInformacion", sw, "ERROR");
+        LogService.Error($"[ISCSI] #{id} ERROR CompletarInformacion: {ex.Message}");
     }
 }
+
 
     
 
@@ -375,49 +347,60 @@ public static class IscsiHelper
     //  CONECTAR — Montaje avanzado, robusto y con instrumentación
     // ======================================================================
   
-    public static async Task Conectar(IscsiDestino d)
+ public static async Task Conectar(IscsiDestino d)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "Conectar", $"IQN='{d.Iqn}', IP='{d.Ip}'");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → Conectar IQN='{d.Iqn}', IP='{d.Ip}'");
 
     using (LoadingService.Show($"Connecting to {d.Iqn}..."))
     {
         try
         {
-            string userBase = GetUserIscsiBase();
+            // ============================================================
+            // 1) Crear mountpoint usando ConfigManager
+            // ============================================================
+            string userBase = ConfigManager.MountBasePath; // ← CAMBIO REAL
             d.MountPoint = Path.Combine(userBase, SanitizarNombre(d.Iqn));
 
-            Log(id, $"MountPoint='{d.MountPoint}'");
+            LogService.Debug($"[ISCSI] #{id} MountPoint='{d.MountPoint}'");
 
             if (Directory.Exists(d.MountPoint))
             {
                 try { Directory.GetFileSystemEntries(d.MountPoint); }
                 catch
                 {
-                    Log(id, "MountPoint corrupto → limpiando...");
+                    LogService.Error($"[ISCSI] #{id} MountPoint corrupto → limpiando...");
                     ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"");
                 }
             }
 
             if (!Directory.Exists(d.MountPoint))
+            {
                 Directory.CreateDirectory(d.MountPoint);
 
+                // Aplicar permisos configurados
+                ShellHelper.EjecutarComoRoot(
+                    $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+                );
+            }
+
             // ============================================================
-            //  SESIONES ACTIVAS (en hilo separado)
+            // 2) Comprobar si ya está conectado
             // ============================================================
             var sesiones = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout
             );
 
             bool yaConectado = sesiones.Contains(d.Iqn);
-            Log(id, $"yaConectado={yaConectado}");
+            LogService.Debug($"[ISCSI] #{id} yaConectado={yaConectado}");
 
             // ============================================================
-            //  LOGIN iSCSI (con timeout)
+            // 3) LOGIN iSCSI (si no está conectado)
             // ============================================================
             if (!yaConectado)
             {
-                Log(id, "Buscando portal válido para este IQN...");
+                LogService.Debug($"[ISCSI] #{id} Buscando portal válido...");
 
                 var discoveryTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
@@ -429,9 +412,8 @@ public static class IscsiHelper
 
                 if (completed != discoveryTask)
                 {
-                    Log(id, "[TIMEOUT] Discovery tardó demasiado.");
+                    LogService.Error($"[ISCSI] #{id} TIMEOUT en discovery");
                     NotificadorLinux.Enviar($"[TIMEOUT] Connecting to {d.Iqn} took too long.", 6000, "critical");
-                    EndTrace(id, "Conectar", sw, "TIMEOUT");
                     return;
                 }
 
@@ -456,7 +438,7 @@ public static class IscsiHelper
 
                 foreach (var portal in portals)
                 {
-                    Log(id, $"Probando portal {portal}...");
+                    LogService.Debug($"[ISCSI] #{id} Probando portal {portal}...");
 
                     var result = await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot(
@@ -475,7 +457,7 @@ public static class IscsiHelper
                     throw new Exception("No se encontró ningún portal válido para este destino.");
 
                 d.Ip = portalValido;
-                Log(id, $"Portal válido seleccionado: {d.Ip}");
+                LogService.Debug($"[ISCSI] #{id} Portal válido: {d.Ip}");
 
                 await Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
@@ -484,10 +466,12 @@ public static class IscsiHelper
                 );
 
                 // ============================================================
-                //  CHAP / MUTUAL CHAP
+                // 4) CHAP / MUTUAL CHAP
                 // ============================================================
                 if (d.UsaChap || d.UsaMutualChap)
                 {
+                    LogService.Debug($"[ISCSI] #{id} Configurando CHAP...");
+
                     await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot(
                             $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op=update --name node.session.auth.authmethod --value=CHAP"
@@ -526,9 +510,9 @@ public static class IscsiHelper
                 }
 
                 // ============================================================
-                //  LOGIN (con timeout)
+                // 5) LOGIN
                 // ============================================================
-                Log(id, $"Realizando login iSCSI en portal {d.Ip}...");
+                LogService.Debug($"[ISCSI] #{id} Realizando login...");
 
                 var loginTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
@@ -540,24 +524,17 @@ public static class IscsiHelper
 
                 if (loginCompleted != loginTask)
                 {
-                    Log(id, "[TIMEOUT] Login tardó demasiado.");
+                    LogService.Error($"[ISCSI] #{id} TIMEOUT en login");
                     NotificadorLinux.Enviar($"[TIMEOUT] Login to {d.Iqn} took too long.", 6000, "critical");
-                    EndTrace(id, "Conectar", sw, "TIMEOUT");
                     return;
                 }
             }
 
             // ============================================================
-            //  DETECTAR CHAP / PERSISTENCIA
+            // 6) DETECTAR SYMLINK
             // ============================================================
-            DetectarChap(d);
-            d.Persistir = DetectarPersistencia(d);
-
             d.DevicePath = null;
 
-            // ============================================================
-            //  DETECTAR SYMLINK (en hilo separado)
-            // ============================================================
             for (int i = 0; i < 10; i++)
             {
                 var byPath = await Task.Run(() =>
@@ -574,7 +551,7 @@ public static class IscsiHelper
                 if (match != null)
                 {
                     d.DevicePath = "/dev/disk/by-path/" + match.Trim();
-                    Log(id, $"DevicePath='{d.DevicePath}'");
+                    LogService.Debug($"[ISCSI] #{id} DevicePath='{d.DevicePath}'");
                     break;
                 }
 
@@ -585,7 +562,7 @@ public static class IscsiHelper
                 throw new Exception($"No se encontró symlink para {d.Iqn}");
 
             // ============================================================
-            //  DETECTAR PARTICIÓN
+            // 7) DETECTAR PARTICIÓN
             // ============================================================
             var lsblk2 = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}")
@@ -597,10 +574,10 @@ public static class IscsiHelper
                 ? "/dev/" + lines2[1].Trim()
                 : d.DevicePath;
 
-            Log(id, $"PartitionPath='{d.PartitionPath}'");
+            LogService.Debug($"[ISCSI] #{id} PartitionPath='{d.PartitionPath}'");
 
             // ============================================================
-            //  DETECTAR FILESYSTEM
+            // 8) DETECTAR FILESYSTEM
             // ============================================================
             var blkid = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}")
@@ -608,10 +585,9 @@ public static class IscsiHelper
 
             if (string.IsNullOrWhiteSpace(blkid.Stdout))
             {
-                Log(id, "No se detectó filesystem → destino sin formatear.");
+                LogService.Write($"[ISCSI] #{id} No filesystem detected.");
                 d.TieneFilesystem = false;
                 d.Conectado = true;
-                EndTrace(id, "Conectar", sw, "NO_FS");
                 return;
             }
 
@@ -619,10 +595,10 @@ public static class IscsiHelper
             string fsType = DetectarFsType(blkid.Stdout);
             d.FsType = fsType;
 
-            Log(id, $"Filesystem detectado='{fsType}'");
+            LogService.Debug($"[ISCSI] #{id} Filesystem='{fsType}'");
 
             // ============================================================
-            //  MONTAR (NTFS → ntfs-3g)
+            // 9) MONTAR
             // ============================================================
             var mpCheck = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
@@ -630,7 +606,7 @@ public static class IscsiHelper
 
             if (mpCheck.ExitCode != 0)
             {
-                Log(id, "Montando volumen...");
+                LogService.Debug($"[ISCSI] #{id} Montando volumen...");
 
                 string mountFs = fsType == "ntfs" ? "ntfs-3g" : fsType;
 
@@ -642,39 +618,40 @@ public static class IscsiHelper
             }
             else
             {
-                Log(id, "Ya estaba montado.");
+                LogService.Debug($"[ISCSI] #{id} Ya estaba montado.");
             }
 
             d.Conectado = true;
             NotificadorLinux.Enviar($"Target {d.Iqn} mounted in {d.MountPoint}");
 
-            EndTrace(id, "Conectar", sw, "OK");
+            LogService.Debug($"[ISCSI] #{id} ← Conectar OK");
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR Conectar: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to connect target {d.Iqn}", 6000, "critical");
-            EndTrace(id, "Conectar", sw, "ERROR");
         }
     }
 }
 
+    
 
     // ======================================================================
     //  DESCONECTAR — desmontaje avanzado, limpieza real e instrumentación
     // ======================================================================
     
-    public static async Task Desconectar_Borrar(IscsiDestino d)
+   public static async Task Desconectar_Borrar(IscsiDestino d)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "Desconectar", $"IQN='{d.Iqn}', MP='{d.MountPoint}'");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → Desconectar_Borrar IQN='{d.Iqn}', MP='{d.MountPoint}'");
 
     using (LoadingService.Show($"Disconnecting {d.Iqn}..."))
     {
         try
         {
             // --------------------------------------------------------------
-            // 1) Desmontar si está montado (en hilo separado)
+            // 1) Desmontar si está montado
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
@@ -684,20 +661,19 @@ public static class IscsiHelper
 
                 if (mpCheck.ExitCode == 0)
                 {
-                    Log(id, "Desmontando volumen...");
+                    LogService.Debug($"[ISCSI] #{id} Desmontando volumen...");
                     await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"")
                     );
                     await Task.Delay(300);
 
-                    // Reintento
                     mpCheck = await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
                     );
 
                     if (mpCheck.ExitCode == 0)
                     {
-                        Log(id, "[WARN] El volumen sigue montado, forzando umount...");
+                        LogService.Debug($"[ISCSI] #{id} WARN: volumen sigue montado, forzando umount...");
                         await Task.Run(() =>
                             ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\"")
                         );
@@ -714,21 +690,21 @@ public static class IscsiHelper
             {
                 try
                 {
-                    Log(id, "Eliminando directorio de montaje...");
+                    LogService.Debug($"[ISCSI] #{id} Eliminando directorio de montaje...");
                     await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"")
                     );
                 }
                 catch (Exception ex)
                 {
-                    Log(id, $"[WARN] No se pudo eliminar el directorio: {ex.Message}");
+                    LogService.Error($"[ISCSI] #{id} WARN: No se pudo eliminar el directorio: {ex.Message}");
                 }
             }
 
             // --------------------------------------------------------------
-            // 3) Cerrar sesión iSCSI (con timeout)
+            // 3) Cerrar sesión iSCSI
             // --------------------------------------------------------------
-            Log(id, "Comprobando sesiones iSCSI...");
+            LogService.Debug($"[ISCSI] #{id} Comprobando sesiones iSCSI...");
 
             var sesiones = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout
@@ -737,7 +713,7 @@ public static class IscsiHelper
             if (!string.IsNullOrWhiteSpace(sesiones) &&
                 sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
             {
-                Log(id, "Cerrando sesión iSCSI...");
+                LogService.Debug($"[ISCSI] #{id} Cerrando sesión iSCSI...");
 
                 var logoutTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
@@ -749,7 +725,7 @@ public static class IscsiHelper
 
                 if (completed != logoutTask)
                 {
-                    Log(id, "[TIMEOUT] Logout tardó demasiado.");
+                    LogService.Error($"[ISCSI] #{id} TIMEOUT en logout");
                     NotificadorLinux.Enviar($"[TIMEOUT] Logout from {d.Iqn} took too long.", 6000, "critical");
                 }
                 else
@@ -759,13 +735,13 @@ public static class IscsiHelper
             }
             else
             {
-                Log(id, "No hay sesión activa, se omite logout.");
+                LogService.Debug($"[ISCSI] #{id} No hay sesión activa, se omite logout.");
             }
 
             // --------------------------------------------------------------
-            // 4) Eliminar nodo iSCSI (en hilo separado)
+            // 4) Eliminar nodo iSCSI
             // --------------------------------------------------------------
-            Log(id, "Eliminando nodo iSCSI...");
+            LogService.Debug($"[ISCSI] #{id} Eliminando nodo iSCSI...");
 
             await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot(
@@ -785,13 +761,12 @@ public static class IscsiHelper
 
             NotificadorLinux.Enviar($"Target {d.Iqn} disconnected");
 
-            EndTrace(id, "Desconectar", sw, "OK");
+            LogService.Debug($"[ISCSI] #{id} ← Desconectar_Borrar OK en {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR Desconectar_Borrar: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to disconnect target {d.Iqn}", 6000, "critical");
-            EndTrace(id, "Desconectar", sw, "ERROR");
         }
     }
 }
@@ -802,14 +777,15 @@ public static class IscsiHelper
 public static async Task Desconectar(IscsiDestino d)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "Desconectar", $"IQN='{d.Iqn}', MP='{d.MountPoint}'");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → Desconectar IQN='{d.Iqn}', MP='{d.MountPoint}'");
 
     using (LoadingService.Show($"Disconnecting {d.Iqn}..."))
     {
         try
         {
             // --------------------------------------------------------------
-            // 1) Desmontar si está montado (en hilo separado)
+            // 1) Desmontar si está montado
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
@@ -819,20 +795,19 @@ public static async Task Desconectar(IscsiDestino d)
 
                 if (mpCheck.ExitCode == 0)
                 {
-                    Log(id, "Desmontando volumen...");
+                    LogService.Debug($"[ISCSI] #{id} Desmontando volumen...");
                     await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"")
                     );
                     await Task.Delay(300);
 
-                    // Reintento
                     mpCheck = await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
                     );
 
                     if (mpCheck.ExitCode == 0)
                     {
-                        Log(id, "[WARN] El volumen sigue montado, forzando umount...");
+                        LogService.Debug($"[ISCSI] #{id} WARN: volumen sigue montado, forzando umount...");
                         await Task.Run(() =>
                             ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\"")
                         );
@@ -842,28 +817,28 @@ public static async Task Desconectar(IscsiDestino d)
             }
 
             // --------------------------------------------------------------
-            // 2) Eliminar directorio de montaje (solo si existe)
+            // 2) Eliminar directorio de montaje
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint) &&
                 Directory.Exists(d.MountPoint))
             {
                 try
                 {
-                    Log(id, "Eliminando directorio de montaje...");
+                    LogService.Debug($"[ISCSI] #{id} Eliminando directorio de montaje...");
                     await Task.Run(() =>
                         ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"")
                     );
                 }
                 catch (Exception ex)
                 {
-                    Log(id, $"[WARN] No se pudo eliminar el directorio: {ex.Message}");
+                    LogService.Error($"[ISCSI] #{id} WARN: No se pudo eliminar el directorio: {ex.Message}");
                 }
             }
 
             // --------------------------------------------------------------
-            // 3) Cerrar sesión iSCSI (con timeout)
+            // 3) Cerrar sesión iSCSI
             // --------------------------------------------------------------
-            Log(id, "Comprobando sesiones iSCSI...");
+            LogService.Debug($"[ISCSI] #{id} Comprobando sesiones iSCSI...");
 
             var sesiones = await Task.Run(() =>
                 ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout
@@ -872,7 +847,7 @@ public static async Task Desconectar(IscsiDestino d)
             if (!string.IsNullOrWhiteSpace(sesiones) &&
                 sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
             {
-                Log(id, "Cerrando sesión iSCSI...");
+                LogService.Debug($"[ISCSI] #{id} Cerrando sesión iSCSI...");
 
                 var logoutTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
@@ -884,7 +859,7 @@ public static async Task Desconectar(IscsiDestino d)
 
                 if (completed != logoutTask)
                 {
-                    Log(id, "[TIMEOUT] Logout tardó demasiado.");
+                    LogService.Error($"[ISCSI] #{id} TIMEOUT en logout");
                     NotificadorLinux.Enviar($"[TIMEOUT] Logout from {d.Iqn} took too long.", 6000, "critical");
                 }
                 else
@@ -894,16 +869,16 @@ public static async Task Desconectar(IscsiDestino d)
             }
             else
             {
-                Log(id, "No hay sesión activa, se omite logout.");
+                LogService.Debug($"[ISCSI] #{id} No hay sesión activa, se omite logout.");
             }
 
             // --------------------------------------------------------------
-            // 4) NO BORRAR EL NODO (esta es la diferencia clave)
+            // 4) NO BORRAR EL NODO (diferencia clave)
             // --------------------------------------------------------------
-            Log(id, "Nodo iSCSI conservado (no se elimina).");
+            LogService.Debug($"[ISCSI] #{id} Nodo iSCSI conservado (no se elimina).");
 
             // --------------------------------------------------------------
-            // 5) Reset de propiedades del destino (limpieza en memoria)
+            // 5) Reset de propiedades del destino
             // --------------------------------------------------------------
             d.Conectado = false;
             d.TieneFilesystem = false;
@@ -914,17 +889,15 @@ public static async Task Desconectar(IscsiDestino d)
 
             NotificadorLinux.Enviar($"Target {d.Iqn} disconnected");
 
-            EndTrace(id, "Desconectar", sw, "OK");
+            LogService.Debug($"[ISCSI] #{id} ← Desconectar OK en {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR Desconectar: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to disconnect target {d.Iqn}", 6000, "critical");
-            EndTrace(id, "Desconectar", sw, "ERROR");
         }
     }
 }
-
 
 
 //-------
@@ -937,19 +910,29 @@ public static async Task Desconectar(IscsiDestino d)
     public static async Task AplicarPersistencia(IscsiDestino d)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "AplicarPersistencia", $"IQN='{d.Iqn}', Persistir={d.Persistir}");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → AplicarPersistencia IQN='{d.Iqn}', Persistir={d.Persistir}");
 
     using (LoadingService.Show($"Applying persistence for {d.Iqn}..."))
     {
         try
         {
-            // ============================================================
-            //  EJECUTAR EN HILO 
-            // ============================================================
             var task = Task.Run(() =>
             {
+                // ============================================================
+                // Asegurar que el mountpoint existe (ConfigManager)
+                // ============================================================
+                if (!Directory.Exists(d.MountPoint))
+                {
+                    Directory.CreateDirectory(d.MountPoint);
+                    ShellHelper.EjecutarComoRoot(
+                        $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+                    );
+                }
+
                 if (d.Persistir)
                 {
+                    LogService.Debug($"[ISCSI] #{id} Guardando persistencia en fstab/systemd...");
                     GuardarEnFstab(d, id);
                     CrearServicioLogin(d, id);
                     CrearMountUnit(d, d.FsType, id);
@@ -957,6 +940,7 @@ public static async Task Desconectar(IscsiDestino d)
                 }
                 else
                 {
+                    LogService.Debug($"[ISCSI] #{id} Eliminando persistencia...");
                     EliminarDeFstab(d, id);
                     EliminarServicioSystemd(d, id);
                     EliminarMountUnit(d, id);
@@ -964,35 +948,32 @@ public static async Task Desconectar(IscsiDestino d)
                 }
             });
 
-            // ============================================================
-            //  TIMEOUT REAL (5 segundos)
-            // ============================================================
             var completed = await Task.WhenAny(task, Task.Delay(5000));
 
             if (completed != task)
             {
-                Log(id, "[TIMEOUT] AplicarPersistencia tardó demasiado.");
+                LogService.Error($"[ISCSI] #{id} TIMEOUT en AplicarPersistencia");
                 NotificadorLinux.Enviar($"[TIMEOUT] Persistence operation for {d.Iqn} took too long.", 6000, "critical");
-                EndTrace(id, "AplicarPersistencia", sw, "TIMEOUT");
                 return;
             }
 
-            EndTrace(id, "AplicarPersistencia", sw, "OK");
+            LogService.Debug($"[ISCSI] #{id} ← AplicarPersistencia OK en {sw.ElapsedMilliseconds} ms");
             NotificadorLinux.Enviar($"Persistence updated for {d.Iqn}", 4000, "normal");
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] Persistencia: {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR AplicarPersistencia: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to apply persistence for {d.Iqn}", 6000, "critical");
-            EndTrace(id, "AplicarPersistencia", sw, "ERROR");
         }
     }
 }
 
 
+
     // ======================================================================
     //  FSTAB — Guardar entrada persistente
     // ======================================================================
+ 
     private static async Task GuardarEnFstab(IscsiDestino d, long id)
 {
     using (LoadingService.Show($"Updating fstab for {d.Iqn}..."))
@@ -1001,16 +982,24 @@ public static async Task Desconectar(IscsiDestino d)
         {
             if (!d.TieneFilesystem || string.IsNullOrWhiteSpace(d.MountPoint))
             {
-                Log(id, "No se puede persistir: no hay filesystem o mountpoint.");
+                LogService.Write($"[ISCSI] #{id} No se puede persistir: no hay filesystem o mountpoint.");
                 return;
             }
 
-            string entry = $"{d.PartitionPath} {d.MountPoint} auto _netdev 0 0";
-            Log(id, $"Añadiendo entrada a fstab: {entry}");
+            // ============================================================
+            // Asegurar que el mountpoint existe y tiene permisos correctos
+            // ============================================================
+            if (!Directory.Exists(d.MountPoint))
+            {
+                Directory.CreateDirectory(d.MountPoint);
+                ShellHelper.EjecutarComoRoot(
+                    $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+                );
+            }
 
-            // ============================================================
-            //  EJECUTAR TODO EN HILO SEPARADO PARA NO BLOQUEAR LA UI
-            // ============================================================
+            string entry = $"{d.PartitionPath} {d.MountPoint} auto _netdev 0 0";
+            LogService.Debug($"[ISCSI] #{id} Añadiendo entrada a fstab: {entry}");
+
             var task = Task.Run(() =>
             {
                 // Eliminar entradas previas
@@ -1023,88 +1012,100 @@ public static async Task Desconectar(IscsiDestino d)
                 );
             });
 
-            // ============================================================
-            //  TIMEOUT REAL (5 segundos)
-            // ============================================================
             var completed = await Task.WhenAny(task, Task.Delay(5000));
 
             if (completed != task)
             {
-                Log(id, "[TIMEOUT] GuardarEnFstab tardó demasiado.");
+                LogService.Error($"[ISCSI] #{id} TIMEOUT en GuardarEnFstab");
                 NotificadorLinux.Enviar($"[TIMEOUT] Updating fstab for {d.Iqn} took too long.", 6000, "critical");
                 return;
             }
 
+            LogService.Debug($"[ISCSI] #{id} fstab actualizado correctamente.");
             NotificadorLinux.Enviar($"fstab updated for {d.Iqn}", 4000, "normal");
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] GuardarEnFstab: {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR GuardarEnFstab: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to update fstab for {d.Iqn}", 6000, "critical");
         }
     }
 }
 
 
+
     // ======================================================================
     //  FSTAB — Eliminar entrada persistente
     // ======================================================================
+   
     private static async Task EliminarDeFstab(IscsiDestino d, long id)
+{
+    using (LoadingService.Show($"Removing fstab entry for {d.Iqn}..."))
     {
-        using (LoadingService.Show($"Removing fstab entry for {d.Iqn}..."))
+        try
         {
-            try
+            if (string.IsNullOrWhiteSpace(d.MountPoint))
             {
-                if (string.IsNullOrWhiteSpace(d.MountPoint))
-                {
-                    Log(id, "No se puede eliminar de fstab: mountpoint vacío.");
-                    return;
-                }
-
-                Log(id, $"Eliminando entrada de fstab para {d.MountPoint}");
-
-                // ============================================================
-                //  EJECUTAR TODO EN HILO SEPARADO PARA NO BLOQUEAR LA UI
-                // ============================================================
-                var task = Task.Run(() =>
-                {
-                    ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.MountPoint}#d\" /etc/fstab");
-                    ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.PartitionPath}#d\" /etc/fstab");
-                });
-
-                // ============================================================
-                //  TIMEOUT REAL (5 segundos)
-                // ============================================================
-                var completed = await Task.WhenAny(task, Task.Delay(5000));
-
-                if (completed != task)
-                {
-                    Log(id, "[TIMEOUT] EliminarDeFstab tardó demasiado.");
-                    NotificadorLinux.Enviar($"[TIMEOUT] Removing fstab entry for {d.Iqn} took too long.", 6000, "critical");
-                    return;
-                }
-
-                NotificadorLinux.Enviar($"fstab entry removed for {d.Iqn}", 4000, "normal");
+                LogService.Write($"[ISCSI] #{id} No se puede eliminar de fstab: mountpoint vacío.");
+                return;
             }
-            catch (Exception ex)
+
+            // ============================================================
+            // Asegurar que el mountpoint existe (ConfigManager)
+            // ============================================================
+            if (!Directory.Exists(d.MountPoint))
             {
-                Log(id, $"[ERROR] EliminarDeFstab: {ex.Message}");
-                NotificadorLinux.Enviar($"[ERROR] Failed to remove fstab entry for {d.Iqn}", 6000, "critical");
+                Directory.CreateDirectory(d.MountPoint);
+                ShellHelper.EjecutarComoRoot(
+                    $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+                );
             }
+
+            LogService.Debug($"[ISCSI] #{id} Eliminando entrada de fstab para {d.MountPoint}");
+
+            var task = Task.Run(() =>
+            {
+                ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.MountPoint}#d\" /etc/fstab");
+                ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.PartitionPath}#d\" /etc/fstab");
+            });
+
+            var completed = await Task.WhenAny(task, Task.Delay(5000));
+
+            if (completed != task)
+            {
+                LogService.Error($"[ISCSI] #{id} TIMEOUT en EliminarDeFstab");
+                NotificadorLinux.Enviar($"[TIMEOUT] Removing fstab entry for {d.Iqn} took too long.", 6000, "critical");
+                return;
+            }
+
+            LogService.Debug($"[ISCSI] #{id} Entrada de fstab eliminada correctamente.");
+            NotificadorLinux.Enviar($"fstab entry removed for {d.Iqn}", 4000, "normal");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] #{id} ERROR EliminarDeFstab: {ex.Message}");
+            NotificadorLinux.Enviar($"[ERROR] Failed to remove fstab entry for {d.Iqn}", 6000, "critical");
         }
     }
+}
+
 
 
     // ======================================================================
     //  SYSTEMD — Crear servicio de login iSCSI
     // ======================================================================
+  
     private static void CrearServicioLogin(IscsiDestino d, long id)
     {
-        string safe = SystemdSafe(d.Iqn);
-        string path = $"/etc/systemd/system/iscsi-login-{safe}.service";
+        try
+        {
+            string safe = SystemdSafe(d.Iqn);
+            string path = $"/etc/systemd/system/iscsi-login-{safe}.service";
 
-        string contenido =
-$@"[Unit]
+            LogService.Debug($"[ISCSI] #{id} Creando servicio systemd: {path}");
+
+            string contenido =
+                $@"[Unit]
 Description=Login iSCSI for {d.Iqn}
 After=network-online.target iscsid.service
 Wants=network-online.target
@@ -1118,28 +1119,57 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ";
 
-        ShellHelper.EjecutarComoRoot($"sh -c \"echo '{contenido.Replace("'", "'\\''")}' > {path}\"");
-        ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
-        ShellHelper.EjecutarComoRoot($"systemctl enable iscsi-login-{safe}.service");
+            // Crear archivo
+            ShellHelper.EjecutarComoRoot(
+                $"sh -c \"echo '{contenido.Replace("'", "'\\''")}' > {path}\""
+            );
 
-        Log(id, $"Servicio creado: {path}");
+            // Recargar systemd
+            ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
+
+            // Habilitar servicio
+            ShellHelper.EjecutarComoRoot($"systemctl enable iscsi-login-{safe}.service");
+
+            LogService.Debug($"[ISCSI] #{id} Servicio creado correctamente: {path}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] #{id} ERROR CrearServicioLogin: {ex.Message}");
+        }
     }
 
+    
     // ======================================================================
     //  SYSTEMD — Crear unidad .mount
     // ======================================================================
+   
     private static void CrearMountUnit(IscsiDestino d, string fsType, long id)
     {
-        string safeMount = d.MountPoint
-            .Trim('/')
-            .Replace("/", "-")
-            .Replace(".", "_");
+        try
+        {
+            // ============================================================
+            // Asegurar que el mountpoint existe y tiene permisos correctos
+            // ============================================================
+            if (!Directory.Exists(d.MountPoint))
+            {
+                Directory.CreateDirectory(d.MountPoint);
+                ShellHelper.EjecutarComoRoot(
+                    $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+                );
+            }
 
-        string unitName = $"{safeMount}.mount";
-        string path = $"/etc/systemd/system/{unitName}";
+            string safeMount = d.MountPoint
+                .Trim('/')
+                .Replace("/", "-")
+                .Replace(".", "_");
 
-        string contenido =
-$@"[Unit]
+            string unitName = $"{safeMount}.mount";
+            string path = $"/etc/systemd/system/{unitName}";
+
+            LogService.Debug($"[ISCSI] #{id} Creando mount unit: {path}");
+
+            string contenido =
+                $@"[Unit]
 Description=Mount iSCSI volume {d.Iqn}
 After=iscsi-login-{SystemdSafe(d.Iqn)}.service
 
@@ -1153,70 +1183,133 @@ Options=_netdev
 WantedBy=multi-user.target
 ";
 
-        ShellHelper.EjecutarComoRoot($"sh -c \"echo '{contenido.Replace("'", "'\\''")}' > {path}\"");
-        ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
-        ShellHelper.EjecutarComoRoot($"systemctl enable {unitName}");
+            // Crear archivo .mount
+            ShellHelper.EjecutarComoRoot(
+                $"sh -c \"echo '{contenido.Replace("'", "'\\''")}' > {path}\""
+            );
 
-        Log(id, $"Mount unit creada: {path}");
+            // Recargar systemd
+            ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
+
+            // Habilitar unidad
+            ShellHelper.EjecutarComoRoot($"systemctl enable {unitName}");
+
+            LogService.Debug($"[ISCSI] #{id} Mount unit creada correctamente: {path}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] #{id} ERROR CrearMountUnit: {ex.Message}");
+        }
     }
 
+
+    
     // ======================================================================
     //  SYSTEMD — Eliminar servicio
     // ======================================================================
+   
     private static void EliminarServicioSystemd(IscsiDestino d, long id)
     {
-        string safe = SystemdSafe(d.Iqn);
-        string service = $"/etc/systemd/system/iscsi-login-{safe}.service";
-
-        if (File.Exists(service))
+        try
         {
-            ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-login-{safe}.service");
-            ShellHelper.EjecutarComoRoot($"rm -f {service}");
-            Log(id, $"Servicio eliminado: {service}");
+            string safe = SystemdSafe(d.Iqn);
+            string service = $"/etc/systemd/system/iscsi-login-{safe}.service";
+
+            LogService.Debug($"[ISCSI] #{id} Eliminando servicio systemd: {service}");
+
+            if (File.Exists(service))
+            {
+                ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-login-{safe}.service");
+                ShellHelper.EjecutarComoRoot($"rm -f {service}");
+
+                LogService.Debug($"[ISCSI] #{id} Servicio eliminado correctamente: {service}");
+            }
+            else
+            {
+                LogService.Debug($"[ISCSI] #{id} Servicio no existe, nada que eliminar: {service}");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] #{id} ERROR EliminarServicioSystemd: {ex.Message}");
         }
     }
 
+    
     // ======================================================================
     //  SYSTEMD — Eliminar mount unit
     // ======================================================================
+  
     private static void EliminarMountUnit(IscsiDestino d, long id)
     {
-        if (string.IsNullOrWhiteSpace(d.MountPoint))
-            return;
-
-        string safeMount = d.MountPoint
-            .Trim('/')
-            .Replace("/", "-")
-            .Replace(".", "_");
-
-        string mountUnit = $"/etc/systemd/system/{safeMount}.mount";
-
-        if (File.Exists(mountUnit))
+        try
         {
-            ShellHelper.EjecutarComoRoot($"systemctl disable {safeMount}.mount");
-            ShellHelper.EjecutarComoRoot($"rm -f {mountUnit}");
-            Log(id, $"Mount unit eliminada: {mountUnit}");
+            if (string.IsNullOrWhiteSpace(d.MountPoint))
+            {
+                LogService.Debug($"[ISCSI] #{id} MountPoint vacío, no hay mount unit que eliminar.");
+                return;
+            }
+
+            string safeMount = d.MountPoint
+                .Trim('/')
+                .Replace("/", "-")
+                .Replace(".", "_");
+
+            string mountUnit = $"/etc/systemd/system/{safeMount}.mount";
+
+            LogService.Debug($"[ISCSI] #{id} Eliminando mount unit: {mountUnit}");
+
+            if (File.Exists(mountUnit))
+            {
+                ShellHelper.EjecutarComoRoot($"systemctl disable {safeMount}.mount");
+                ShellHelper.EjecutarComoRoot($"rm -f {mountUnit}");
+
+                LogService.Debug($"[ISCSI] #{id} Mount unit eliminada correctamente: {mountUnit}");
+            }
+            else
+            {
+                LogService.Debug($"[ISCSI] #{id} Mount unit no existe, nada que eliminar: {mountUnit}");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] #{id} ERROR EliminarMountUnit: {ex.Message}");
         }
     }
 
+    
     // ======================================================================
     //  SYSTEMD — Habilitar servicios necesarios
     // ======================================================================
     private static void HabilitarServicios(long id)
     {
-        Log(id, "Habilitando servicios systemd...");
-
-        ShellHelper.EjecutarComoRoot("systemctl enable iscsid");
-
-        var check = ShellHelper.EjecutarComoRoot("systemctl list-unit-files | grep -q open-iscsi");
-
-        if (check.ExitCode == 0)
+        try
         {
-            ShellHelper.EjecutarComoRoot("systemctl enable open-iscsi");
+            LogService.Debug($"[ISCSI] #{id} Habilitando servicios systemd...");
+
+            // iscsid es común en todas las distros
+            ShellHelper.EjecutarComoRoot("systemctl enable iscsid");
+
+            // Algunas distros usan open-iscsi, otras no
+            var check = ShellHelper.EjecutarComoRoot(
+                "systemctl list-unit-files | grep -q open-iscsi"
+            );
+
+            if (check.ExitCode == 0)
+            {
+                LogService.Debug($"[ISCSI] #{id} Habilitando open-iscsi...");
+                ShellHelper.EjecutarComoRoot("systemctl enable open-iscsi");
+            }
+            else
+            {
+                LogService.Debug($"[ISCSI] #{id} open-iscsi no existe en este sistema (OK)");
+            }
+
+            LogService.Debug($"[ISCSI] #{id} Servicios habilitados correctamente.");
         }
-        else
+        catch (Exception ex)
         {
-            Log(id, "open-iscsi no existe en este sistema (OK)");
+            LogService.Error($"[ISCSI] #{id} ERROR HabilitarServicios: {ex.Message}");
         }
     }
 
@@ -1275,10 +1368,11 @@ WantedBy=multi-user.target
     //  INICIALIZAR DESTINO — GPT + partición + formateo + montaje
     // ======================================================================
 
-  public static async Task InicializarDestino(IscsiDestino d, string label, string fsType)
+public static async Task InicializarDestino(IscsiDestino d, string label, string fsType)
 {
     long id = NextTraceId();
-    var sw = StartTrace(id, "InicializarDestino", $"IQN='{d.Iqn}', FS='{fsType}', Label='{label}'");
+    var sw = Stopwatch.StartNew();
+    LogService.Debug($"[ISCSI] #{id} → InicializarDestino IQN='{d.Iqn}', FS='{fsType}', Label='{label}'");
 
     using (LoadingService.Show($"Initializing disk ({fsType})..."))
     {
@@ -1289,7 +1383,7 @@ WantedBy=multi-user.target
             // --------------------------------------------------------------
             if (!d.Conectado)
             {
-                Log(id, "Destino no conectado → conectando...");
+                LogService.Debug($"[ISCSI] #{id} Destino no conectado → conectando...");
                 await Conectar(d);
             }
 
@@ -1304,7 +1398,7 @@ WantedBy=multi-user.target
                 var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
                 if (mpCheck.ExitCode == 0)
                 {
-                    Log(id, "Desmontando volumen...");
+                    LogService.Debug($"[ISCSI] #{id} Desmontando volumen...");
                     ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"");
                     await Task.Delay(300);
                 }
@@ -1312,19 +1406,19 @@ WantedBy=multi-user.target
                 // --------------------------------------------------------------
                 // 3) Borrar tabla de particiones
                 // --------------------------------------------------------------
-                Log(id, "Borrando tabla de particiones...");
+                LogService.Debug($"[ISCSI] #{id} Borrando tabla de particiones...");
                 ShellHelper.EjecutarComoRoot($"sgdisk --zap-all {d.PartitionPath}");
 
                 // --------------------------------------------------------------
                 // 4) Crear tabla GPT
                 // --------------------------------------------------------------
-                Log(id, "Creando tabla GPT...");
+                LogService.Debug($"[ISCSI] #{id} Creando tabla GPT...");
                 ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mklabel gpt");
 
                 // --------------------------------------------------------------
                 // 5) Crear partición primaria
                 // --------------------------------------------------------------
-                Log(id, "Creando partición primaria...");
+                LogService.Debug($"[ISCSI] #{id} Creando partición primaria...");
                 ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mkpart primary 0% 100%");
 
                 await Task.Delay(1200);
@@ -1332,7 +1426,7 @@ WantedBy=multi-user.target
                 // --------------------------------------------------------------
                 // 6) Detectar nueva partición real
                 // --------------------------------------------------------------
-                Log(id, "Detectando nueva partición...");
+                LogService.Debug($"[ISCSI] #{id} Detectando nueva partición...");
                 var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
                 var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
@@ -1340,12 +1434,12 @@ WantedBy=multi-user.target
                     throw new Exception("No se detectó la nueva partición tras crearla.");
 
                 d.PartitionPath = "/dev/" + lines[1].Trim();
-                Log(id, $"Nueva partición detectada: {d.PartitionPath}");
+                LogService.Debug($"[ISCSI] #{id} Nueva partición detectada: {d.PartitionPath}");
 
                 // --------------------------------------------------------------
                 // 7) Formatear según filesystem elegido
                 // --------------------------------------------------------------
-                Log(id, $"Formateando en {fsType}...");
+                LogService.Debug($"[ISCSI] #{id} Formateando en {fsType}...");
 
                 switch (fsType)
                 {
@@ -1385,13 +1479,20 @@ WantedBy=multi-user.target
                 // --------------------------------------------------------------
                 string mountFs = fsType == "ntfs" ? "ntfs-3g" : fsType;
 
-                Log(id, $"Montando volumen como {mountFs}...");
+                LogService.Debug($"[ISCSI] #{id} Montando volumen como {mountFs}...");
                 ShellHelper.EjecutarComoRoot(
                     $"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\""
                 );
 
                 // --------------------------------------------------------------
-                // 9) Actualizar persistencia
+                // 9) Aplicar permisos configurados al mountpoint
+                // --------------------------------------------------------------
+                ShellHelper.EjecutarComoRoot(
+                    $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+                );
+
+                // --------------------------------------------------------------
+                // 10) Actualizar persistencia
                 // --------------------------------------------------------------
                 d.Persistir = DetectarPersistencia(d);
             });
@@ -1403,26 +1504,24 @@ WantedBy=multi-user.target
 
             if (completed != task)
             {
-                Log(id, "[TIMEOUT] InicializarDestino tardó demasiado.");
+                LogService.Error($"[ISCSI] #{id} TIMEOUT en InicializarDestino");
                 NotificadorLinux.Enviar($"[TIMEOUT] Initializing {d.Iqn} took too long.", 6000, "critical");
-                EndTrace(id, "InicializarDestino", sw, "TIMEOUT");
                 return;
             }
 
             // --------------------------------------------------------------
-            // 10) Notificación final
+            // 11) Notificación final
             // --------------------------------------------------------------
             NotificadorLinux.Enviar(
                 $"Target {d.Iqn} initialized as {fsType} with label '{label}'"
             );
 
-            EndTrace(id, "InicializarDestino", sw, "OK");
+            LogService.Debug($"[ISCSI] #{id} ← InicializarDestino OK en {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception ex)
         {
-            Log(id, $"[ERROR] InicializarDestino: {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR InicializarDestino: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to initialize target {d.Iqn}", 6000, "critical");
-            EndTrace(id, "InicializarDestino", sw, "ERROR");
         }
     }
 }

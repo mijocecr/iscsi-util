@@ -9,6 +9,7 @@ using Avalonia.Media;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
+using ISCSI_Util.Views;
 
 namespace ISCSI_Util.Views;
 
@@ -50,6 +51,12 @@ public partial class MainWindow : Window
     {
         base.OnOpened(e);
 
+        // ------------------------------------------------------------
+        // 0) CARGAR CONFIGURACIÓN GLOBAL
+        // ------------------------------------------------------------
+        ConfigManager.Load();
+        Log("Configuration loaded.");
+
         StatusBarText.Text = "Initializing...";
         await Task.Delay(120);
 
@@ -63,16 +70,22 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(Credenciales.AdminPassword))
             {
                 StatusBarText.Text = "Initialization aborted.";
+                Log("Initialization aborted: no password provided.");
                 return;
             }
 
             StatusBarText.Text = "Validating password...";
+            Log("Validating admin password...");
 
             var result = ShellHelper.EjecutarComoRoot("bash -c \"echo OK\"");
 
             if (result.ExitCode == 0)
+            {
+                Log("Password validated successfully.");
                 break;
+            }
 
+            LogService.Error("Incorrect administrator password.");
             await MostrarPasswordIncorrecta();
         }
 
@@ -80,30 +93,37 @@ public partial class MainWindow : Window
         // 2) ARRANCAR ISCSID SOLO SI ES NECESARIO
         // ------------------------------------------------------------
         StatusBarText.Text = "Checking iSCSI service...";
+        Log("Checking iscsid service status...");
 
         var statusCheck = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
 
         if (!statusCheck.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
         {
             StatusBarText.Text = "Starting iSCSI service...";
+            Log("iscsid not active. Starting service...");
             ShellHelper.EjecutarComoRoot("systemctl start iscsid");
         }
 
         await WaitForDaemonReady();
 
         // ------------------------------------------------------------
-        // 3) CARGAR SESSIONS (Vista Global Completa)
+        // 3) CARGAR SESSIONS
         // ------------------------------------------------------------
         StatusBarText.Text = "Loading iSCSI information...";
+        Log("Loading global iSCSI session overview...");
         await LoadSessionsAsync();
 
         // ------------------------------------------------------------
         // 4) REFRESCAR STATUSVIEW
         // ------------------------------------------------------------
         if (StatusPanel is StatusView status)
+        {
+            Log("Refreshing StatusView...");
             await status.RefreshStatus();
+        }
 
         StatusBarText.Text = "Ready.";
+        Log("Initialization completed. System ready.");
     }
 
     // ============================================================
@@ -118,12 +138,15 @@ public partial class MainWindow : Window
             );
 
             if (result.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
+            {
+                Log("iscsid is active.");
                 return;
+            }
 
             await Task.Delay(120);
         }
 
-        Log("[WARN] iscsid did not reach active state within timeout.");
+        LogService.Error("iscsid did not reach active state within timeout.");
     }
 
     // ============================================================
@@ -196,7 +219,7 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    // CARGAR SESSIONS (Vista Global Completa)
+    // CARGAR SESSIONS
     // ============================================================
     private async Task LoadSessionsAsync()
     {
@@ -210,12 +233,13 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    // MÉTODOS ISCSI (reales)
+    // MÉTODOS ISCSI
     // ============================================================
     public async Task DiscoverTargets(string ip)
     {
         using (LoadingService.Show("Discovering targets..."))
         {
+            Log($"Discovering targets on portal {ip}...");
             await IscsiHelper.Descubrir(ip);
         }
     }
@@ -224,6 +248,7 @@ public partial class MainWindow : Window
     {
         using (LoadingService.Show("Connecting to target..."))
         {
+            Log($"Connecting to target {d.Iqn}...");
             await IscsiHelper.Conectar(d);
             await Task.Delay(1500);
 
@@ -236,6 +261,7 @@ public partial class MainWindow : Window
     {
         using (LoadingService.Show("Disconnecting target..."))
         {
+            Log($"Disconnecting target {d.Iqn}...");
             await IscsiHelper.Desconectar(d);
             await Task.Delay(1500);
 
@@ -248,6 +274,7 @@ public partial class MainWindow : Window
     {
         using (LoadingService.Show("Initializing disk..."))
         {
+            Log($"Initializing disk for {d.Iqn} with FS {fsType} and label {label}...");
             await IscsiHelper.InicializarDestino(d, label, fsType);
             await Task.Delay(1500);
 
@@ -278,17 +305,27 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"[ERROR] Failed to open folder: {ex.Message}");
+            LogService.Error($"Failed to open folder: {ex.Message}");
         }
     }
 
     // ============================================================
-    // LOGGING
+    // CONFIG WINDOW
+    // ============================================================
+    private async void OnOpenConfig(object? sender, RoutedEventArgs e)
+    {
+        var win = new ConfigWindow();
+        await win.ShowDialog(this);
+
+        Log("Configuration updated.");
+    }
+
+    // ============================================================
+    // LOGGING (usa LogService)
     // ============================================================
     private void Log(string message)
     {
-        string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        System.Console.WriteLine($"[{timestamp}] {message}");
+        LogService.Write(message);
     }
 
     // ============================================================

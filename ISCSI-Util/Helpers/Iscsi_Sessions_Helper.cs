@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Helpers;
 
@@ -29,7 +30,7 @@ public static class Iscsi_Sessions_Helper
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] GetLocalIPv4: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] GetLocalIPv4: {ex.Message}");
             return "0.0.0.0";
         }
     }
@@ -52,7 +53,6 @@ public static class Iscsi_Sessions_Helper
     // ============================================================
     //   1) SESIONES ACTIVAS
     // ============================================================
-
     private static List<IscsiDestino> ObtenerSesionesActivas()
     {
         var list = new List<IscsiDestino>();
@@ -62,7 +62,7 @@ public static class Iscsi_Sessions_Helper
             long id = NextId();
             var sw = Stopwatch.StartNew();
 
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} → SesionesActivas()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → SesionesActivas()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m session");
 
@@ -89,11 +89,11 @@ public static class Iscsi_Sessions_Helper
             }
 
             sw.Stop();
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} ← SesionesActivas={list.Count} en {sw.ElapsedMilliseconds} ms");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} ← SesionesActivas={list.Count} en {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] ObtenerSesionesActivas: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] ObtenerSesionesActivas: {ex.Message}");
         }
 
         return list;
@@ -102,7 +102,6 @@ public static class Iscsi_Sessions_Helper
     // ============================================================
     //   2) NODOS CONFIGURADOS
     // ============================================================
-
     private static List<IscsiDestino> ObtenerNodos()
     {
         var list = new List<IscsiDestino>();
@@ -112,7 +111,7 @@ public static class Iscsi_Sessions_Helper
             long id = NextId();
             var sw = Stopwatch.StartNew();
 
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} → Nodos()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → Nodos()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m node");
 
@@ -139,11 +138,11 @@ public static class Iscsi_Sessions_Helper
             }
 
             sw.Stop();
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} ← Nodos={list.Count} en {sw.ElapsedMilliseconds} ms");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} ← Nodos={list.Count} en {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] ObtenerNodos: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] ObtenerNodos: {ex.Message}");
         }
 
         return list;
@@ -152,7 +151,6 @@ public static class Iscsi_Sessions_Helper
     // ============================================================
     //   3) DISCOVERYDB
     // ============================================================
-
     private static List<IscsiDestino> ObtenerDiscoveryDb()
     {
         var list = new List<IscsiDestino>();
@@ -162,7 +160,7 @@ public static class Iscsi_Sessions_Helper
             long id = NextId();
             var sw = Stopwatch.StartNew();
 
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} → DiscoveryDB()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → DiscoveryDB()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m discoverydb -t sendtargets -o show");
 
@@ -189,20 +187,19 @@ public static class Iscsi_Sessions_Helper
             }
 
             sw.Stop();
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} ← DiscoveryDB={list.Count} en {sw.ElapsedMilliseconds} ms");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} ← DiscoveryDB={list.Count} en {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] ObtenerDiscoveryDb: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] ObtenerDiscoveryDb: {ex.Message}");
         }
 
         return list;
     }
 
     // ============================================================
-    //   4) FUSIÓN INTELIGENTE (IQN + IP)
+    //   4) FUSIÓN INTELIGENTE
     // ============================================================
-
     private static List<IscsiDestino> Fusionar(
         List<IscsiDestino> sesiones,
         List<IscsiDestino> nodos,
@@ -215,7 +212,6 @@ public static class Iscsi_Sessions_Helper
             todos.AddRange(nodos);
             todos.AddRange(discoverydb);
 
-            // Agrupar por IQN + IP
             var grupos = todos.GroupBy(x => $"{x.Iqn}|{x.Ip}");
 
             var final = new List<IscsiDestino>();
@@ -224,7 +220,6 @@ public static class Iscsi_Sessions_Helper
             {
                 var lista = g.ToList();
 
-                // Prioridad 1: sesión activa
                 var activo = lista.FirstOrDefault(x => x.Conectado);
                 if (activo != null)
                 {
@@ -232,7 +227,6 @@ public static class Iscsi_Sessions_Helper
                     continue;
                 }
 
-                // Prioridad 2: nodo configurado
                 var nodo = lista.FirstOrDefault(x => !x.Conectado);
                 if (nodo != null)
                 {
@@ -240,7 +234,6 @@ public static class Iscsi_Sessions_Helper
                     continue;
                 }
 
-                // Prioridad 3: discoverydb
                 final.Add(lista.First());
             }
 
@@ -251,7 +244,7 @@ public static class Iscsi_Sessions_Helper
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] Fusionar: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] Fusionar: {ex.Message}");
             return new List<IscsiDestino>();
         }
     }
@@ -259,7 +252,6 @@ public static class Iscsi_Sessions_Helper
     // ============================================================
     //   5) COMPLETAR INFO SOLO PARA CONECTADOS
     // ============================================================
-
     private static async Task CompletarInfo(List<IscsiDestino> destinos)
     {
         long id = NextId();
@@ -269,7 +261,7 @@ public static class Iscsi_Sessions_Helper
         {
             var conectados = destinos.Where(x => x.Conectado).ToList();
 
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} → CompletarInfo() conectados={conectados.Count}");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → CompletarInfo() conectados={conectados.Count}");
 
             foreach (var d in conectados)
             {
@@ -279,23 +271,22 @@ public static class Iscsi_Sessions_Helper
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[SESSIONS_HELPER] #{id} ERROR completando {d.Iqn}: {ex.Message}");
+                    LogService.Error($"[SESSIONS_HELPER] #{id} ERROR completando {d.Iqn}: {ex.Message}");
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] CompletarInfo: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] CompletarInfo: {ex.Message}");
         }
 
         sw.Stop();
-        Console.WriteLine($"[SESSIONS_HELPER] #{id} ← CompletarInfo en {sw.ElapsedMilliseconds} ms");
+        LogService.Debug($"[SESSIONS_HELPER] #{id} ← CompletarInfo en {sw.ElapsedMilliseconds} ms");
     }
 
     // ============================================================
     //   6) VISTA GLOBAL FINAL
     // ============================================================
-
     public static async Task<List<IscsiDestino>> ObtenerVistaGlobal()
     {
         long id = NextId();
@@ -303,7 +294,7 @@ public static class Iscsi_Sessions_Helper
 
         try
         {
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} → VistaGlobal()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → VistaGlobal()");
 
             var sesiones = ObtenerSesionesActivas();
             var nodos = ObtenerNodos();
@@ -314,13 +305,13 @@ public static class Iscsi_Sessions_Helper
             await CompletarInfo(fusion);
 
             sw.Stop();
-            Console.WriteLine($"[SESSIONS_HELPER] #{id} ← VistaGlobal={fusion.Count} en {sw.ElapsedMilliseconds} ms");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} ← VistaGlobal={fusion.Count} en {sw.ElapsedMilliseconds} ms");
 
             return fusion;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] VistaGlobal: {ex.Message}");
+            LogService.Error($"[SESSIONS_HELPER] VistaGlobal: {ex.Message}");
             return new List<IscsiDestino>();
         }
     }

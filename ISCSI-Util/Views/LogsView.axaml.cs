@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views
 {
@@ -23,10 +25,42 @@ namespace ISCSI_Util.Views
                 if (top?.Clipboard != null && !string.IsNullOrWhiteSpace(LogText.Text))
                     await top.Clipboard.SetTextAsync(LogText.Text);
             };
-           
         }
 
+        // ============================================================
+        //  CARGAR LOG (PRIMERO LOG DEL PROGRAMA, LUEGO JOURNAL)
+        // ============================================================
         private void LoadLog()
+        {
+            try
+            {
+                string appLog = Path.Combine(ConfigManager.LogPath, "iscsi-util.log");
+
+                // 1) Intentar leer el log del programa
+                if (File.Exists(appLog))
+                {
+                    string content = File.ReadAllText(appLog);
+
+                    if (!string.IsNullOrWhiteSpace(content))
+                    {
+                        LogText.Text = content;
+                        return;
+                    }
+                }
+
+                // 2) Si no hay log del programa, cargar journalctl
+                LoadSystemLog();
+            }
+            catch
+            {
+                LogText.Text = "Unable to read application logs.";
+            }
+        }
+
+        // ============================================================
+        //  CARGAR LOG DEL SISTEMA (journalctl)
+        // ============================================================
+        private void LoadSystemLog()
         {
             try
             {
@@ -61,6 +95,9 @@ namespace ISCSI_Util.Views
             }
         }
 
+        // ============================================================
+        //  FILTRADO DE LÍNEAS ÚTILES
+        // ============================================================
         private string FiltrarLineasUtiles(string log)
         {
             var lines = log.Split('\n');

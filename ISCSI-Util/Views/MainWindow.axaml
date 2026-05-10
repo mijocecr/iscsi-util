@@ -14,7 +14,7 @@
 
     <DockPanel>
 
-        <!-- TOP STATUS BAR -->
+        
         <Border Background="{DynamicResource SteamPanel}" Padding="10" DockPanel.Dock="Top">
             <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
 
@@ -32,8 +32,10 @@
                         Grid.Column="1"
                         Grid.Row="0"
                         Margin="10"
+                        Click="OnOpenConfig"
                         VerticalAlignment="Center"
-                        HorizontalAlignment="Right" />
+                        HorizontalAlignment="Right"
+                        Classes="SteamButton"/>
             </Grid>
         </Border>
 
@@ -86,9 +88,8 @@
                     <TextBlock Text="Logs" Tag="3"
                                PointerPressed="onTabLogsClick"/>
                 </TabItem.Header>
-                <views:LogsView
-                    x:Name="LogsView"/>
-                
+
+                <views:LogsView x:Name="LogsView"/>
             </TabItem>
 
         </TabControl>
