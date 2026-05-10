@@ -1,39 +1,47 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ISCSI_Util.Views.LoadingDialog"
-        Width="360"
-        Height="160"
+        Width="380"
+        Height="170"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
-        Background="#AA000000"
+        Background="Transparent"
+        TransparencyLevelHint="AcrylicBlur, Blur, Transparent"
         SystemDecorations="None"
         ShowInTaskbar="False"
         Topmost="True">
 
-    <Border Background="#1A1A1A"
-            BorderBrush="#3A7BFF"
-            BorderThickness="2"
-            CornerRadius="10"
-            Padding="20"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center">
+    <!-- Overlay oscuro -->
+    <Border Background="#AA000000">
 
-        <StackPanel Spacing="14" HorizontalAlignment="Center">
+        <!-- Caja central -->
+        <Border Background="#1E1E1E"
+                BorderBrush="#3A7BFF"
+                BorderThickness="2"
+                CornerRadius="12"
+                Padding="22"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Effect="drop-shadow(0 0 18 #000000AA)">
 
-            <TextBlock x:Name="MessageText"
-                       Text="Loading..."
-                       FontSize="18"
-                       FontWeight="Bold"
-                       Foreground="White"
-                       HorizontalAlignment="Center"/>
+            <StackPanel Spacing="16" HorizontalAlignment="Center">
 
-            <ProgressBar IsIndeterminate="True"
-                         Width="260"
-                         Height="6"
-                         Foreground="#3A7BFF"
-                         Background="#333"/>
+                <TextBlock x:Name="MessageText"
+                           Text="Loading..."
+                           FontSize="19"
+                           FontWeight="SemiBold"
+                           Foreground="White"
+                           HorizontalAlignment="Center"/>
 
-        </StackPanel>
+                <ProgressBar IsIndeterminate="True"
+                             Width="260"
+                             Height="8"
+                             Foreground="#3A7BFF"
+                             Background="#333"
+                             CornerRadius="4"/>
 
+            </StackPanel>
+
+        </Border>
     </Border>
 </Window>

@@ -38,21 +38,21 @@ namespace ISCSI_Util.Views
                 return;
             }
 
-            // 🔥 No cerrar la app cuando devolvemos la contraseña
+            // No cerrar la app cuando devolvemos la contraseña
             _closeApp = false;
             Close(pass);
         }
 
         private void OnCancel(object? sender, RoutedEventArgs e)
         {
-            // 🔥 Cancel sí debe cerrar la app
+            // Cancel sí debe cerrar la app
             _closeApp = true;
             Close(null);
         }
 
         private void OnClose(object? sender, RoutedEventArgs e)
         {
-            // 🔥 Cerrar app si el usuario pulsa el botón Close
+            // Cerrar app si el usuario pulsa el botón Close
             _closeApp = true;
             Close(null);
         }

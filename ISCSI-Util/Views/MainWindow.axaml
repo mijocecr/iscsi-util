@@ -83,12 +83,12 @@
             <!-- LOGS TAB -->
             <TabItem>
                 <TabItem.Header>
-                    <TextBlock Text="Logs" Tag="3"/>
+                    <TextBlock Text="Logs" Tag="3"
+                               PointerPressed="onTabLogsClick"/>
                 </TabItem.Header>
-
-                <Grid Margin="10">
-                    <ListBox x:Name="LogsList" />
-                </Grid>
+                <views:LogsView
+                    x:Name="LogsView"/>
+                
             </TabItem>
 
         </TabControl>

@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ISCSI_Util.Views.LogsView">
+
+    <DockPanel Margin="10 20 10 10">
+
+        <!-- Barra superior -->
+        <StackPanel Orientation="Horizontal"
+                    DockPanel.Dock="Top"
+                    Spacing="8">
+
+            <Button x:Name="BtnRefresh"
+                    Content="Refresh"
+                    HorizontalContentAlignment="Center"
+                    Width="90"
+                    Margin="0 10"
+                    Classes="accent"/>
+
+            <Button x:Name="BtnCopy"
+                    Content="Copy"
+                    HorizontalContentAlignment="Center"
+                    Width="80"
+                    Margin="0 10"/>
+        </StackPanel>
+
+        <!-- Área de logs -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <TextBox x:Name="LogText"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     FontFamily="Consolas, Monospace"
+                     FontSize="11"
+                     Background="#111"
+                     Foreground="#DDD"
+                     BorderBrush="#3A7BFF"
+                     BorderThickness="1"
+                     TextWrapping="NoWrap"
+                     Padding="8"
+                     MinHeight="280"/>
+        </ScrollViewer>
+
+    </DockPanel>
+
+</UserControl>

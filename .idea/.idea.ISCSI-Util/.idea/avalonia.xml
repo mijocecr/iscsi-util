@@ -11,6 +11,7 @@
         <entry key="ISCSI-Util/Views/ChapDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/InitializeDiskDialogService.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/LoadingDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
+        <entry key="ISCSI-Util/Views/LogsView.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/MainWindow.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/MutualChapDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/PasswordDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />

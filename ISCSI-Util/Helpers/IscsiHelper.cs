@@ -14,7 +14,7 @@ namespace ISCSI_Util.Helpers;
 public static class IscsiHelper
 {
     // ============================================================
-    //  🔥 INFRAESTRUCTURA DE TRAZAS
+    //  INFRAESTRUCTURA DE TRAZAS
     // ============================================================
 
     private static long _traceCounter = 0;
@@ -39,7 +39,7 @@ public static class IscsiHelper
     }
 
     // ============================================================
-    //  🔥 SANITIZAR NOMBRE PARA ARCHIVOS Y SYSTEMD
+    //  SANITIZAR NOMBRE PARA ARCHIVOS Y SYSTEMD
     // ============================================================
 
     public static string SanitizarNombre(string iqn)
@@ -303,7 +303,7 @@ public static class IscsiHelper
         var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        // 🔥 FIX: filtrar por IP + IQN + lun
+        // FIX: filtrar por IP + IQN + lun
         var match = byPath.FirstOrDefault(l =>
             l.Contains(d.Ip, StringComparison.OrdinalIgnoreCase) &&
             l.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase) &&

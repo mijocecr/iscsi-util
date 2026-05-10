@@ -152,7 +152,7 @@
 
                     <Button x:Name="BtnDisconnect"
                             Content="Unplug"
-                            ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
+                            ToolTip.Tip="Unmount the volume and terminate the active iSCSI session"
                             Classes="SteamButton"
                             Width="80"
                             Background="{StaticResource SteamBlue}"

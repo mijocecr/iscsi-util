@@ -48,7 +48,7 @@ public static class ShellHelper
         // Cerrar stdin después de enviar la contraseña
         process.StandardInput.Close();
 
-        // 🔥 NUEVO: lectura síncrona y completa de stdout/stderr
+        // NUEVO: lectura síncrona y completa de stdout/stderr
         string stdout = process.StandardOutput.ReadToEnd();
         string stderr = process.StandardError.ReadToEnd();
 
@@ -69,7 +69,7 @@ public static class ShellHelper
         Console.WriteLine($"[SHELL] #{callId} STDOUT='{stdout.Trim()}'");
         Console.WriteLine($"[SHELL] #{callId} STDERR='{stderr.Trim()}'");
 
-        // 🔥 DETECCIÓN DE CONTRASEÑA INCORRECTA
+        // DETECCIÓN DE CONTRASEÑA INCORRECTA
         if (stderr.Contains("incorrect password", StringComparison.OrdinalIgnoreCase) ||
             stderr.Contains("Sorry, try again", StringComparison.OrdinalIgnoreCase) ||
             stderr.Contains("no password was provided", StringComparison.OrdinalIgnoreCase))

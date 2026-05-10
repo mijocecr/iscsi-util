@@ -180,7 +180,6 @@ public partial class MainWindow : Window
         {
             Content = "OK",
             Width = 90,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Classes = { "SteamButton" },
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
         };
@@ -211,7 +210,7 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    // MÉTODOS ISCSI (siguen funcionando igual)
+    // MÉTODOS ISCSI (reales)
     // ============================================================
     public async Task DiscoverTargets(string ip)
     {
@@ -289,7 +288,7 @@ public partial class MainWindow : Window
     private void Log(string message)
     {
         string timestamp = DateTime.Now.ToString("HH:mm:ss");
-        LogsList.Items.Add($"[{timestamp}] {message}");
+        System.Console.WriteLine($"[{timestamp}] {message}");
     }
 
     // ============================================================
@@ -312,7 +311,12 @@ public partial class MainWindow : Window
 
     private async void OnTabSessionsClick(object? sender, PointerPressedEventArgs e)
     {
-       await LoadSessionsAsync();
+        await LoadSessionsAsync();
         StatusBarText.Text = "Sessions overview";
+    }
+
+    private void onTabLogsClick(object? sender, PointerPressedEventArgs e)
+    {
+        StatusBarText.Text = "Latest iSCSI logs";
     }
 }
