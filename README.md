@@ -48,6 +48,36 @@ Pre‑built packages and release archives are available on the project’s GitHu
 
 Download the latest release, extract the contents, and run the application directly.
 
+AUR (Arch Linux / Manjaro / EndeavourOS)
+iSCSI‑Util is available in the Arch User Repository.
+
+Install with yay:
+```bash
+yay -S iscsi-util
+```
+Install with paru:
+```bash
+paru -S iscsi-util
+```
+Manual AUR clone:
+
+```bash
+git clone https://aur.archlinux.org/iscsi-util.git
+cd iscsi-util
+makepkg -si
+```
+
+---
+
+## 🚀 Running iSCSI‑Util
+
+### From source:
+```bash
+git clone https://github.com/mijocecr/iscsi-util.git
+cd iscsi-util
+dotnet run
+```
+
 ---
 
 ## Requirements
@@ -109,4 +139,18 @@ Please use the GitHub issue tracker or submit a pull request to participate in t
 ## License
 
 iSCSI‑Util is distributed under the **MIT License**, allowing free use, modification, and distribution.
+
+---
+Project Status
+---
+
+iSCSI‑Util is stable, safe, and suitable for production use in home servers, homelabs, and small office environments. 
+It focuses on reliability and does not modify any ISCSI settings outside the user’s explicit actions.
+
+---
+
+Pendiente la Imagen
+
+
+---
 
