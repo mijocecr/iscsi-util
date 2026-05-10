@@ -9,6 +9,7 @@
         <entry key="ISCSI-Util/Styles/SteamStyles.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Styles/Theme.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/ChapDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
+        <entry key="ISCSI-Util/Views/ConfigWindow.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/InitializeDiskDialogService.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/LoadingDialog.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />
         <entry key="ISCSI-Util/Views/LogsView.axaml" value="ISCSI-Util/ISCSI-Util.csproj" />

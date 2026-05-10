@@ -28,10 +28,11 @@
                     VerticalAlignment="Center"
                 />
 
-                <Button Content="Config"
+                <Button Content="⚙"
                         Grid.Column="1"
                         Grid.Row="0"
                         Margin="10"
+                        FontSize="18"
                         Click="OnOpenConfig"
                         VerticalAlignment="Center"
                         HorizontalAlignment="Right"
