@@ -664,7 +664,7 @@ public static class IscsiHelper
     //  DESCONECTAR — desmontaje avanzado, limpieza real e instrumentación
     // ======================================================================
     
-    public static async Task Desconectar(IscsiDestino d)
+    public static async Task Desconectar_Borrar(IscsiDestino d)
 {
     long id = NextTraceId();
     var sw = StartTrace(id, "Desconectar", $"IQN='{d.Iqn}', MP='{d.MountPoint}'");
@@ -796,7 +796,140 @@ public static class IscsiHelper
     }
 }
 
+//----------
 
+ 
+public static async Task Desconectar(IscsiDestino d)
+{
+    long id = NextTraceId();
+    var sw = StartTrace(id, "Desconectar", $"IQN='{d.Iqn}', MP='{d.MountPoint}'");
+
+    using (LoadingService.Show($"Disconnecting {d.Iqn}..."))
+    {
+        try
+        {
+            // --------------------------------------------------------------
+            // 1) Desmontar si está montado (en hilo separado)
+            // --------------------------------------------------------------
+            if (!string.IsNullOrWhiteSpace(d.MountPoint))
+            {
+                var mpCheck = await Task.Run(() =>
+                    ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
+                );
+
+                if (mpCheck.ExitCode == 0)
+                {
+                    Log(id, "Desmontando volumen...");
+                    await Task.Run(() =>
+                        ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"")
+                    );
+                    await Task.Delay(300);
+
+                    // Reintento
+                    mpCheck = await Task.Run(() =>
+                        ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
+                    );
+
+                    if (mpCheck.ExitCode == 0)
+                    {
+                        Log(id, "[WARN] El volumen sigue montado, forzando umount...");
+                        await Task.Run(() =>
+                            ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\"")
+                        );
+                        await Task.Delay(200);
+                    }
+                }
+            }
+
+            // --------------------------------------------------------------
+            // 2) Eliminar directorio de montaje (solo si existe)
+            // --------------------------------------------------------------
+            if (!string.IsNullOrWhiteSpace(d.MountPoint) &&
+                Directory.Exists(d.MountPoint))
+            {
+                try
+                {
+                    Log(id, "Eliminando directorio de montaje...");
+                    await Task.Run(() =>
+                        ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"")
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Log(id, $"[WARN] No se pudo eliminar el directorio: {ex.Message}");
+                }
+            }
+
+            // --------------------------------------------------------------
+            // 3) Cerrar sesión iSCSI (con timeout)
+            // --------------------------------------------------------------
+            Log(id, "Comprobando sesiones iSCSI...");
+
+            var sesiones = await Task.Run(() =>
+                ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout
+            );
+
+            if (!string.IsNullOrWhiteSpace(sesiones) &&
+                sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
+            {
+                Log(id, "Cerrando sesión iSCSI...");
+
+                var logoutTask = Task.Run(() =>
+                    ShellHelper.EjecutarComoRoot(
+                        $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --logout"
+                    )
+                );
+
+                var completed = await Task.WhenAny(logoutTask, Task.Delay(5000));
+
+                if (completed != logoutTask)
+                {
+                    Log(id, "[TIMEOUT] Logout tardó demasiado.");
+                    NotificadorLinux.Enviar($"[TIMEOUT] Logout from {d.Iqn} took too long.", 6000, "critical");
+                }
+                else
+                {
+                    await Task.Delay(300);
+                }
+            }
+            else
+            {
+                Log(id, "No hay sesión activa, se omite logout.");
+            }
+
+            // --------------------------------------------------------------
+            // 4) NO BORRAR EL NODO (esta es la diferencia clave)
+            // --------------------------------------------------------------
+            Log(id, "Nodo iSCSI conservado (no se elimina).");
+
+            // --------------------------------------------------------------
+            // 5) Reset de propiedades del destino (limpieza en memoria)
+            // --------------------------------------------------------------
+            d.Conectado = false;
+            d.TieneFilesystem = false;
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.MountPoint = null;
+            d.FsType = null;
+
+            NotificadorLinux.Enviar($"Target {d.Iqn} disconnected");
+
+            EndTrace(id, "Desconectar", sw, "OK");
+        }
+        catch (Exception ex)
+        {
+            Log(id, $"[ERROR] {ex.Message}");
+            NotificadorLinux.Enviar($"[ERROR] Failed to disconnect target {d.Iqn}", 6000, "critical");
+            EndTrace(id, "Desconectar", sw, "ERROR");
+        }
+    }
+}
+
+
+
+//-------
+    
+    
     // ======================================================================
     //  PERSISTENCIA — fstab + systemd
     // ======================================================================

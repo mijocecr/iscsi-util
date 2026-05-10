@@ -28,7 +28,8 @@
 
                 <TextBlock x:Name="MessageText"
                            Text="Loading..."
-                           FontSize="19"
+                           FontSize="16"
+                           TextWrapping="Wrap"
                            FontWeight="SemiBold"
                            Foreground="White"
                            HorizontalAlignment="Center"/>

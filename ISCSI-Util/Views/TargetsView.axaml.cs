@@ -524,140 +524,20 @@ public partial class TargetsView : UserControl
         if (_selected == null)
             return;
 
-        await EliminarNodoSeguro(_selected);
+        await IscsiHelper.Desconectar_Borrar(_selected);
+
+        // Después de borrar, refrescamos la lista
+        _targets.Remove(_selected);
+        RefreshTargetsList();
+
+        DetailsInfoPanel.Children.Clear();
+        DetailsIcon.Source = null;
+
+        BtnHeaderUnmount.IsVisible = false;
+        BtnHeaderOpen.IsVisible = false;
     }
 
-   private async Task EliminarNodoSeguro(IscsiDestino d)
-{
-    using (LoadingService.Show($"Deleting node {d.Iqn}..."))
-    {
-        try
-        {
-            // ============================================================
-            // 1) DESMONTAR SI ESTÁ MONTADO
-            // ============================================================
-            if (!string.IsNullOrWhiteSpace(d.MountPoint))
-            {
-                var mpCheck = await Task.Run(() =>
-                    ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
-                );
-
-                if (mpCheck.ExitCode == 0)
-                {
-                    await Task.Run(() =>
-                        ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"")
-                    );
-                    await Task.Delay(300);
-
-                    // Reintento
-                    mpCheck = await Task.Run(() =>
-                        ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"")
-                    );
-
-                    if (mpCheck.ExitCode == 0)
-                    {
-                        await Task.Run(() =>
-                            ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\"")
-                        );
-                        await Task.Delay(200);
-                    }
-                }
-
-                // Eliminar directorio
-                if (Directory.Exists(d.MountPoint))
-                {
-                    await Task.Run(() =>
-                        ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"")
-                    );
-                }
-            }
-
-            // ============================================================
-            // 2) CERRAR SESIÓN ISCSI (CON TIMEOUT)
-            // ============================================================
-            var logoutTask = Task.Run(() =>
-                ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --logout"
-                )
-            );
-
-            var logoutCompleted = await Task.WhenAny(logoutTask, Task.Delay(5000));
-            if (logoutCompleted != logoutTask)
-            {
-                Console.WriteLine($"[DELETE NODE] TIMEOUT en logout de {d.Iqn}");
-            }
-
-            await Task.Delay(200);
-
-            // ============================================================
-            // 3) ELIMINAR PERSISTENCIA (fstab, systemd, mount units)
-            // ============================================================
-            await Task.Run(() =>
-            {
-                try
-                {
-                    // fstab
-                    ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.MountPoint}#d\" /etc/fstab");
-                    ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.PartitionPath}#d\" /etc/fstab");
-
-                    // systemd services
-                    string safeIqn = d.Iqn.Replace(":", "_").Replace(".", "_");
-                    ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-login-{safeIqn}.service --now");
-                    ShellHelper.EjecutarComoRoot($"rm -f /etc/systemd/system/iscsi-login-{safeIqn}.service");
-
-                    // mount unit
-                    ShellHelper.EjecutarComoRoot($"rm -f /etc/systemd/system/{safeIqn}.mount");
-
-                    ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
-                }
-                catch { }
-            });
-
-            // ============================================================
-            // 4) ELIMINAR NODO ISCSI Y DISCOVERYDB
-            // ============================================================
-            await Task.Run(() =>
-            {
-                ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op=delete"
-                );
-
-                ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m discoverydb -t sendtargets -p {d.Ip} --op=delete"
-                );
-            });
-
-            // ============================================================
-            // 5) LIMPIAR OBJETO EN MEMORIA
-            // ============================================================
-            d.Conectado = false;
-            d.TieneFilesystem = false;
-            d.DevicePath = null;
-            d.PartitionPath = null;
-            d.MountPoint = null;
-            d.FsType = null;
-            d.Persistir = false;
-
-            _targets.Remove(d);
-            RefreshTargetsList();
-
-            DetailsInfoPanel.Children.Clear();
-            DetailsIcon.Source = null;
-
-            BtnHeaderUnmount.IsVisible = false;
-            BtnHeaderOpen.IsVisible = false;
-
-            NotificadorLinux.Enviar($"Node {d.Iqn} deleted", 4000, "normal");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[DELETE NODE] ERROR: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to delete node {d.Iqn}", 6000, "critical");
-        }
-    }
-}
-
-    
+  
     // ============================================================
     // ICONOS
     // ============================================================

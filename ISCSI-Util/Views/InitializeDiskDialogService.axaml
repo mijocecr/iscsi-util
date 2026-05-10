@@ -15,6 +15,7 @@
         <TextBlock Text="Initialize iSCSI Disk"
                    FontSize="15"
                    FontWeight="Bold"
+                   TextWrapping="Wrap"
                    HorizontalAlignment="Center"
                    Foreground="{DynamicResource SteamText}"/>
 
@@ -27,6 +28,7 @@
             <TextBlock Text="Label:"
                        Foreground="{DynamicResource SteamBlue}"
                        VerticalAlignment="Center"
+                       TextWrapping="Wrap"
                        Grid.Row="0" Grid.Column="0"/>
 
             <TextBox x:Name="LabelBox"

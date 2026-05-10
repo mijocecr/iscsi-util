@@ -1,15 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Layout;
 using Avalonia.Media;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views;
 
@@ -26,22 +25,12 @@ public partial class SessionsView : UserControl
     }
 
     // ============================================================
-    //   CARGAR SESIONES (VISTA GLOBAL REAL)
+    //   CARGAR SESIONES + NODOS
     // ============================================================
     public async Task CargarSesiones()
     {
         long id = ++_loadId;
-        var sw = Stopwatch.StartNew();
-
         Console.WriteLine($"[SESSIONS] #{id} → CargarSesiones()");
-
-        if (string.IsNullOrWhiteSpace(Credenciales.AdminPassword))
-        {
-            Console.WriteLine($"[SESSIONS] #{id} Saltando: no hay contraseña.");
-            _destinos.Clear();
-            PintarLista();
-            return;
-        }
 
         try
         {
@@ -55,14 +44,10 @@ public partial class SessionsView : UserControl
 
             if (_selected != null)
                 PintarDetalles(_selected);
-
-            sw.Stop();
-            Console.WriteLine($"[SESSIONS] #{id} ← OK en {sw.ElapsedMilliseconds} ms (Destinos={_destinos.Count})");
         }
         catch (Exception ex)
         {
-            sw.Stop();
-            Console.WriteLine($"[SESSIONS] #{id} ERROR: {ex.Message}");
+            Console.WriteLine($"[SESSIONS] ERROR: {ex.Message}");
             _destinos.Clear();
             PintarLista();
         }
@@ -84,8 +69,6 @@ public partial class SessionsView : UserControl
 
             SessionsList.Children.Add(card);
         }
-
-        Console.WriteLine($"[SESSIONS] PintarLista: {_destinos.Count} tarjetas.");
     }
 
     private Border CrearTarjeta(IscsiDestino d)
@@ -134,11 +117,7 @@ public partial class SessionsView : UserControl
         border.PointerPressed += (_, _) =>
         {
             _selected = _destinos.Find(x => x.Iqn == d.Iqn && x.Ip == d.Ip);
-
-            Console.WriteLine($"[SESSIONS] Seleccionado: {_selected?.Iqn} @ {_selected?.Ip}");
-
             PintarLista();
-
             if (_selected != null)
                 PintarDetalles(_selected);
         };
@@ -147,7 +126,7 @@ public partial class SessionsView : UserControl
     }
 
     // ============================================================
-    //   PINTAR DETALLES (CORREGIDO)
+    //   PINTAR DETALLES
     // ============================================================
     private void PintarDetalles(IscsiDestino d)
     {
@@ -168,45 +147,19 @@ public partial class SessionsView : UserControl
         AddDetail("Persist:", d.Persistir ? "Yes" : "No");
 
         // ============================
-        // ESTADO REAL DEL DESTINO
-        // ============================
-
-        bool isConnected   = d.Conectado;
-        bool hasFs         = d.TieneFilesystem;
-        bool hasDevice     = !string.IsNullOrWhiteSpace(d.DevicePath);
-        bool hasPartition  = !string.IsNullOrWhiteSpace(d.PartitionPath);
-        bool hasMountPoint = !string.IsNullOrWhiteSpace(d.MountPoint);
-
-        bool isMounted = false;
-
-        if (hasMountPoint)
-        {
-            var mp = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
-            isMounted = mp.ExitCode == 0;
-        }
-
-        // ============================
         // BOTONES (LÓGICA CORRECTA)
         // ============================
 
-        BtnOpen.IsEnabled       = isMounted;
-        BtnInit.IsEnabled       = isConnected && !hasFs && hasDevice && hasPartition;
-        BtnMount.IsEnabled      = isConnected && hasFs;
-        BtnDisconnect.IsEnabled = isConnected;
+        BtnOpen.IsEnabled = false;
+        BtnInit.IsEnabled = false;
 
-        BtnMount.Content = isMounted ? "Unmount" : "Mount";
+        BtnMount.IsEnabled = true;
+        BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
 
-        BtnOpen.Click       -= OnOpen;
-        BtnInit.Click       -= OnInit;
-        BtnMount.Click      -= OnMount;
-        BtnDisconnect.Click -= OnDisconnect;
+        BtnDisconnect.IsVisible = false;
 
-        BtnOpen.Click       += OnOpen;
-        BtnInit.Click       += OnInit;
-        BtnMount.Click      += OnMount;
-        BtnDisconnect.Click += OnDisconnect;
-
-        Console.WriteLine($"[SESSIONS] Detalles pintados para {d.Iqn}");
+        BtnMount.Click -= OnMount;
+        BtnMount.Click += OnMount;
     }
 
     private void AddDetail(string label, string value, bool wrap = false)
@@ -240,61 +193,22 @@ public partial class SessionsView : UserControl
     // ============================================================
     //  ACCIONES
     // ============================================================
-
-    private void OnOpen(object? s, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_selected?.MountPoint == null) return;
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "xdg-open",
-                Arguments = $"\"{_selected.MountPoint}\"",
-                UseShellExecute = false
-            });
-
-            Console.WriteLine($"[SESSIONS] Abriendo mountpoint: {_selected.MountPoint}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[SESSIONS] Error al abrir mountpoint: {ex.Message}");
-        }
-    }
-
-    private async void OnInit(object? s, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_selected == null) return;
-
-        Console.WriteLine($"[SESSIONS] OnInit → {_selected.Iqn}");
-
-        var dlg = new InitializeDiskDialog(_selected);
-        await dlg.ShowDialog((Window)VisualRoot);
-
-        await CargarSesiones();
-    }
-
     private async void OnMount(object? s, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_selected == null)
             return;
 
-        Console.WriteLine($"[SESSIONS] OnMount → {_selected.Iqn}");
-
         if (_selected.Conectado)
-            await IscsiHelper.Desconectar(_selected);
+        {
+            using (LoadingService.Show("Unmounting..."))
+                await IscsiHelper.Desconectar(_selected);
+        }
         else
-            await IscsiHelper.Conectar(_selected);
+        {
+            using (LoadingService.Show("Connecting..."))
+                await IscsiHelper.Conectar(_selected);
+        }
 
-        await CargarSesiones();
-    }
-
-    private async void OnDisconnect(object? s, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_selected == null) return;
-
-        Console.WriteLine($"[SESSIONS] OnDisconnect → {_selected.Iqn}");
-        await IscsiHelper.Desconectar(_selected);
         await CargarSesiones();
     }
 }

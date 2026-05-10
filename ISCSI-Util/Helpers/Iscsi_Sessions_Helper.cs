@@ -30,7 +30,6 @@ public static class Iscsi_Sessions_Helper
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] GetLocalIPv4: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to get local IP: {ex.Message}", 6000, "critical", "dialog-error");
             return "0.0.0.0";
         }
     }
@@ -44,9 +43,8 @@ public static class Iscsi_Sessions_Helper
             return a.Length == 4 && b.Length == 4 &&
                    a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"[SESSIONS_HELPER][ERROR] MismaSubred: {ex.Message}");
             return false;
         }
     }
@@ -57,6 +55,8 @@ public static class Iscsi_Sessions_Helper
 
     private static List<IscsiDestino> ObtenerSesionesActivas()
     {
+        var list = new List<IscsiDestino>();
+
         try
         {
             long id = NextId();
@@ -65,8 +65,6 @@ public static class Iscsi_Sessions_Helper
             Console.WriteLine($"[SESSIONS_HELPER] #{id} → SesionesActivas()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m session");
-
-            var list = new List<IscsiDestino>();
 
             if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
             {
@@ -92,22 +90,23 @@ public static class Iscsi_Sessions_Helper
 
             sw.Stop();
             Console.WriteLine($"[SESSIONS_HELPER] #{id} ← SesionesActivas={list.Count} en {sw.ElapsedMilliseconds} ms");
-            return list;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] ObtenerSesionesActivas: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to read active sessions: {ex.Message}", 6000, "critical", "dialog-error");
-            return new List<IscsiDestino>();
         }
+
+        return list;
     }
 
     // ============================================================
-    //   2) NODOS CONOCIDOS
+    //   2) NODOS CONFIGURADOS
     // ============================================================
 
     private static List<IscsiDestino> ObtenerNodos()
     {
+        var list = new List<IscsiDestino>();
+
         try
         {
             long id = NextId();
@@ -116,8 +115,6 @@ public static class Iscsi_Sessions_Helper
             Console.WriteLine($"[SESSIONS_HELPER] #{id} → Nodos()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m node");
-
-            var list = new List<IscsiDestino>();
 
             if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
             {
@@ -143,14 +140,13 @@ public static class Iscsi_Sessions_Helper
 
             sw.Stop();
             Console.WriteLine($"[SESSIONS_HELPER] #{id} ← Nodos={list.Count} en {sw.ElapsedMilliseconds} ms");
-            return list;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] ObtenerNodos: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to read nodes: {ex.Message}", 6000, "critical", "dialog-error");
-            return new List<IscsiDestino>();
         }
+
+        return list;
     }
 
     // ============================================================
@@ -159,6 +155,8 @@ public static class Iscsi_Sessions_Helper
 
     private static List<IscsiDestino> ObtenerDiscoveryDb()
     {
+        var list = new List<IscsiDestino>();
+
         try
         {
             long id = NextId();
@@ -167,8 +165,6 @@ public static class Iscsi_Sessions_Helper
             Console.WriteLine($"[SESSIONS_HELPER] #{id} → DiscoveryDB()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m discoverydb -t sendtargets -o show");
-
-            var list = new List<IscsiDestino>();
 
             if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
             {
@@ -194,18 +190,17 @@ public static class Iscsi_Sessions_Helper
 
             sw.Stop();
             Console.WriteLine($"[SESSIONS_HELPER] #{id} ← DiscoveryDB={list.Count} en {sw.ElapsedMilliseconds} ms");
-            return list;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] ObtenerDiscoveryDb: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to read discoverydb: {ex.Message}", 6000, "critical", "dialog-error");
-            return new List<IscsiDestino>();
         }
+
+        return list;
     }
 
     // ============================================================
-    //   4) FUSIÓN INTELIGENTE
+    //   4) FUSIÓN INTELIGENTE (IQN + IP)
     // ============================================================
 
     private static List<IscsiDestino> Fusionar(
@@ -220,48 +215,33 @@ public static class Iscsi_Sessions_Helper
             todos.AddRange(nodos);
             todos.AddRange(discoverydb);
 
-            var grupos = todos.GroupBy(x => x.Iqn);
-
-            string ipLocal = GetLocalIPv4();
+            // Agrupar por IQN + IP
+            var grupos = todos.GroupBy(x => $"{x.Iqn}|{x.Ip}");
 
             var final = new List<IscsiDestino>();
 
             foreach (var g in grupos)
             {
-                string iqn = g.Key;
                 var lista = g.ToList();
 
-                var sesionActiva = lista.FirstOrDefault(x => x.Conectado);
-                if (sesionActiva != null)
+                // Prioridad 1: sesión activa
+                var activo = lista.FirstOrDefault(x => x.Conectado);
+                if (activo != null)
                 {
-                    final.Add(new IscsiDestino
-                    {
-                        Ip = sesionActiva.Ip,
-                        Iqn = iqn,
-                        Conectado = true
-                    });
+                    final.Add(activo);
                     continue;
                 }
 
-                var mismaSubred = lista.FirstOrDefault(x => MismaSubred(ipLocal, x.Ip));
-                if (mismaSubred != null)
+                // Prioridad 2: nodo configurado
+                var nodo = lista.FirstOrDefault(x => !x.Conectado);
+                if (nodo != null)
                 {
-                    final.Add(new IscsiDestino
-                    {
-                        Ip = mismaSubred.Ip,
-                        Iqn = iqn,
-                        Conectado = false
-                    });
+                    final.Add(nodo);
                     continue;
                 }
 
-                var primero = lista.First();
-                final.Add(new IscsiDestino
-                {
-                    Ip = primero.Ip,
-                    Iqn = iqn,
-                    Conectado = false
-                });
+                // Prioridad 3: discoverydb
+                final.Add(lista.First());
             }
 
             return final
@@ -272,13 +252,12 @@ public static class Iscsi_Sessions_Helper
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] Fusionar: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to merge session data: {ex.Message}", 6000, "critical", "dialog-error");
             return new List<IscsiDestino>();
         }
     }
 
     // ============================================================
-    //   5) COMPLETAR INFORMACIÓN REAL
+    //   5) COMPLETAR INFO SOLO PARA CONECTADOS
     // ============================================================
 
     private static async Task CompletarInfo(List<IscsiDestino> destinos)
@@ -301,14 +280,12 @@ public static class Iscsi_Sessions_Helper
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[SESSIONS_HELPER] #{id} ERROR completando {d.Iqn}: {ex.Message}");
-                    NotificadorLinux.Enviar($"[ERROR] Failed to complete info for {d.Iqn}: {ex.Message}", 6000, "critical", "dialog-error");
                 }
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] CompletarInfo: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to complete session info: {ex.Message}", 6000, "critical", "dialog-error");
         }
 
         sw.Stop();
@@ -316,7 +293,7 @@ public static class Iscsi_Sessions_Helper
     }
 
     // ============================================================
-    //   6) VISTA GLOBAL
+    //   6) VISTA GLOBAL FINAL
     // ============================================================
 
     public static async Task<List<IscsiDestino>> ObtenerVistaGlobal()
@@ -344,7 +321,6 @@ public static class Iscsi_Sessions_Helper
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS_HELPER][ERROR] VistaGlobal: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to load session view: {ex.Message}", 6000, "critical", "dialog-error");
             return new List<IscsiDestino>();
         }
     }
