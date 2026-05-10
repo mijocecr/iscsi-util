@@ -149,7 +149,9 @@ It focuses on reliability and does not modify any ISCSI settings outside the use
 
 ---
 
-Pendiente la Imagen
+
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/2e18bfa6-acbe-454d-b28c-2e644115d40b" />
+
 
 
 ---
