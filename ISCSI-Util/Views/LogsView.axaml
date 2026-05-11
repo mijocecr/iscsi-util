@@ -17,9 +17,9 @@
                     Classes="accent"/>
 
             <Button x:Name="BtnCopy"
-                    Content="Copy"
+                    Content="Open File"
                     HorizontalContentAlignment="Center"
-                    Width="80"
+                    Width="100"
                     Margin="0 10"/>
         </StackPanel>
 

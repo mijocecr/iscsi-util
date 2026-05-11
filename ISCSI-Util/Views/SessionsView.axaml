@@ -28,6 +28,7 @@
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="BoxShadow" Value="0 4 12 #80000080"/>
+            <Setter Property="Padding" Value="10"/>
         </Style>
 
         <!-- Botón Steam -->
@@ -37,7 +38,7 @@
             <Setter Property="BorderThickness" Value="2"/>
             <Setter Property="CornerRadius" Value="6"/>
             <Setter Property="Foreground" Value="{StaticResource SteamText}"/>
-            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Padding" Value="6,3"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
         </Style>
@@ -80,13 +81,13 @@
     <!-- ============================================================
          LAYOUT PRINCIPAL
     ============================================================ -->
-    <Grid RowDefinitions="*,*" Margin="15" RowSpacing="5">
+    <Grid RowDefinitions="*,*" Margin="15" RowSpacing="6">
 
         <!-- LISTA DE SESIONES -->
-        <Border Classes="SteamCard" Padding="5">
+        <Border Classes="SteamCard" Padding="6">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="SessionsList"
-                            Spacing="5"
+                            Spacing="6"
                             Margin="2"/>
             </ScrollViewer>
         </Border>
@@ -94,32 +95,38 @@
         <!-- PANEL DE DETALLES -->
         <Border Grid.Row="1"
                 Classes="SteamCard"
-                Padding="8">
+                Padding="10">
 
             <!--  COLUMNAS FIJAS PARA EVITAR QUE LOS BOTONES SE MUEVAN -->
-            <Grid ColumnDefinitions="300,120"
-                  ColumnSpacing="8">
+            <Grid ColumnDefinitions="300,110"
+                  ColumnSpacing="10"
+                  VerticalAlignment="Top">
 
                 <!-- COLUMNA IZQUIERDA -->
-                <Grid RowDefinitions="Auto,Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*"
+                      RowSpacing="4">
 
+                    <!-- TÍTULO -->
                     <TextBlock Grid.Row="0"
                                Text="Session Details"
-                               FontSize="16"
+                               FontSize="15"
                                FontWeight="Bold"
-                               HorizontalAlignment="Center"
+                               HorizontalAlignment="Left"
                                Foreground="{StaticResource SteamBlue}"/>
 
+                    <!-- SEPARADOR -->
                     <Rectangle Grid.Row="1"
                                Height="1"
                                Fill="{StaticResource SteamBlue}"
-                               Opacity="0.4"
-                               Margin="0,4"/>
+                               Opacity="0.35"
+                               Margin="0,0,0,2"/>
 
+                    <!-- DETALLES (compactado) -->
                     <ScrollViewer Grid.Row="2"
-                                  VerticalScrollBarVisibility="Auto">
+                                  VerticalScrollBarVisibility="Auto"
+                                  Margin="0,0,0,0">
                         <StackPanel x:Name="DetailsPanel"
-                                    Spacing="4"
+                                    Spacing="2"
                                     Width="300"
                                     MaxWidth="300"/>
                     </ScrollViewer>
@@ -128,29 +135,20 @@
 
                 <!-- COLUMNA DERECHA (BOTONES FIJOS) -->
                 <StackPanel Grid.Column="1"
-                            Spacing="5"
+                            Spacing="4"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Top">
 
                     <Button x:Name="BtnOpen"
                             Content="Open"
                             Classes="SteamButton"
                             Width="80"/>
 
-                    <Button x:Name="BtnInit"
-                            Content="Init"
-                            Classes="SteamButton"
-                            Width="80"
-                            ToolTip.Tip="Caution - Disk initialization"
-                            Background="Orange"
-                            Foreground="Black"/>
-
                     <Button x:Name="BtnMount"
                             Content="Mount"
                             Classes="SteamButton"
                             Width="80"/>
 
-                   
                 </StackPanel>
 
             </Grid>

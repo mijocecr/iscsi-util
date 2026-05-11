@@ -266,16 +266,13 @@ public static class IscsiHelper
     //  COMPLETAR INFORMACIÓN — DevicePath, PartitionPath, FS
     // ============================================================
 
-    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+   public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
 {
     long id = NextTraceId();
     TraceIn(id, "CompletarInformacion", d.Iqn);
 
     try
     {
-        // --------------------------------------------------------------
-        // 0) Si no está conectado → limpiar y salir
-        // --------------------------------------------------------------
         if (!d.Conectado)
         {
             d.TieneFilesystem = false;
@@ -301,7 +298,7 @@ public static class IscsiHelper
             return;
 
         // --------------------------------------------------------------
-        // 2) Detectar partición
+        // 2) Detectar partición (si existe)
         // --------------------------------------------------------------
         var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
         var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -311,17 +308,38 @@ public static class IscsiHelper
             : d.DevicePath;
 
         // --------------------------------------------------------------
-        // 3) Detectar mountpoint
+        // 3) Detectar mountpoint (MEJORADO)
         // --------------------------------------------------------------
         var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        var mline = mounts.FirstOrDefault(l => l.Contains(d.PartitionPath));
-        if (mline != null)
+        string[] posibles =
         {
-            var parts = mline.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 3)
-                d.MountPoint = parts[2];
+            d.PartitionPath ?? "",
+            d.DevicePath ?? "",
+            "/dev/" + Path.GetFileName(d.PartitionPath ?? ""),
+            "/dev/" + Path.GetFileName(d.DevicePath ?? "")
+        };
+
+        d.MountPoint = "";
+
+        foreach (var m in mounts)
+        {
+            foreach (var p in posibles)
+            {
+                if (!string.IsNullOrWhiteSpace(p) && m.StartsWith(p + " "))
+                {
+                    var parts = m.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 3)
+                    {
+                        d.MountPoint = parts[2];
+                        break;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(d.MountPoint))
+                break;
         }
 
         // --------------------------------------------------------------
@@ -336,9 +354,6 @@ public static class IscsiHelper
         if (d.TieneFilesystem)
             d.FsType = DetectarFsType(blkid.Stdout);
 
-     
-
-        // Flags usados por la UI
         d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
         d.UsaMutualChap = d.RequiresMutualChap || d.HasLocalMutualConfigured;
 
@@ -365,10 +380,23 @@ public static async Task Conectar(IscsiDestino d)
         try
         {
             // --------------------------------------------------------------
-            // 1) Crear mountpoint si no existe
+            // 1) Crear mountpoint único por IQN (evita colisiones)
             // --------------------------------------------------------------
             string basePath = ConfigManager.MountBasePath;
-            d.MountPoint = Path.Combine(basePath, SanitizarNombre(d.Iqn));
+
+            string safeIqn = d.Iqn
+                .Replace(":", "_")
+                .Replace("/", "_")
+                .Replace(".", "_")
+                .Replace("-", "_");
+
+            string hash = Convert.ToHexString(
+                System.Security.Cryptography.SHA1.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(d.Iqn)
+                )
+            ).Substring(0, 8);
+
+            d.MountPoint = Path.Combine(basePath, $"{safeIqn}_{hash}");
 
             if (!Directory.Exists(d.MountPoint))
             {
@@ -389,18 +417,12 @@ public static async Task Conectar(IscsiDestino d)
             // --------------------------------------------------------------
             if (!yaConectado)
             {
-                // ----------------------------------------------------------
-                // 3A) Comprobar si el nodo ya existe (evita op=new)
-                // ----------------------------------------------------------
                 var checkNode = ShellHelper.EjecutarComoRoot(
                     $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}"
                 );
 
                 bool nodoExiste = !checkNode.Stderr.Contains("No records found");
 
-                // ----------------------------------------------------------
-                // 3B) Crear nodo solo si no existe
-                // ----------------------------------------------------------
                 if (!nodoExiste)
                 {
                     ShellHelper.EjecutarComoRoot(
@@ -409,7 +431,7 @@ public static async Task Conectar(IscsiDestino d)
                 }
 
                 // ----------------------------------------------------------
-                // 3C) Aplicar CHAP solo si el usuario lo configuró
+                // 3C) Aplicar CHAP si procede
                 // ----------------------------------------------------------
                 if (d.UsaChap || d.UsaMutualChap)
                 {
@@ -463,7 +485,7 @@ public static async Task Conectar(IscsiDestino d)
             }
 
             // --------------------------------------------------------------
-            // 4) Detectar symlink
+            // 4) Detectar symlink en /dev/disk/by-path
             // --------------------------------------------------------------
             d.DevicePath = null;
 
@@ -517,7 +539,7 @@ public static async Task Conectar(IscsiDestino d)
             d.FsType = DetectarFsType(blkid.Stdout);
 
             // --------------------------------------------------------------
-            // 7) Montar
+            // 7) Montar (con mountpoint único)
             // --------------------------------------------------------------
             var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
 
@@ -874,41 +896,54 @@ public static async Task Desconectar(IscsiDestino d)
         try
         {
             // --------------------------------------------------------------
-            // 1) Desmontar si está montado
+            // 1) Desmontar si está montado (solo su mountpoint único)
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
-                var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+                var mpCheck = ShellHelper.EjecutarComoRoot(
+                    $"mountpoint -q \"{d.MountPoint}\""
+                );
 
                 if (mpCheck.ExitCode == 0)
                 {
                     // Lazy unmount primero
-                    ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"");
+                    ShellHelper.EjecutarComoRoot(
+                        $"umount -l \"{d.MountPoint}\""
+                    );
                     await Task.Delay(300);
 
                     // Si sigue montado, forzar
-                    mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+                    mpCheck = ShellHelper.EjecutarComoRoot(
+                        $"mountpoint -q \"{d.MountPoint}\""
+                    );
+
                     if (mpCheck.ExitCode == 0)
                     {
-                        ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\"");
+                        ShellHelper.EjecutarComoRoot(
+                            $"umount -f \"{d.MountPoint}\""
+                        );
                         await Task.Delay(200);
                     }
                 }
             }
 
             // --------------------------------------------------------------
-            // 2) Eliminar directorio de montaje
+            // 2) Eliminar directorio de montaje (solo el suyo)
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint) &&
                 Directory.Exists(d.MountPoint))
             {
-                ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"");
+                ShellHelper.EjecutarComoRoot(
+                    $"rm -rf \"{d.MountPoint}\""
+                );
             }
 
             // --------------------------------------------------------------
             // 3) Logout iSCSI (solo si existe sesión activa)
             // --------------------------------------------------------------
-            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
+            var sesiones = ShellHelper.EjecutarComoRoot(
+                "iscsiadm -m session"
+            ).Stdout;
 
             if (!string.IsNullOrWhiteSpace(sesiones) &&
                 sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
@@ -930,11 +965,13 @@ public static async Task Desconectar(IscsiDestino d)
             d.TieneFilesystem = false;
             d.DevicePath = null;
             d.PartitionPath = null;
-            d.MountPoint = null;
             d.FsType = null;
 
-            // Mantener CHAP detectado y configurado
-            // Mantener persistencia (solo se aplica en Conectar)
+            // MUY IMPORTANTE:
+            // Mantener MountPoint = null para que TargetsView no lo considere montado
+            d.MountPoint = null;
+
+            // CHAP y persistencia se mantienen (solo se aplican en Conectar)
 
             NotificadorLinux.Enviar($"Target {d.Iqn} disconnected");
             TraceOut(id, "Desconectar");
@@ -961,41 +998,54 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
         try
         {
             // --------------------------------------------------------------
-            // 1) Desmontar si está montado
+            // 1) Desmontar si está montado (solo su mountpoint único)
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
-                var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+                var mpCheck = ShellHelper.EjecutarComoRoot(
+                    $"mountpoint -q \"{d.MountPoint}\""
+                );
 
                 if (mpCheck.ExitCode == 0)
                 {
                     // Lazy unmount
-                    ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"");
+                    ShellHelper.EjecutarComoRoot(
+                        $"umount -l \"{d.MountPoint}\""
+                    );
                     await Task.Delay(300);
 
                     // Si sigue montado → forzar
-                    mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+                    mpCheck = ShellHelper.EjecutarComoRoot(
+                        $"mountpoint -q \"{d.MountPoint}\""
+                    );
+
                     if (mpCheck.ExitCode == 0)
                     {
-                        ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\"");
+                        ShellHelper.EjecutarComoRoot(
+                            $"umount -f \"{d.MountPoint}\""
+                        );
                         await Task.Delay(200);
                     }
                 }
             }
 
             // --------------------------------------------------------------
-            // 2) Eliminar directorio de montaje
+            // 2) Eliminar directorio de montaje (solo el suyo)
             // --------------------------------------------------------------
             if (!string.IsNullOrWhiteSpace(d.MountPoint) &&
                 Directory.Exists(d.MountPoint))
             {
-                ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"");
+                ShellHelper.EjecutarComoRoot(
+                    $"rm -rf \"{d.MountPoint}\""
+                );
             }
 
             // --------------------------------------------------------------
             // 3) Logout iSCSI si hay sesión activa
             // --------------------------------------------------------------
-            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
+            var sesiones = ShellHelper.EjecutarComoRoot(
+                "iscsiadm -m session"
+            ).Stdout;
 
             if (!string.IsNullOrWhiteSpace(sesiones) &&
                 sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
@@ -1048,7 +1098,7 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
             );
 
             // --------------------------------------------------------------
-            // 7) Reset completo del objeto
+            // 7) Reset completo del objeto (estado limpio)
             // --------------------------------------------------------------
             d.Conectado = false;
             d.TieneFilesystem = false;

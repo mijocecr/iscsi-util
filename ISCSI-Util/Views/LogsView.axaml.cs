@@ -18,12 +18,32 @@ namespace ISCSI_Util.Views
 
             BtnRefresh.Click += (_, _) => LoadLog();
 
-            BtnCopy.Click += async (_, _) =>
+            // ============================================================
+            //  AHORA ABRE EL ARCHIVO EN EL EDITOR DE TEXTO
+            // ============================================================
+            BtnCopy.Click += (_, _) =>
             {
-                var top = TopLevel.GetTopLevel(this);
+                string appLog = Path.Combine(ConfigManager.LogPath, "iscsi-util.log");
 
-                if (top?.Clipboard != null && !string.IsNullOrWhiteSpace(LogText.Text))
-                    await top.Clipboard.SetTextAsync(LogText.Text);
+                if (File.Exists(appLog))
+                {
+                    // Abrir el archivo con el editor predeterminado del sistema
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = appLog,
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    // Si no existe el log del programa, abrir journalctl en un visor
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "bash",
+                        Arguments = "-c \"journalctl -u iscsid | less\"",
+                        UseShellExecute = false
+                    });
+                }
             };
         }
 

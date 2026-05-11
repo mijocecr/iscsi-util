@@ -5,14 +5,35 @@
 
     <UserControl.Styles>
 
-        <!-- Tarjetas elevadas Steam -->
+        <!-- Tarjeta estilo Sessions -->
         <Style Selector="Border.SteamCard">
-            <Setter Property="Background" Value="{DynamicResource SteamCardBackground}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource SteamBorderStrong}" />
-            <Setter Property="BorderThickness" Value="1.5" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="16,12,16,6" />
-            <Setter Property="BoxShadow" Value="0 4 12 #80000000" />
+            <Setter Property="Background" Value="#141A22" />
+            <Setter Property="BorderBrush" Value="#2A3A4A" />
+            <Setter Property="BorderThickness" Value="1.6" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="BoxShadow" Value="0 6 14 #80000000" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="BorderBrush" Duration="0:0:0.15"/>
+                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <!-- Hover estilo Sessions -->
+        <Style Selector="Border.SteamCard:pointerover">
+            <Setter Property="Background" Value="#1C2632" />
+            <Setter Property="BorderBrush" Value="#3A4F63" />
+            <Setter Property="BoxShadow" Value="0 0 18 #552A9FFF" />
+        </Style>
+
+        <!-- Seleccionado estilo Sessions -->
+        <Style Selector="Border.SteamCard:selected">
+            <Setter Property="Background" Value="#1E2F45" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SteamBlue}" />
+            <Setter Property="BorderThickness" Value="2.4" />
+            <Setter Property="BoxShadow" Value="0 0 22 #AA1E90FF" />
         </Style>
 
         <!-- Botones Steam -->
@@ -66,8 +87,9 @@
 
         <!-- TARGET LIST -->
         <Border Grid.Row="1"
+                Cursor="Hand"
                 Classes="SteamCard"
-                MinHeight="100"
+                MinHeight="120"
                 Margin="0,12,0,5">
 
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -79,8 +101,8 @@
         <!-- DETAILS PANEL -->
         <Border Grid.Row="2"
                 Classes="SteamCard"
-                Margin="0,10,0,0"
-                MaxHeight="250"
+                Margin="0,5,0,0"
+                MaxHeight="225"
                 CornerRadius="10">
 
             <Border.Background>
@@ -90,21 +112,20 @@
                 </LinearGradientBrush>
             </Border.Background>
 
-         
-            <StackPanel Spacing="2">
+            <StackPanel Spacing="1">
 
                 <!-- BOTONES ARRIBA -->
                 <Grid ColumnDefinitions="Auto,Auto,Auto"
                       HorizontalAlignment="Right"
-                      ColumnSpacing="2"
-                      Margin="0,0,0,2">
+                      ColumnSpacing="1"
+                      Margin="0,0,0,1">
 
                     <Button  x:Name="BtnHeaderUnmount"
                              Grid.Column="0"
-                            Content="Unmount"
-                            Classes="SteamButton"
-                            Width="90"
-                            IsVisible="False"/>
+                             Content="Unmount"
+                             Classes="SteamButton"
+                             Width="90"
+                             IsVisible="False"/>
 
                     <Button x:Name="BtnHeaderOpen"
                             Grid.Column="1"
@@ -124,38 +145,58 @@
                             Foreground="White"/>
                 </Grid>
 
-                <!-- TÍTULO MÁS PEGADO -->
-                <TextBlock Text="Target Details"
-                           FontSize="15"
-                           FontWeight="Bold"
-                           x:Name="TextBlock_Header"
-                           IsVisible="False"
-                           Foreground="{DynamicResource SteamBlue}"
-                           HorizontalAlignment="Left"
-                           Margin="0,0,0,1"/>
+                <!-- HEADER + CHECKBOX -->
+                <Grid ColumnDefinitions="*,Auto"
+                      Margin="0,0,0,0"
+                      x:Name="HeaderRow"
+                      IsVisible="False">
 
-                <!-- SEPARADOR MÁS FINO -->
+                    <TextBlock Text="Target Details"
+                               FontSize="15"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamBlue}"
+                               VerticalAlignment="Center"/>
+
+                    <CheckBox x:Name="ChkPersistent"
+                              Grid.Column="1"
+                              Content="Persistent mount"
+                              Foreground="{DynamicResource SteamText}"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Center"/>
+                </Grid>
+
                 <Rectangle Height="1"
                            Fill="#40FFFFFF"
                            Margin="0,1,0,1"/>
 
-                <!-- CONTENIDO -->
-                <Grid ColumnDefinitions="230,Auto"
-                      ColumnSpacing="10">
+                <!-- CONTENIDO DETALLES (compactado) -->
+                <Grid ColumnDefinitions="*,180"
+                      ColumnSpacing="6"
+                      Margin="0,0,0,0"
+                      VerticalAlignment="Top">
 
+                    <!-- PANEL IZQUIERDO (INFO) -->
                     <StackPanel x:Name="DetailsInfoPanel"
-                                Spacing="3"
-                                Margin="0,0,8,0"
-                                VerticalAlignment="Center" />
+                                Spacing="4"
+                                Margin="0,4,4,0"
+                                VerticalAlignment="Top" />
 
-                    <Image x:Name="DetailsIcon"
-                           Grid.Column="1"
-                           Width="200"
-                           Height="200"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Margin="10,5,10,0"
-                           IsHitTestVisible="False"/>
+                    <!-- ICONO A LA DERECHA -->
+                    <Border Grid.Column="1"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top"
+                            Padding="0"
+                            Margin="0">
+                        <Image x:Name="DetailsIcon"
+                               Width="190"
+                               Height="190"
+                               Stretch="Uniform"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Top"
+                               Margin="0"
+                               IsHitTestVisible="False"/>
+                    </Border>
+
                 </Grid>
 
             </StackPanel>
@@ -163,4 +204,5 @@
         </Border>
 
     </Grid>
+
 </UserControl>

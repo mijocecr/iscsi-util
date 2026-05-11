@@ -10,6 +10,8 @@ public class IscsiDestino
     public string Ip { get; set; } = "";          // Portal original
     public string Iqn { get; set; } = "";         // Identificador único
 
+    public bool EsAccesible { get; set; } = false;
+
     // Portal real (puede cambiar tras discovery)
     public string PortalReal { get; set; } = "";
 

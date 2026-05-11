@@ -10,6 +10,7 @@ using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
 using System.IO;
+using System.Linq;
 
 namespace ISCSI_Util.Views;
 
@@ -38,6 +39,20 @@ public partial class SessionsView : UserControl
             var nuevos = await IscsiSessions.ObtenerVistaGlobal();
             _destinos = nuevos ?? new List<IscsiDestino>();
 
+            // ------------------------------------------------------
+            // FILTRAR DESTINOS POR REDES ACCESIBLES
+            // ------------------------------------------------------
+            var redesLocales = NetworkHelper.ObtenerRedesLocales();
+
+            _destinos = _destinos
+                .Where(d => redesLocales.Any(r => d.Ip.StartsWith(r)))
+                .ToList();
+
+            // Marcar accesibilidad
+            foreach (var d in _destinos)
+                d.EsAccesible = redesLocales.Any(r => d.Ip.StartsWith(r));
+
+            // Mantener selección si existe
             if (_selected != null)
                 _selected = _destinos.Find(x => x.Iqn == _selected.Iqn && x.Ip == _selected.Ip);
 
@@ -151,26 +166,17 @@ public partial class SessionsView : UserControl
         // BOTONES (LÓGICA CORRECTA)
         // ============================
 
-        // OPEN solo si está conectado y el mountpoint existe
-        if (d.Conectado &&
+        // OPEN solo si está montado
+        BtnOpen.IsEnabled =
+            d.Conectado &&
             !string.IsNullOrWhiteSpace(d.MountPoint) &&
-            Directory.Exists(d.MountPoint))
-        {
-            BtnOpen.IsEnabled = true;
-        }
-        else
-        {
-            BtnOpen.IsEnabled = false;
-        }
+            Directory.Exists(d.MountPoint);
 
-        // INIT nunca en Sessions
-        BtnInit.IsEnabled = false;
+        // MOUNT solo si el destino es accesible
+        BtnMount.IsEnabled = d.EsAccesible;
 
-        // MOUNT siempre habilitado
-        BtnMount.IsEnabled = true;
+        // Texto del botón
         BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
-
-        
 
         // Eventos
         BtnMount.Click -= OnMount;
