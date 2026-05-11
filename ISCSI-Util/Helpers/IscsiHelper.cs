@@ -107,7 +107,8 @@ public static class IscsiHelper
     //  DISCOVER — Descubrir destinos iSCSI
     // ============================================================
 
-    public static async Task<List<IscsiDestino>> Descubrir(string ip)
+  
+public static async Task<List<IscsiDestino>> Descubrir(string ip)
 {
     long id = NextTraceId();
     TraceIn(id, "Descubrir", $"IP='{ip}'");
@@ -140,9 +141,14 @@ public static class IscsiHelper
                 if (!line.Contains("iqn.")) continue;
 
                 var partes = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                string portal = partes[0]; // puede ser "IP" o "IP:PUERTO"
 
-                // Si NO trae puerto → añadir 3260
+                // partes[0] = "192.168.10.20:3260,1"
+                var portalRaw = partes[0];
+
+                // Nos quedamos solo con "192.168.10.20:3260"
+                var portal = portalRaw.Split(',')[0];
+
+                // Si no trae puerto, añadimos 3260
                 if (!portal.Contains(":"))
                     portal = $"{portal}:3260";
 
@@ -157,8 +163,8 @@ public static class IscsiHelper
 
                 var d = new IscsiDestino
                 {
-                    Ip = portal,              // ✔ SIEMPRE IP:PUERTO
-                    PortalReal = portal,      // ✔ Guardamos el portal real
+                    Ip = portal,
+                    PortalReal = portal,
                     Iqn = iqn,
                     Conectado = conectado,
                     Seleccionado = false,
@@ -185,7 +191,6 @@ public static class IscsiHelper
         }
     }
 }
-
 
 
     // ============================================================
@@ -467,38 +472,48 @@ public static async Task Conectar(IscsiDestino d)
 // ======================================================================
 //  OBTENER PORTAL REAL — universal, robusto, multi-servidor
 // ======================================================================
-public static string? ObtenerPortalReal(IscsiDestino d)
-{
-    try
+
+
+    public static string? ObtenerPortalReal(IscsiDestino d)
     {
-        var result = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn}"
-        );
+        try
+        {
+            var result = ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn}"
+            );
 
-        if (string.IsNullOrWhiteSpace(result.Stdout))
+            if (string.IsNullOrWhiteSpace(result.Stdout))
+                return null;
+
+            var line = result.Stdout
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault(l => l.Contains(d.Iqn));
+
+            if (line == null)
+                return null;
+
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                return null;
+
+            var portal = parts[0].Trim();
+
+            // ❌ Ignorar basura tipo "node.name"
+            if (portal.StartsWith("node.", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            // ❌ Ignorar cosas que no parezcan IP:PUERTO
+            if (!portal.Contains('.') || !portal.Contains(':'))
+                return null;
+
+            return portal;
+        }
+        catch
+        {
             return null;
-
-        // Ejemplo de línea:
-        // 192.168.10.20:3260,1 iqn.2013-03.com.wdc:mycloudex2ultra:mjcc
-        var line = result.Stdout
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault(l => l.Contains(d.Iqn));
-
-        if (line == null)
-            return null;
-
-        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0)
-            return null;
-
-        // El portal es la primera columna
-        return parts[0].Trim();
+        }
     }
-    catch
-    {
-        return null;
-    }
-}
+
 
 
 // ======================================================================
@@ -614,6 +629,8 @@ private static async Task GuardarEnFstab_Original(IscsiDestino d, long id)
 
 
 
+
+
 private static async Task CrearServicioPersistencia_Original(IscsiDestino d, long id)
 {
     try
@@ -625,24 +642,22 @@ private static async Task CrearServicioPersistencia_Original(IscsiDestino d, lon
 
         string scriptContent =
 $@"#!/bin/bash
+# VMCF_2026
 TARGET=""{d.Iqn}""
 PORTAL=""{d.Ip}""
 MOUNTPOINT=""{d.MountPoint}""
 
-# --- CONFIGURAR CHAP SI EXISTE ---
 if [ ""{d.UsuarioChap}"" != """" ]; then
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.authmethod --value=CHAP
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.username --value=""{d.UsuarioChap}""
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.password --value=""{d.PasswordChap}""
 fi
 
-# --- CONFIGURAR MUTUAL CHAP SI EXISTE ---
 if [ ""{d.UsuarioMutualChap}"" != """" ]; then
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.username_in --value=""{d.UsuarioMutualChap}""
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.password_in --value=""{d.PasswordMutualChap}""
 fi
 
-# --- LOGIN ---
 if ! iscsiadm -m session | grep -q ""$TARGET""; then
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --login
   for i in {{1..10}}; do
@@ -653,15 +668,15 @@ if ! iscsiadm -m session | grep -q ""$TARGET""; then
   done
 fi
 
-# --- MONTAR ---
 mount -a -O _netdev
 exit 0
 ";
 
-        ShellHelper.EjecutarComoRoot(
-            $"bash -c \"cat > {scriptPath} << 'EOF'\n{scriptContent}\nEOF\""
-        );
+        // 🔥 ESCRIBIR DIRECTAMENTE DESDE C#
+        File.WriteAllText("/tmp/tmp_script.sh", scriptContent);
 
+        // 🔥 MOVERLO A /usr/local/bin CON PERMISOS ROOT
+        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_script.sh {scriptPath}");
         ShellHelper.EjecutarComoRoot($"chmod 755 {scriptPath}");
         ShellHelper.EjecutarComoRoot($"chown root:root {scriptPath}");
 
@@ -684,9 +699,11 @@ RestartSec=5
 WantedBy=multi-user.target
 ";
 
-        ShellHelper.EjecutarComoRoot(
-            $"bash -c \"cat > {servicePath} << 'EOF'\n{serviceContent}\nEOF\""
-        );
+        File.WriteAllText("/tmp/tmp_service.service", serviceContent);
+
+        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_service.service {servicePath}");
+        ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
+        ShellHelper.EjecutarComoRoot($"chown root:root {servicePath}");
 
         TraceOut(id, "CrearServicioPersistencia_Original");
     }
@@ -697,6 +714,8 @@ WantedBy=multi-user.target
 
     await Task.CompletedTask;
 }
+
+
 
 
 
