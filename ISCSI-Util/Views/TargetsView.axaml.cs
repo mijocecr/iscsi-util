@@ -471,16 +471,20 @@ public partial class TargetsView : UserControl
             Foreground = (IBrush)Application.Current!.FindResource("SteamText")!,
             Margin = new Thickness(0, 4, 0, 0)
         };
-        toggle.Checked += (_, _) =>
+
+        // 🔥 CORREGIDO: async + await
+        toggle.Checked += async (_, _) =>
         {
             destino.Persistir = true;
-            IscsiHelper.AplicarPersistencia(destino);
+            await IscsiHelper.AplicarPersistencia(destino);
         };
-        toggle.Unchecked += (_, _) =>
+
+        toggle.Unchecked += async (_, _) =>
         {
             destino.Persistir = false;
-            IscsiHelper.AplicarPersistencia(destino);
+            await IscsiHelper.AplicarPersistencia(destino);
         };
+
         DetailsInfoPanel.Children.Add(toggle);
     }
 
@@ -526,7 +530,6 @@ public partial class TargetsView : UserControl
 
         await IscsiHelper.Desconectar_Borrar(_selected);
 
-        // Después de borrar, refrescamos la lista
         _targets.Remove(_selected);
         RefreshTargetsList();
 
@@ -537,7 +540,6 @@ public partial class TargetsView : UserControl
         BtnHeaderOpen.IsVisible = false;
     }
 
-  
     // ============================================================
     // ICONOS
     // ============================================================

@@ -16,10 +16,11 @@ public static class ShellHelper
 
         LogService.Debug($"[SHELL] #{callId} → EjecutarComoRoot('{command}')");
 
+        // 🔥 SIEMPRE usar bash -c para soportar redirecciones, sed, systemctl, etc.
         var psi = new ProcessStartInfo
         {
             FileName = "sudo",
-            Arguments = $"-S -p '' {command}",
+            Arguments = $"-S bash -c \"{command.Replace("\"", "\\\"")}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = true,

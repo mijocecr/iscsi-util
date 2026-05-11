@@ -907,20 +907,19 @@ public static async Task Desconectar(IscsiDestino d)
     //  PERSISTENCIA — fstab + systemd
     // ======================================================================
     
+    
     public static async Task AplicarPersistencia(IscsiDestino d)
-{
-    long id = NextTraceId();
-    var sw = Stopwatch.StartNew();
-    LogService.Debug($"[ISCSI] #{id} → AplicarPersistencia IQN='{d.Iqn}', Persistir={d.Persistir}");
-
-    using (LoadingService.Show($"Applying persistence for {d.Iqn}..."))
     {
-        try
+        long id = NextTraceId();
+        var sw = Stopwatch.StartNew();
+        LogService.Debug($"[ISCSI] #{id} → AplicarPersistencia IQN='{d.Iqn}', Persistir={d.Persistir}");
+
+        using (LoadingService.Show($"Applying persistence for {d.Iqn}..."))
         {
-            var task = Task.Run(() =>
+            try
             {
                 // ============================================================
-                // Asegurar que el mountpoint existe (ConfigManager)
+                // Asegurar que el mountpoint existe
                 // ============================================================
                 if (!Directory.Exists(d.MountPoint))
                 {
@@ -933,48 +932,41 @@ public static async Task Desconectar(IscsiDestino d)
                 if (d.Persistir)
                 {
                     LogService.Debug($"[ISCSI] #{id} Guardando persistencia en fstab/systemd...");
-                    GuardarEnFstab(d, id);
-                    CrearServicioLogin(d, id);
-                    CrearMountUnit(d, d.FsType, id);
-                    HabilitarServicios(id);
+
+                    await GuardarEnFstab(d, id);
+                    await CrearServicioLogin(d, id);
+                    await CrearMountUnit(d, d.FsType, id);
+                    await HabilitarServicios(id);
                 }
                 else
                 {
                     LogService.Debug($"[ISCSI] #{id} Eliminando persistencia...");
-                    EliminarDeFstab(d, id);
-                    EliminarServicioSystemd(d, id);
-                    EliminarMountUnit(d, id);
+
+                    await EliminarDeFstab(d, id);
+                    await EliminarServicioSystemd(d, id);
+                    await EliminarMountUnit(d, id);
+
                     ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
                 }
-            });
 
-            var completed = await Task.WhenAny(task, Task.Delay(5000));
-
-            if (completed != task)
-            {
-                LogService.Error($"[ISCSI] #{id} TIMEOUT en AplicarPersistencia");
-                NotificadorLinux.Enviar($"[TIMEOUT] Persistence operation for {d.Iqn} took too long.", 6000, "critical");
-                return;
+                LogService.Debug($"[ISCSI] #{id} ← AplicarPersistencia OK en {sw.ElapsedMilliseconds} ms");
+                NotificadorLinux.Enviar($"Persistence updated for {d.Iqn}", 4000, "normal");
             }
-
-            LogService.Debug($"[ISCSI] #{id} ← AplicarPersistencia OK en {sw.ElapsedMilliseconds} ms");
-            NotificadorLinux.Enviar($"Persistence updated for {d.Iqn}", 4000, "normal");
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[ISCSI] #{id} ERROR AplicarPersistencia: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to apply persistence for {d.Iqn}", 6000, "critical");
+            catch (Exception ex)
+            {
+                LogService.Error($"[ISCSI] #{id} ERROR AplicarPersistencia: {ex.Message}");
+                NotificadorLinux.Enviar($"[ERROR] Failed to apply persistence for {d.Iqn}", 6000, "critical");
+            }
         }
     }
-}
 
-
+    
 
     // ======================================================================
     //  FSTAB — Guardar entrada persistente
     // ======================================================================
  
-    private static async Task GuardarEnFstab(IscsiDestino d, long id)
+  private static async Task GuardarEnFstab(IscsiDestino d, long id)
 {
     using (LoadingService.Show($"Updating fstab for {d.Iqn}..."))
     {
@@ -997,18 +989,34 @@ public static async Task Desconectar(IscsiDestino d)
                 );
             }
 
+            // ============================================================
+            // Preparar entrada fstab
+            // ============================================================
             string entry = $"{d.PartitionPath} {d.MountPoint} auto _netdev 0 0";
             LogService.Debug($"[ISCSI] #{id} Añadiendo entrada a fstab: {entry}");
 
+            // Escapar rutas para sed
+            string partEsc = d.PartitionPath.Replace("/", "\\/");
+            string mountEsc = d.MountPoint.Replace("/", "\\/");
+
             var task = Task.Run(() =>
             {
+                // ============================================================
                 // Eliminar entradas previas
-                ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.PartitionPath}#d\" /etc/fstab");
-                ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.MountPoint}#d\" /etc/fstab");
-
-                // Añadir nueva entrada
+                // ============================================================
                 ShellHelper.EjecutarComoRoot(
-                    $"sh -c \"echo '{entry}' >> /etc/fstab\""
+                    $"sed -i '\\#{partEsc}#d' /etc/fstab"
+                );
+
+                ShellHelper.EjecutarComoRoot(
+                    $"sed -i '\\#{mountEsc}#d' /etc/fstab"
+                );
+
+                // ============================================================
+                // Añadir nueva entrada (forma correcta con bash -c)
+                // ============================================================
+                ShellHelper.EjecutarComoRoot(
+                    $"bash -c 'echo \"{entry}\" >> /etc/fstab'"
                 );
             });
 
@@ -1033,12 +1041,11 @@ public static async Task Desconectar(IscsiDestino d)
 }
 
 
-
     // ======================================================================
     //  FSTAB — Eliminar entrada persistente
     // ======================================================================
    
-    private static async Task EliminarDeFstab(IscsiDestino d, long id)
+  private static async Task EliminarDeFstab(IscsiDestino d, long id)
 {
     using (LoadingService.Show($"Removing fstab entry for {d.Iqn}..."))
     {
@@ -1051,7 +1058,7 @@ public static async Task Desconectar(IscsiDestino d)
             }
 
             // ============================================================
-            // Asegurar que el mountpoint existe (ConfigManager)
+            // Asegurar que el mountpoint existe
             // ============================================================
             if (!Directory.Exists(d.MountPoint))
             {
@@ -1063,10 +1070,24 @@ public static async Task Desconectar(IscsiDestino d)
 
             LogService.Debug($"[ISCSI] #{id} Eliminando entrada de fstab para {d.MountPoint}");
 
+            // ============================================================
+            // Escapar rutas para sed
+            // ============================================================
+            string partEsc = d.PartitionPath.Replace("/", "\\/");
+            string mountEsc = d.MountPoint.Replace("/", "\\/");
+
             var task = Task.Run(() =>
             {
-                ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.MountPoint}#d\" /etc/fstab");
-                ShellHelper.EjecutarComoRoot($"sed -i \"\\#{d.PartitionPath}#d\" /etc/fstab");
+                // ============================================================
+                // Eliminar entradas previas (ambas variantes)
+                // ============================================================
+                ShellHelper.EjecutarComoRoot(
+                    $"sed -i '\\#{mountEsc}#d' /etc/fstab"
+                );
+
+                ShellHelper.EjecutarComoRoot(
+                    $"sed -i '\\#{partEsc}#d' /etc/fstab"
+                );
             });
 
             var completed = await Task.WhenAny(task, Task.Delay(5000));
@@ -1089,13 +1110,13 @@ public static async Task Desconectar(IscsiDestino d)
     }
 }
 
-
+    
 
     // ======================================================================
     //  SYSTEMD — Crear servicio de login iSCSI
     // ======================================================================
   
-    private static void CrearServicioLogin(IscsiDestino d, long id)
+    private static async Task CrearServicioLogin(IscsiDestino d, long id)
     {
         try
         {
@@ -1119,9 +1140,13 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 ";
 
-            // Crear archivo
+            // ============================================================
+            // Escribir archivo systemd correctamente como root
+            // ============================================================
+            string contenidoEscapado = contenido.Replace("\"", "\\\"");
+
             ShellHelper.EjecutarComoRoot(
-                $"sh -c \"echo '{contenido.Replace("'", "'\\''")}' > {path}\""
+                $"bash -c \"echo \\\"{contenidoEscapado}\\\" > {path}\""
             );
 
             // Recargar systemd
@@ -1143,12 +1168,12 @@ WantedBy=multi-user.target
     //  SYSTEMD — Crear unidad .mount
     // ======================================================================
    
-    private static void CrearMountUnit(IscsiDestino d, string fsType, long id)
+    private static async Task CrearMountUnit(IscsiDestino d, string fsType, long id)
     {
         try
         {
             // ============================================================
-            // Asegurar que el mountpoint existe y tiene permisos correctos
+            // Asegurar que el mountpoint existe
             // ============================================================
             if (!Directory.Exists(d.MountPoint))
             {
@@ -1158,6 +1183,7 @@ WantedBy=multi-user.target
                 );
             }
 
+            // Normalizar nombre de unidad systemd
             string safeMount = d.MountPoint
                 .Trim('/')
                 .Replace("/", "-")
@@ -1183,9 +1209,13 @@ Options=_netdev
 WantedBy=multi-user.target
 ";
 
-            // Crear archivo .mount
+            // ============================================================
+            // Escribir archivo .mount correctamente como root
+            // ============================================================
+            string contenidoEscapado = contenido.Replace("\"", "\\\"");
+
             ShellHelper.EjecutarComoRoot(
-                $"sh -c \"echo '{contenido.Replace("'", "'\\''")}' > {path}\""
+                $"bash -c \"echo \\\"{contenidoEscapado}\\\" > {path}\""
             );
 
             // Recargar systemd
@@ -1202,13 +1232,12 @@ WantedBy=multi-user.target
         }
     }
 
-
     
     // ======================================================================
     //  SYSTEMD — Eliminar servicio
     // ======================================================================
    
-    private static void EliminarServicioSystemd(IscsiDestino d, long id)
+    private static async Task EliminarServicioSystemd(IscsiDestino d, long id)
     {
         try
         {
@@ -1219,8 +1248,14 @@ WantedBy=multi-user.target
 
             if (File.Exists(service))
             {
+                // Deshabilitar servicio
                 ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-login-{safe}.service");
+
+                // Eliminar archivo
                 ShellHelper.EjecutarComoRoot($"rm -f {service}");
+
+                // Recargar systemd
+                ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
                 LogService.Debug($"[ISCSI] #{id} Servicio eliminado correctamente: {service}");
             }
@@ -1233,6 +1268,8 @@ WantedBy=multi-user.target
         {
             LogService.Error($"[ISCSI] #{id} ERROR EliminarServicioSystemd: {ex.Message}");
         }
+
+        await Task.CompletedTask; // Para cumplir la firma async Task
     }
 
     
@@ -1240,7 +1277,7 @@ WantedBy=multi-user.target
     //  SYSTEMD — Eliminar mount unit
     // ======================================================================
   
-    private static void EliminarMountUnit(IscsiDestino d, long id)
+    private static async Task EliminarMountUnit(IscsiDestino d, long id)
     {
         try
         {
@@ -1261,8 +1298,14 @@ WantedBy=multi-user.target
 
             if (File.Exists(mountUnit))
             {
+                // Deshabilitar unidad
                 ShellHelper.EjecutarComoRoot($"systemctl disable {safeMount}.mount");
+
+                // Eliminar archivo
                 ShellHelper.EjecutarComoRoot($"rm -f {mountUnit}");
+
+                // Recargar systemd
+                ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
                 LogService.Debug($"[ISCSI] #{id} Mount unit eliminada correctamente: {mountUnit}");
             }
@@ -1275,13 +1318,16 @@ WantedBy=multi-user.target
         {
             LogService.Error($"[ISCSI] #{id} ERROR EliminarMountUnit: {ex.Message}");
         }
+
+        await Task.CompletedTask; // Para cumplir la firma async Task
     }
 
     
     // ======================================================================
     //  SYSTEMD — Habilitar servicios necesarios
     // ======================================================================
-    private static void HabilitarServicios(long id)
+   
+    private static async Task HabilitarServicios(long id)
     {
         try
         {
@@ -1311,8 +1357,11 @@ WantedBy=multi-user.target
         {
             LogService.Error($"[ISCSI] #{id} ERROR HabilitarServicios: {ex.Message}");
         }
+
+        await Task.CompletedTask; // Para cumplir la firma async Task
     }
 
+    
     // ======================================================================
     //  DETECTAR PERSISTENCIA REAL
     // ======================================================================
