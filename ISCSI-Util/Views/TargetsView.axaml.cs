@@ -156,7 +156,11 @@ public partial class TargetsView : UserControl
             _targets.AddRange(await IscsiHelper.Descubrir(portal));
         }
 
-        RefreshTargetsList();
+        // Reset InfoCompleta for all
+        foreach (var d in _targets)
+            d.InfoCompleta = false;
+
+        await RefreshTargetsList();
 
         if (_targets.Count > 0)
         {
@@ -169,12 +173,19 @@ public partial class TargetsView : UserControl
     // REFRESH LIST
     // ============================================================
 
-    private void RefreshTargetsList()
+    private Task RefreshTargetsList()
     {
         TargetsList.Children.Clear();
 
         foreach (var destino in _targets)
+        {
+            destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
+            destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
+
             TargetsList.Children.Add(CreateTargetCard(destino));
+        }
+
+        return Task.CompletedTask;
     }
 
     // ============================================================
@@ -189,7 +200,6 @@ public partial class TargetsView : UserControl
             Padding = new Thickness(12, 10),
             CornerRadius = new CornerRadius(8),
             Margin = new Thickness(0, 0, 0, 8),
-            BoxShadow = new BoxShadows(),
             BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
             BorderThickness = new Thickness(1.4)
         };
@@ -222,7 +232,6 @@ public partial class TargetsView : UserControl
             Text = destino.Iqn,
             FontSize = 14,
             FontWeight = FontWeight.SemiBold,
-            TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
         };
@@ -234,54 +243,14 @@ public partial class TargetsView : UserControl
         var btnRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 8,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+            Spacing = 8
         };
 
-        var connectBtn = new Button
-        {
-            Classes = { "SteamButton" },
-            Content = destino.Conectado ? "Disconnect" : "Connect",
-            Width = 100,
-            Height = 28
-        };
-        connectBtn.Click += async (_, _) =>
-        {
-            if (!destino.Conectado)
-            {
-                using (LoadingService.Show("Connecting..."))
-                    await IscsiHelper.Conectar(destino);
-            }
-            else
-            {
-                using (LoadingService.Show("Disconnecting..."))
-                    await IscsiHelper.Desconectar(destino);
-            }
+        // ============================================================
+        // 1) MUTUAL CHAP (solo si NO está configurado)
+        // ============================================================
 
-            RefreshTargetsList();
-            LoadTargetDetails(destino);
-        };
-        btnRow.Children.Add(connectBtn);
-
-        if (destino.UsaChap && !destino.UsaMutualChap)
-        {
-            var chapBtn = new Button
-            {
-                Content = "CHAP",
-                Classes = { "SteamButton" },
-                Width = 70,
-                Height = 28
-            };
-            chapBtn.Click += async (_, _) =>
-            {
-                var dlg = new ChapDialog(destino);
-                await dlg.ShowDialog((Window)VisualRoot);
-                LoadTargetDetails(destino);
-            };
-            btnRow.Children.Add(chapBtn);
-        }
-
-        if (destino.UsaMutualChap)
+        if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
         {
             var mutualBtn = new Button
             {
@@ -290,16 +259,84 @@ public partial class TargetsView : UserControl
                 Width = 90,
                 Height = 28
             };
+
             mutualBtn.Click += async (_, _) =>
             {
                 var dlg = new MutualChapDialog(destino);
                 await dlg.ShowDialog((Window)VisualRoot);
+                await RefreshTargetsList();
                 LoadTargetDetails(destino);
             };
+
             btnRow.Children.Add(mutualBtn);
         }
+        else
+        // ============================================================
+        // 2) CHAP normal (solo si NO está configurado)
+        // ============================================================
+        if (destino.RequiresChap && !destino.HasLocalChapConfigured)
+        {
+            var chapBtn = new Button
+            {
+                Content = "Configure CHAP",
+                Classes = { "SteamButton" },
+                Width = 130,
+                Height = 28
+            };
 
-        if (destino.Conectado && !destino.TieneFilesystem)
+            chapBtn.Click += async (_, _) =>
+            {
+                var dlg = new ChapDialog(destino);
+                await dlg.ShowDialog((Window)VisualRoot);
+                await RefreshTargetsList();
+                LoadTargetDetails(destino);
+            };
+
+            btnRow.Children.Add(chapBtn);
+        }
+        else
+        // ============================================================
+        // 3) CONNECT (solo si NO requiere CHAP)
+        // ============================================================
+        if (!destino.RequiresChap && !destino.RequiresMutualChap)
+        {
+            var connectBtn = new Button
+            {
+                Classes = { "SteamButton" },
+                Content = destino.Conectado ? "Disconnect" : "Connect",
+                Width = 100,
+                Height = 28
+            };
+
+            connectBtn.Click += async (_, _) =>
+            {
+                if (!destino.Conectado)
+                {
+                    using (LoadingService.Show("Connecting..."))
+                        await IscsiHelper.Conectar(destino);
+                }
+                else
+                {
+                    using (LoadingService.Show("Disconnecting..."))
+                        await IscsiHelper.Desconectar(destino);
+                }
+
+                await RefreshTargetsList();
+                LoadTargetDetails(destino);
+            };
+
+            btnRow.Children.Add(connectBtn);
+        }
+
+        // ============================================================
+        // INIT BUTTON (solo si el disco está REALMENTE vacío)
+        // ============================================================
+
+        if (destino.InfoCompleta &&
+            destino.Conectado &&
+            !destino.TieneFilesystem &&
+            string.IsNullOrEmpty(destino.MountPoint) &&
+            destino.PartitionPath == null)
         {
             var initBtn = new Button
             {
@@ -309,12 +346,15 @@ public partial class TargetsView : UserControl
                 Height = 28,
                 Background = new SolidColorBrush(Colors.DarkOrange)
             };
+
             initBtn.Click += async (_, _) =>
             {
                 var dlg = new InitializeDiskDialog(destino);
                 await dlg.ShowDialog((Window)VisualRoot);
+                await RefreshTargetsList();
                 LoadTargetDetails(destino);
             };
+
             btnRow.Children.Add(initBtn);
         }
 
@@ -346,15 +386,27 @@ public partial class TargetsView : UserControl
         BtnHeaderUnmount.IsVisible = false;
         BtnHeaderOpen.IsVisible = false;
 
-        IscsiHelper.DetectarChap(destino);
+        destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
+        destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
 
         if (destino.Conectado)
         {
             using (LoadingService.Show("Reading target info..."))
-                await IscsiHelper.CompletarInformacionDestino(destino, 0);
+            {
+                await Task.Run(async () =>
+                {
+                    await IscsiHelper.CompletarInformacionDestino(destino, 0);
+                    destino.Persistir = IscsiHelper.DetectarPersistencia(destino);
+                });
+            }
+        }
+        else
+        {
+            destino.Persistir = false;
         }
 
-        destino.Persistir = IscsiHelper.DetectarPersistencia(destino);
+        // 🔥 MARCAR QUE LA INFO YA ES COMPLETA
+        destino.InfoCompleta = true;
 
         var infoGrid = new Grid
         {
@@ -363,87 +415,40 @@ public partial class TargetsView : UserControl
             RowSpacing = 2
         };
 
-        infoGrid.Children.Add(new TextBlock
+        void AddRow(string label, string value, int row, IBrush? color = null)
         {
-            Text = "IQN:",
-            TextAlignment = TextAlignment.Center,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
-            FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(0, 0, 0, 1)
-        });
-        Grid.SetRow(infoGrid.Children[^1], 0);
+            infoGrid.Children.Add(new TextBlock
+            {
+                Text = label,
+                TextAlignment = TextAlignment.Center,
+                Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
+                FontWeight = FontWeight.SemiBold
+            });
+            Grid.SetRow(infoGrid.Children[^1], row);
 
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = destino.Iqn,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamText")!,
-            TextWrapping = TextWrapping.Wrap
-        });
-        Grid.SetColumn(infoGrid.Children[^1], 1);
-        Grid.SetRow(infoGrid.Children[^1], 0);
+            infoGrid.Children.Add(new TextBlock
+            {
+                Text = value,
+                Foreground = color ?? (IBrush)Application.Current!.FindResource("SteamText")!
+            });
+            Grid.SetColumn(infoGrid.Children[^1], 1);
+            Grid.SetRow(infoGrid.Children[^1], row);
+        }
 
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = "Portal:",
-            TextAlignment = TextAlignment.Center,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
-            FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(0, 0, 0, 1)
-        });
-        Grid.SetRow(infoGrid.Children[^1], 1);
-
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = destino.Ip,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
-        });
-        Grid.SetColumn(infoGrid.Children[^1], 1);
-        Grid.SetRow(infoGrid.Children[^1], 1);
-
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = "Status:",
-            TextAlignment = TextAlignment.Center,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
-            FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(0, 0, 0, 1)
-        });
-        Grid.SetRow(infoGrid.Children[^1], 2);
-
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = destino.Conectado ? "Connected" : "Disconnected",
-            Foreground = destino.Conectado
+        AddRow("IQN:", destino.Iqn, 0);
+        AddRow("Portal:", destino.Ip, 1);
+        AddRow("Status:",
+            destino.Conectado ? "Connected" : "Disconnected",
+            2,
+            destino.Conectado
                 ? (IBrush)Application.Current!.FindResource("SteamGreen")!
                 : Brushes.OrangeRed
-        });
-        Grid.SetColumn(infoGrid.Children[^1], 1);
-        Grid.SetRow(infoGrid.Children[^1], 2);
-
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = "Filesystem:",
-            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
-            FontWeight = FontWeight.SemiBold
-        });
-        Grid.SetRow(infoGrid.Children[^1], 3);
-
-        infoGrid.Children.Add(new TextBlock
-        {
-            Text = destino.TieneFilesystem ? "Yes" : "No",
-            Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
-        });
-        Grid.SetColumn(infoGrid.Children[^1], 1);
-        Grid.SetRow(infoGrid.Children[^1], 3);
+        );
+        AddRow("Filesystem:", destino.TieneFilesystem ? "Yes" : "No", 3);
 
         DetailsInfoPanel.Children.Add(infoGrid);
 
-        // ICONO
         DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
-
-        // ============================================================
-        // BOTONES DEL HEADER
-        // ============================================================
 
         if (destino.Conectado)
         {
@@ -460,10 +465,6 @@ public partial class TargetsView : UserControl
             }
         }
 
-        // ============================================================
-        // PERSISTENCIA
-        // ============================================================
-
         var toggle = new CheckBox
         {
             Content = "Persistent mount",
@@ -472,7 +473,6 @@ public partial class TargetsView : UserControl
             Margin = new Thickness(0, 4, 0, 0)
         };
 
-        // 🔥 CORREGIDO: async + await
         toggle.Checked += async (_, _) =>
         {
             destino.Persistir = true;
@@ -531,7 +531,7 @@ public partial class TargetsView : UserControl
         await IscsiHelper.Desconectar_Borrar(_selected);
 
         _targets.Remove(_selected);
-        RefreshTargetsList();
+        await RefreshTargetsList();
 
         DetailsInfoPanel.Children.Clear();
         DetailsIcon.Source = null;

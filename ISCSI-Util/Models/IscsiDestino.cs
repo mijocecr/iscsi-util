@@ -57,21 +57,42 @@ public class IscsiDestino
            .Replace("/", "_");
 
     // ============================================================
-    // CHAP
+    // NUEVO SISTEMA CHAP (desde IscsiChapDetector)
     // ============================================================
-    public bool UsaChap { get; set; } = false;
-    public string UsuarioChap { get; set; } = "";
-    public string PasswordChap { get; set; } = "";
+
+    // Lo que requiere el servidor
+    public bool RequiresChap { get; set; } = false;
+    public bool RequiresMutualChap { get; set; } = false;
+
+    // Lo que está configurado localmente
+    public bool HasLocalChapConfigured { get; set; } = false;
+    public bool HasLocalMutualConfigured { get; set; } = false;
+
+    // Credenciales locales detectadas
+    public string LocalUser { get; set; } = "";
+    public string LocalPass { get; set; } = "";
+    public string LocalUserIn { get; set; } = "";
+    public string LocalPassIn { get; set; } = "";
 
     // ============================================================
-    // MUTUAL CHAP
+    // COMPATIBILIDAD CON TU UI (mantener)
     // ============================================================
+
+    // Flags usados por la UI (derivados del detector)
+    public bool UsaChap { get; set; } = false;
     public bool UsaMutualChap { get; set; } = false;
+
+    // Credenciales que el usuario introduce en los diálogos
+    public string UsuarioChap { get; set; } = "";
+    public string PasswordChap { get; set; } = "";
+    public bool InfoCompleta { get; set; } = false;
+
+
     public string UsuarioMutualChap { get; set; } = "";
     public string PasswordMutualChap { get; set; } = "";
 
     // ============================================================
-    // PROPIEDADES DERIVADAS (MUY ÚTILES PARA LA UI)
+    // PROPIEDADES DERIVADAS (UI)
     // ============================================================
 
     public bool SinChap => !UsaChap && !UsaMutualChap;
@@ -89,7 +110,7 @@ public class IscsiDestino
         $"{Iqn} ({Ip})";
 
     // ============================================================
-    // ICONO (OPCIONAL)
+    // ICONO
     // ============================================================
     public string Icono
     {
@@ -104,4 +125,6 @@ public class IscsiDestino
             return EsRaw ? "no-chap-hdd" : "no-chap";
         }
     }
+
+    
 }

@@ -8,7 +8,7 @@ using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Helpers;
 
-public static class Iscsi_Sessions_Helper
+public static class IscsiSessions
 {
     private static long _opId = 0;
     private static long NextId() => ++_opId;

@@ -14,11 +14,22 @@ public partial class MutualChapDialog : Window
         InitializeComponent();
         _destino = destino;
 
-        // Cargar valores actuales
-        UserBox.Text = destino.UsuarioChap;
-        PassBox.Text = destino.PasswordChap;
-        UserInBox.Text = destino.UsuarioMutualChap;
-        PassInBox.Text = destino.PasswordMutualChap;
+        // Cargar valores actuales (preferir usuario → si no, valores detectados)
+        UserBox.Text = string.IsNullOrWhiteSpace(destino.UsuarioChap)
+            ? destino.LocalUser
+            : destino.UsuarioChap;
+
+        PassBox.Text = string.IsNullOrWhiteSpace(destino.PasswordChap)
+            ? destino.LocalPass
+            : destino.PasswordChap;
+
+        UserInBox.Text = string.IsNullOrWhiteSpace(destino.UsuarioMutualChap)
+            ? destino.LocalUserIn
+            : destino.UsuarioMutualChap;
+
+        PassInBox.Text = string.IsNullOrWhiteSpace(destino.PasswordMutualChap)
+            ? destino.LocalPassIn
+            : destino.PasswordMutualChap;
 
         CancelBtn.Click += (_, _) => Close();
         ApplyBtn.Click += ApplyChanges;
@@ -31,7 +42,9 @@ public partial class MutualChapDialog : Window
         string userIn = UserInBox.Text?.Trim() ?? "";
         string passIn = PassInBox.Text?.Trim() ?? "";
 
-        // Guardar en el modelo
+        // --------------------------------------------------------------
+        // 1) Guardar en el modelo (preferencias del usuario)
+        // --------------------------------------------------------------
         _destino.UsaChap = true;
         _destino.UsaMutualChap = true;
 
@@ -41,26 +54,50 @@ public partial class MutualChapDialog : Window
         _destino.UsuarioMutualChap = userIn;
         _destino.PasswordMutualChap = passIn;
 
-        // Aplicar a iscsiadm
+        // --------------------------------------------------------------
+        // 2) Aplicar a iscsiadm (CHAP + Mutual CHAP)
+        // --------------------------------------------------------------
+        // Activar CHAP
         ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.authmethod --value=CHAP");
+            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.authmethod --value=CHAP"
+        );
 
-        // CHAP normal
+        // CHAP outgoing
         ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username --value={user}");
-
-        ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password --value={pass}");
-
-        // Mutual CHAP
-        ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username_in --value={userIn}");
+            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username --value=\"{user}\""
+        );
 
         ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password_in --value={passIn}");
+            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password --value=\"{pass}\""
+        );
 
-        // Refrescar estado CHAP real
-        IscsiHelper.DetectarChap(_destino);
+        // Mutual CHAP incoming
+        ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+        );
+
+        ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+        );
+
+        // --------------------------------------------------------------
+        // 3) Refrescar estado CHAP real
+        // --------------------------------------------------------------
+        var r = IscsiChapDetector.Detect(_destino);
+
+        _destino.RequiresChap = r.RequiresChap;
+        _destino.RequiresMutualChap = r.RequiresMutualChap;
+        _destino.HasLocalChapConfigured = r.HasLocalChapConfigured;
+        _destino.HasLocalMutualConfigured = r.HasLocalMutualConfigured;
+
+        _destino.LocalUser = r.LocalUser;
+        _destino.LocalPass = r.LocalPass;
+        _destino.LocalUserIn = r.LocalUserIn;
+        _destino.LocalPassIn = r.LocalPassIn;
+
+        // Flags usados por la UI
+        _destino.UsaChap = _destino.RequiresChap || _destino.HasLocalChapConfigured;
+        _destino.UsaMutualChap = _destino.RequiresMutualChap || _destino.HasLocalMutualConfigured;
 
         Close();
     }

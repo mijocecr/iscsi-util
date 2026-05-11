@@ -35,7 +35,7 @@ public partial class SessionsView : UserControl
 
         try
         {
-            var nuevos = await Iscsi_Sessions_Helper.ObtenerVistaGlobal();
+            var nuevos = await IscsiSessions.ObtenerVistaGlobal();
             _destinos = nuevos ?? new List<IscsiDestino>();
 
             if (_selected != null)
