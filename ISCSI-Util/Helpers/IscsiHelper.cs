@@ -108,77 +108,85 @@ public static class IscsiHelper
     // ============================================================
 
     public static async Task<List<IscsiDestino>> Descubrir(string ip)
+{
+    long id = NextTraceId();
+    TraceIn(id, "Descubrir", $"IP='{ip}'");
+
+    var destinos = new List<IscsiDestino>();
+
+    using (LoadingService.Show($"Discovering targets at {ip}..."))
     {
-        long id = NextTraceId();
-        TraceIn(id, "Descubrir", $"IP='{ip}'");
-
-        var destinos = new List<IscsiDestino>();
-
-        using (LoadingService.Show($"Discovering targets at {ip}..."))
+        try
         {
-            try
+            var discoveryTask = Task.Run(() =>
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
+            );
+
+            var completed = await Task.WhenAny(discoveryTask, Task.Delay(5000));
+            if (completed != discoveryTask)
             {
-                var discoveryTask = Task.Run(() =>
-                    ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
-                );
-
-                var completed = await Task.WhenAny(discoveryTask, Task.Delay(5000));
-                if (completed != discoveryTask)
-                {
-                    LogService.Error($"[ISCSI] #{id} TIMEOUT en discovery");
-                    return destinos;
-                }
-
-                var discovery = discoveryTask.Result;
-                if (string.IsNullOrWhiteSpace(discovery.Stdout))
-                    return destinos;
-
-                var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
-
-                foreach (var line in discovery.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (!line.Contains("iqn.")) continue;
-
-                    string iqn = line.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-                        .LastOrDefault(s => s.StartsWith("iqn."));
-
-                    if (string.IsNullOrWhiteSpace(iqn))
-                        continue;
-
-                    bool conectado = sesiones.Contains(iqn);
-
-                    if (destinos.Any(d => d.Iqn == iqn && d.Ip == ip))
-                        continue;
-
-                    var d = new IscsiDestino
-                    {
-                        Ip = ip,
-                        Iqn = iqn,
-                        Conectado = conectado,
-                        Seleccionado = false,
-                        TieneFilesystem = false
-                    };
-
-                    DetectarChap(d);
-                    destinos.Add(d);
-                }
-
-                foreach (var d in destinos.Where(x => x.Conectado))
-                {
-                    try { await CompletarInformacionDestino(d, id); }
-                    catch { }
-                }
-
-                TraceOut(id, "Descubrir");
+                LogService.Error($"[ISCSI] #{id} TIMEOUT en discovery");
                 return destinos;
             }
-            catch (Exception ex)
-            {
-                LogService.Error($"[ISCSI] #{id} ERROR Descubrir: {ex.Message}");
+
+            var discovery = discoveryTask.Result;
+            if (string.IsNullOrWhiteSpace(discovery.Stdout))
                 return destinos;
+
+            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
+
+            foreach (var line in discovery.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!line.Contains("iqn.")) continue;
+
+                var partes = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                string portal = partes[0]; // puede ser "IP" o "IP:PUERTO"
+
+                // Si NO trae puerto → añadir 3260
+                if (!portal.Contains(":"))
+                    portal = $"{portal}:3260";
+
+                string iqn = partes.LastOrDefault(s => s.StartsWith("iqn."));
+                if (string.IsNullOrWhiteSpace(iqn))
+                    continue;
+
+                bool conectado = sesiones.Contains(iqn);
+
+                if (destinos.Any(d => d.Iqn == iqn && d.Ip == portal))
+                    continue;
+
+                var d = new IscsiDestino
+                {
+                    Ip = portal,              // ✔ SIEMPRE IP:PUERTO
+                    PortalReal = portal,      // ✔ Guardamos el portal real
+                    Iqn = iqn,
+                    Conectado = conectado,
+                    Seleccionado = false,
+                    TieneFilesystem = false
+                };
+
+                DetectarChap(d);
+                destinos.Add(d);
             }
+
+            foreach (var d in destinos.Where(x => x.Conectado))
+            {
+                try { await CompletarInformacionDestino(d, id); }
+                catch { }
+            }
+
+            TraceOut(id, "Descubrir");
+            return destinos;
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] #{id} ERROR Descubrir: {ex.Message}");
+            return destinos;
         }
     }
+}
+
+
 
     // ============================================================
     //  COMPLETAR INFORMACIÓN — DevicePath, PartitionPath, FS
@@ -454,10 +462,48 @@ public static async Task Conectar(IscsiDestino d)
     }
 }
 
-// ======================================================================
-//  PERSISTENCIA — EXACTAMENTE COMO EL HELPER ORIGINAL
-// ======================================================================
 
+
+// ======================================================================
+//  OBTENER PORTAL REAL — universal, robusto, multi-servidor
+// ======================================================================
+public static string? ObtenerPortalReal(IscsiDestino d)
+{
+    try
+    {
+        var result = ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m node -T {d.Iqn}"
+        );
+
+        if (string.IsNullOrWhiteSpace(result.Stdout))
+            return null;
+
+        // Ejemplo de línea:
+        // 192.168.10.20:3260,1 iqn.2013-03.com.wdc:mycloudex2ultra:mjcc
+        var line = result.Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(l => l.Contains(d.Iqn));
+
+        if (line == null)
+            return null;
+
+        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+            return null;
+
+        // El portal es la primera columna
+        return parts[0].Trim();
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+
+// ======================================================================
+//  PERSISTENCIA — EXACTAMENTE COMO EL HELPER ORIGINAL + PORTAL REAL
+// ======================================================================
 public static async Task AplicarPersistencia(IscsiDestino d)
 {
     long id = NextTraceId();
@@ -473,6 +519,20 @@ public static async Task AplicarPersistencia(IscsiDestino d)
                 ShellHelper.EjecutarComoRoot(
                     $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
                 );
+            }
+
+            // ============================================================
+            //  NUEVO: detectar portal real registrado por iscsiadm
+            // ============================================================
+            string? portalReal = ObtenerPortalReal(d);
+            if (!string.IsNullOrWhiteSpace(portalReal))
+            {
+                d.Ip = portalReal;
+                LogService.Debug($"[ISCSI] Portal real detectado: {portalReal}");
+            }
+            else
+            {
+                LogService.Debug($"[ISCSI] No se pudo detectar portal real, usando d.Ip actual: {d.Ip}");
             }
 
             if (d.Persistir)
@@ -499,6 +559,13 @@ public static async Task AplicarPersistencia(IscsiDestino d)
         }
     }
 }
+
+
+
+
+
+
+
 
 // ======================================================================
 //  FSTAB — EXACTAMENTE COMO EL ORIGINAL (UUID + _netdev)
@@ -542,8 +609,10 @@ private static async Task GuardarEnFstab_Original(IscsiDestino d, long id)
 }
 
 // ======================================================================
-//  CREAR SERVICIO SYSTEMD — EXACTAMENTE COMO EL ORIGINAL
+//  CREAR SERVICIO SYSTEMD — EXACTAMENTE COMO EL ORIGINAL + PORTAL REAL
 // ======================================================================
+
+
 
 private static async Task CrearServicioPersistencia_Original(IscsiDestino d, long id)
 {
@@ -560,16 +629,31 @@ TARGET=""{d.Iqn}""
 PORTAL=""{d.Ip}""
 MOUNTPOINT=""{d.MountPoint}""
 
+# --- CONFIGURAR CHAP SI EXISTE ---
+if [ ""{d.UsuarioChap}"" != """" ]; then
+  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.authmethod --value=CHAP
+  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.username --value=""{d.UsuarioChap}""
+  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.password --value=""{d.PasswordChap}""
+fi
+
+# --- CONFIGURAR MUTUAL CHAP SI EXISTE ---
+if [ ""{d.UsuarioMutualChap}"" != """" ]; then
+  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.username_in --value=""{d.UsuarioMutualChap}""
+  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.password_in --value=""{d.PasswordMutualChap}""
+fi
+
+# --- LOGIN ---
 if ! iscsiadm -m session | grep -q ""$TARGET""; then
   iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --login
   for i in {{1..10}}; do
-    if ls /dev/disk/by-path/*""$PORTAL""*lun* &>/dev/null; then
+    if ls /dev/disk/by-path/*""$TARGET""*lun* &>/dev/null; then
       break
     fi
     sleep 1
   done
 fi
 
+# --- MONTAR ---
 mount -a -O _netdev
 exit 0
 ";
@@ -584,8 +668,8 @@ exit 0
         string serviceContent =
 $@"[Unit]
 Description=Conectar iSCSI y montar {d.Iqn}
-After=network-online.target iscsid.service
-Requires=network-online.target iscsid.service
+After=network-online.target NetworkManager-wait-online.service iscsid.service iscsi.service remote-fs.target
+Requires=network-online.target NetworkManager-wait-online.service iscsid.service iscsi.service
 Before=remote-fs-pre.target
 Wants=remote-fs-pre.target
 
@@ -593,6 +677,8 @@ Wants=remote-fs-pre.target
 Type=oneshot
 ExecStart={scriptPath}
 RemainAfterExit=yes
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
@@ -611,6 +697,9 @@ WantedBy=multi-user.target
 
     await Task.CompletedTask;
 }
+
+
+
 
 // ======================================================================
 //  ELIMINAR PERSISTENCIA — EXACTAMENTE COMO EL ORIGINAL

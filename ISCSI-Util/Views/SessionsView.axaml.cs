@@ -170,8 +170,7 @@ public partial class SessionsView : UserControl
         BtnMount.IsEnabled = true;
         BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
 
-        // Disconnect no existe en Sessions
-        BtnDisconnect.IsVisible = false;
+        
 
         // Eventos
         BtnMount.Click -= OnMount;

@@ -150,13 +150,7 @@
                             Classes="SteamButton"
                             Width="80"/>
 
-                    <Button x:Name="BtnDisconnect"
-                            Content="Unplug"
-                            ToolTip.Tip="Unmount the volume and terminate the active iSCSI session"
-                            Classes="SteamButton"
-                            Width="80"
-                            Background="{StaticResource SteamBlue}"
-                            Foreground="White"/>
+                   
                 </StackPanel>
 
             </Grid>
