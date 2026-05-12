@@ -51,19 +51,31 @@ public partial class InitializeDiskDialog : Window
 
         LogService.Write($"[INIT_DISK] Inicializando disco {_destino.Iqn} con FS={fs}, Label={label}");
 
-        // ⭐ USAR TU DIÁLOGO DE CARGA REAL ⭐
         using (LoadingService.Show($"Initializing disk ({fs})..."))
         {
             try
             {
-                // Inicializar
+                // ------------------------------------------------------
+                // 1) Inicializar disco (formateo + partición + montaje)
+                // ------------------------------------------------------
                 await IscsiHelper.InicializarDestino(_destino, label, fs);
                 LogService.Debug("[INIT_DISK] Inicialización completada.");
 
-                // Refrescar estado real
+                // ------------------------------------------------------
+                // 2) Refrescar estado REAL del destino
+                // ------------------------------------------------------
+                await IscsiHelper.CompletarInformacionDestino(_destino, 0);
+                LogService.Debug("[INIT_DISK] Información del destino actualizada tras inicialización.");
+
+                // ------------------------------------------------------
+                // 3) Detectar persistencia
+                // ------------------------------------------------------
                 _destino.Persistir = IscsiHelper.DetectarPersistencia(_destino);
                 LogService.Debug($"[INIT_DISK] Persistencia detectada: {_destino.Persistir}");
 
+                // ------------------------------------------------------
+                // 4) Detectar CHAP
+                // ------------------------------------------------------
                 IscsiHelper.DetectarChap(_destino);
                 LogService.Debug("[INIT_DISK] CHAP actualizado tras inicialización.");
             }

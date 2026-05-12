@@ -327,10 +327,14 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(connectBtn);
         }
 
+        // ============================================================
+        // BOTÓN INIT (CORREGIDO)
+        // ============================================================
+
         if (destino.InfoCompleta &&
             destino.Conectado &&
             !destino.TieneFilesystem &&
-            string.IsNullOrEmpty(destino.MountPoint) &&
+            string.IsNullOrWhiteSpace(destino.MountPoint) &&
             destino.PartitionPath == null)
         {
             var initBtn = new Button
@@ -388,7 +392,7 @@ public partial class TargetsView : UserControl
     }
 
     // ============================================================
-    // DETAILS PANEL (ACTUALIZADO)
+    // DETAILS PANEL
     // ============================================================
 
     private async Task LoadTargetDetailsAsync(IscsiDestino destino)
@@ -402,7 +406,6 @@ public partial class TargetsView : UserControl
         BtnHeaderUnmount.IsVisible = false;
         BtnHeaderOpen.IsVisible = false;
 
-        // CONFIGURAR CHECKBOX DEL HEADER
         ChkPersistent.IsChecked = destino.Persistir;
 
         ChkPersistent.Checked += async (_, _) =>
@@ -439,7 +442,6 @@ public partial class TargetsView : UserControl
             infoGrid.Children.Add(new TextBlock
             {
                 Text = value,
-                
                 TextWrapping = TextWrapping.Wrap,
                 TextTrimming = TextTrimming.None,
                 MaxWidth = 300,

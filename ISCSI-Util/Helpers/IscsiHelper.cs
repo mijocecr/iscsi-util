@@ -57,18 +57,45 @@ public static class IscsiHelper
 
     private static string DetectarFsType(string blkidOut)
     {
-        if (blkidOut.Contains("TYPE=\"ext2\"")) return "ext2";
-        if (blkidOut.Contains("TYPE=\"ext3\"")) return "ext3";
-        if (blkidOut.Contains("TYPE=\"ext4\"")) return "ext4";
-        if (blkidOut.Contains("TYPE=\"xfs\"")) return "xfs";
-        if (blkidOut.Contains("TYPE=\"btrfs\"")) return "btrfs";
-        if (blkidOut.Contains("TYPE=\"f2fs\"")) return "f2fs";
-        if (blkidOut.Contains("TYPE=\"ntfs\"")) return "ntfs";
-        if (blkidOut.Contains("TYPE=\"vfat\"")) return "vfat";
-        if (blkidOut.Contains("TYPE=\"exfat\"")) return "exfat";
-        if (blkidOut.Contains("TYPE=\"iso9660\"")) return "iso9660";
-        return "ext4";
+        if (string.IsNullOrWhiteSpace(blkidOut))
+            return "raw";
+
+        // Normalizar
+        string s = blkidOut.ToLowerInvariant();
+
+        // Filesystems reales
+        if (s.Contains("type=\"ext2\"")) return "ext2";
+        if (s.Contains("type=\"ext3\"")) return "ext3";
+        if (s.Contains("type=\"ext4\"")) return "ext4";
+        if (s.Contains("type=\"xfs\"")) return "xfs";
+        if (s.Contains("type=\"btrfs\"")) return "btrfs";
+        if (s.Contains("type=\"f2fs\"")) return "f2fs";
+        if (s.Contains("type=\"ntfs\"")) return "ntfs";
+        if (s.Contains("type=\"vfat\"")) return "vfat";
+        if (s.Contains("type=\"exfat\"")) return "exfat";
+        if (s.Contains("type=\"iso9660\"")) return "iso9660";
+        if (s.Contains("type=\"swap\"")) return "swap";
+
+        // LUKS
+        if (s.Contains("type=\"crypto_luks\"")) return "luks";
+
+        // LVM
+        if (s.Contains("type=\"lvm2_member\"")) return "lvm";
+
+        // RAID
+        if (s.Contains("type=\"linux_raid_member\"")) return "raid";
+
+        // ZFS
+        if (s.Contains("type=\"zfs_member\"")) return "zfs";
+
+        // Si blkid devuelve solo PTTYPE="gpt" o "dos" → NO es filesystem
+        if (s.Contains("pttype="))
+            return "raw";
+
+        // Si no se detecta nada → RAW
+        return "raw";
     }
+
 
     // ============================================================
     //  DETECTAR CHAP / MUTUAL CHAP
@@ -308,7 +335,7 @@ public static class IscsiHelper
     //  COMPLETAR INFORMACIÓN — DevicePath, PartitionPath, FS
     // ============================================================
 
- public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
 {
     long id = NextTraceId();
     TraceIn(id, "CompletarInformacion", d.Iqn);
@@ -354,11 +381,17 @@ public static class IscsiHelper
         var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
         var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        d.PartitionPath = lines.Length > 1
-            ? "/dev/" + lines[1].Trim()
-            : d.DevicePath;
+        // Si no hay partición → RAW → PartitionPath = null
+        if (lines.Length > 1)
+        {
+            d.PartitionPath = "/dev/" + lines[1].Trim();
+        }
+        else
+        {
+            d.PartitionPath = null;
+        }
 
-        LogService.Debug($"[ISCSI] #{id} PartitionPath = {d.PartitionPath}");
+        LogService.Debug($"[ISCSI] #{id} PartitionPath = {d.PartitionPath ?? "(sin partición)"}");
 
         // --------------------------------------------------------------
         // 3) Detectar mountpoint
@@ -370,7 +403,7 @@ public static class IscsiHelper
         {
             d.PartitionPath ?? "",
             d.DevicePath ?? "",
-            "/dev/" + Path.GetFileName(d.PartitionPath ?? ""),
+            d.PartitionPath != null ? "/dev/" + Path.GetFileName(d.PartitionPath) : "",
             "/dev/" + Path.GetFileName(d.DevicePath ?? "")
         };
 
@@ -400,22 +433,40 @@ public static class IscsiHelper
             LogService.Debug($"[ISCSI] #{id} No se detectó mountpoint para {d.Iqn}.");
 
         // --------------------------------------------------------------
-        // 4) Detectar filesystem
+        // 4) Detectar filesystem (corregido)
         // --------------------------------------------------------------
-        var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}");
-
-        d.TieneFilesystem =
-            !string.IsNullOrWhiteSpace(blkid.Stdout) &&
-            blkid.Stdout.Contains("TYPE=");
-
-        if (d.TieneFilesystem)
+        if (d.PartitionPath == null)
         {
-            d.FsType = DetectarFsType(blkid.Stdout);
-            LogService.Debug($"[ISCSI] #{id} Filesystem detectado: {d.FsType}");
+            // RAW sin partición → no hay filesystem
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            LogService.Debug($"[ISCSI] #{id} RAW sin partición → no hay filesystem.");
         }
         else
         {
-            LogService.Debug($"[ISCSI] #{id} No se detectó filesystem en {d.PartitionPath}");
+            var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}");
+            string outBlk = blkid.Stdout ?? "";
+
+            // Detección estricta de FS real
+            d.TieneFilesystem =
+                outBlk.Contains("TYPE=\"ext") ||
+                outBlk.Contains("TYPE=\"xfs\"") ||
+                outBlk.Contains("TYPE=\"btrfs\"") ||
+                outBlk.Contains("TYPE=\"f2fs\"") ||
+                outBlk.Contains("TYPE=\"ntfs\"") ||
+                outBlk.Contains("TYPE=\"vfat\"") ||
+                outBlk.Contains("TYPE=\"exfat\"");
+
+            if (d.TieneFilesystem)
+            {
+                d.FsType = DetectarFsType(outBlk);
+                LogService.Debug($"[ISCSI] #{id} Filesystem detectado: {d.FsType}");
+            }
+            else
+            {
+                d.FsType = "";
+                LogService.Debug($"[ISCSI] #{id} No se detectó filesystem en {d.PartitionPath}");
+            }
         }
 
         d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
@@ -1051,25 +1102,51 @@ private static async Task EliminarPersistencia_Original(IscsiDestino d, long id)
 //  DETECTAR PERSISTENCIA — EXACTAMENTE COMO EL ORIGINAL
 // ======================================================================
 
-public static bool DetectarPersistencia(IscsiDestino d)
-{
-    if (d == null || string.IsNullOrWhiteSpace(d.MountPoint))
-        return false;
-
-    // FSTAB
-    if (File.Exists("/etc/fstab"))
+    public static bool DetectarPersistencia(IscsiDestino d)
     {
-        string fstab = File.ReadAllText("/etc/fstab");
-        if (fstab.Contains(d.MountPoint))
-            return true;
+        if (d == null || string.IsNullOrWhiteSpace(d.MountPoint))
+            return false;
+
+        // ============================================================
+        // 1) FSTAB — detección robusta
+        // ============================================================
+        try
+        {
+            if (File.Exists("/etc/fstab"))
+            {
+                string fstab = File.ReadAllText("/etc/fstab");
+
+                // Coincidencia exacta por mountpoint (no substring parcial)
+                string pattern = $" {d.MountPoint} ";
+
+                if (fstab.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch
+        {
+            // Ignorar errores de lectura
+        }
+
+        // ============================================================
+        // 2) Servicio systemd — detección robusta
+        // ============================================================
+        try
+        {
+            string safe = SystemdSafe(d.Iqn);
+            string service = $"/etc/systemd/system/iscsi-{safe}.service";
+
+            if (File.Exists(service))
+                return true;
+        }
+        catch
+        {
+            // Ignorar errores de acceso
+        }
+
+        return false;
     }
 
-    // Servicio systemd
-    string safe = SystemdSafe(d.Iqn);
-    string service = $"/etc/systemd/system/iscsi-{safe}.service";
-
-    return File.Exists(service);
-}
 
 // ======================================================================
 //  DESCONECTAR — desmontaje + logout + limpieza
@@ -1344,12 +1421,25 @@ public static async Task InicializarDestino(IscsiDestino d, string label, string
     {
         try
         {
+            // ----------------------------------------------------------
+            // 0) Asegurar conexión
+            // ----------------------------------------------------------
             if (!d.Conectado)
                 await Conectar(d);
 
+            // ----------------------------------------------------------
+            // 1) Asegurar que DevicePath existe
+            // ----------------------------------------------------------
+            if (string.IsNullOrWhiteSpace(d.DevicePath))
+                throw new Exception("DevicePath no detectado antes de inicializar.");
+
+            string device = d.DevicePath; // /dev/disk/by-path/ip-iscsi-lun-0
+
             var task = Task.Run(async () =>
             {
-                // 1) Desmontar
+                // ------------------------------------------------------
+                // 2) Desmontar si estaba montado
+                // ------------------------------------------------------
                 var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
                 if (mpCheck.ExitCode == 0)
                 {
@@ -1357,31 +1447,49 @@ public static async Task InicializarDestino(IscsiDestino d, string label, string
                     await Task.Delay(300);
                 }
 
-                // 2) Borrar tabla
-                ShellHelper.EjecutarComoRoot($"sgdisk --zap-all {d.PartitionPath}");
+                // ------------------------------------------------------
+                // 3) Borrar tabla de particiones (RAW)
+                // ------------------------------------------------------
+                ShellHelper.EjecutarComoRoot($"sgdisk --zap-all {device}");
 
-                // 3) Crear GPT
-                ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mklabel gpt");
+                // ------------------------------------------------------
+                // 4) Crear GPT
+                // ------------------------------------------------------
+                ShellHelper.EjecutarComoRoot($"parted -s {device} mklabel gpt");
 
-                // 4) Crear partición
-                ShellHelper.EjecutarComoRoot($"parted -s {d.PartitionPath} mkpart primary 0% 100%");
-                await Task.Delay(1200);
+                // ------------------------------------------------------
+                // 5) Crear partición primaria
+                // ------------------------------------------------------
+                ShellHelper.EjecutarComoRoot($"parted -s {device} mkpart primary 0% 100%");
+                await Task.Delay(1200); // permitir que el kernel detecte la partición
 
-                // 5) Detectar nueva partición
-                var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
+                // ------------------------------------------------------
+                // 6) Detectar nueva partición
+                // ------------------------------------------------------
+                var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {device}");
                 var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-                d.PartitionPath = lines.Length > 1
-                    ? "/dev/" + lines[1].Trim()
-                    : d.DevicePath;
+                if (lines.Length > 1)
+                {
+                    d.PartitionPath = "/dev/" + lines[1].Trim();
+                }
+                else
+                {
+                    throw new Exception("No se detectó partición después de crearla.");
+                }
 
-                // 6) Formatear
+                // ------------------------------------------------------
+                // 7) Formatear
+                // ------------------------------------------------------
                 string mkfs = fsType switch
                 {
-                    "ext4" => $"mkfs.ext4 -F {d.PartitionPath}",
-                    "xfs" => $"mkfs.xfs -f {d.PartitionPath}",
-                    "btrfs" => $"mkfs.btrfs -f {d.PartitionPath}",
-                    _ => $"mkfs.ext4 -F {d.PartitionPath}"
+                    "ext4" => $"mkfs.ext4 -F -L \"{label}\" {d.PartitionPath}",
+                    "xfs" => $"mkfs.xfs -f -L \"{label}\" {d.PartitionPath}",
+                    "btrfs" => $"mkfs.btrfs -f -L \"{label}\" {d.PartitionPath}",
+                    "f2fs" => $"mkfs.f2fs -f {d.PartitionPath}",
+                    "ntfs" => $"mkfs.ntfs -F -L \"{label}\" {d.PartitionPath}",
+                    "exfat" => $"mkfs.exfat -n \"{label}\" {d.PartitionPath}",
+                    _ => $"mkfs.ext4 -F -L \"{label}\" {d.PartitionPath}"
                 };
 
                 ShellHelper.EjecutarComoRoot(mkfs);
@@ -1389,9 +1497,13 @@ public static async Task InicializarDestino(IscsiDestino d, string label, string
                 d.TieneFilesystem = true;
                 d.FsType = fsType;
 
-                // 7) Montar
+                // ------------------------------------------------------
+                // 8) Montar
+                // ------------------------------------------------------
+                string mountFs = fsType == "ntfs" ? "ntfs-3g" : fsType;
+
                 ShellHelper.EjecutarComoRoot(
-                    $"mount -t {fsType} {d.PartitionPath} \"{d.MountPoint}\""
+                    $"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\""
                 );
             });
 
@@ -1407,27 +1519,39 @@ public static async Task InicializarDestino(IscsiDestino d, string label, string
     }
 }
 
+
 // ======================================================================
 //  SOPORTA FILESYSTEM — requerido por InitializeDiskDialogService
 // ======================================================================
-public static bool SoportaFs(string fs)
-{
-    if (string.IsNullOrWhiteSpace(fs))
-        return false;
 
-    fs = fs.ToLowerInvariant();
-
-    return fs switch
+    public static bool SoportaFs(string fs)
     {
-        "ext4" => true,
-        "xfs"  => true,
-        "btrfs" => true,
-        "ext3" => true,
-        "ext2" => true,
-        _ => false
-    };
-}
+        if (string.IsNullOrWhiteSpace(fs))
+            return false;
 
+        fs = fs.ToLowerInvariant();
+
+        // Mapear FS → comando mkfs
+        string cmd = fs switch
+        {
+            "ext2"  => "mkfs.ext2",
+            "ext3"  => "mkfs.ext3",
+            "ext4"  => "mkfs.ext4",
+            "xfs"   => "mkfs.xfs",
+            "btrfs" => "mkfs.btrfs",
+            "f2fs"  => "mkfs.f2fs",
+            "ntfs"  => "mkfs.ntfs",   // ntfs-3g formatting
+            "exfat" => "mkfs.exfat",
+            _ => ""
+        };
+
+        if (string.IsNullOrEmpty(cmd))
+            return false;
+
+        // Verificar si el comando existe en el sistema
+        var check = ShellHelper.EjecutarComoRoot($"which {cmd}");
+        return check.ExitCode == 0;
+    }
 
 
 
