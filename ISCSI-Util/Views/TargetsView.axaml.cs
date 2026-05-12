@@ -243,7 +243,7 @@ public partial class TargetsView : UserControl
             FontSize = 14,
             FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
+            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
         };
 
         grid.Children.Add(iqnText);

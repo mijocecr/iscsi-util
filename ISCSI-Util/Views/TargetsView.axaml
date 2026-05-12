@@ -4,11 +4,11 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <UserControl.Styles>
-
+        
         <!-- Tarjeta estilo Sessions -->
         <Style Selector="Border.SteamCard">
-            <Setter Property="Background" Value="#141A22" />
-            <Setter Property="BorderBrush" Value="#2A3A4A" />
+            <Setter Property="Background" Value="#1B2838" />
+            <Setter Property="BorderBrush" Value="#66C0F4" />
             <Setter Property="BorderThickness" Value="1.6" />
             <Setter Property="CornerRadius" Value="10" />
             <Setter Property="Padding" Value="14,10" />
