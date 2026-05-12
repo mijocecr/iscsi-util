@@ -27,7 +27,7 @@ public partial class MainWindow : Window
         MaxHeight = 580;
         Title = "iscsi-util";
 
-        Log("Main window initialized.");
+        LogService.Debug("[MAIN] Main window initialized.");
     }
 
     // ============================================================
@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     // ============================================================
     public void UpdateMainStatus(string state)
     {
+        LogService.Debug($"[MAIN] UpdateMainStatus → {state}");
+
         StatusBarText.Text = state switch
         {
             "SYSTEM STATUS: OK"       => "Ready.",
@@ -51,11 +53,13 @@ public partial class MainWindow : Window
     {
         base.OnOpened(e);
 
+        LogService.Write("[MAIN] Application startup sequence initiated.");
+
         // ------------------------------------------------------------
         // 0) CARGAR CONFIGURACIÓN GLOBAL
         // ------------------------------------------------------------
         ConfigManager.Load();
-        Log("Configuration loaded.");
+        LogService.Debug("[MAIN] Configuration loaded.");
 
         StatusBarText.Text = "Initializing...";
         await Task.Delay(120);
@@ -65,27 +69,28 @@ public partial class MainWindow : Window
         // ------------------------------------------------------------
         while (true)
         {
+            LogService.Debug("[MAIN] Requesting admin password...");
             await SolicitarPassword();
 
             if (string.IsNullOrWhiteSpace(Credenciales.AdminPassword))
             {
                 StatusBarText.Text = "Initialization aborted.";
-                Log("Initialization aborted: no password provided.");
+                LogService.Error("[MAIN] Initialization aborted: no password provided.");
                 return;
             }
 
             StatusBarText.Text = "Validating password...";
-            Log("Validating admin password...");
+            LogService.Debug("[MAIN] Validating admin password...");
 
             var result = ShellHelper.EjecutarComoRoot("bash -c \"echo OK\"");
 
             if (result.ExitCode == 0)
             {
-                Log("Password validated successfully.");
+                LogService.Write("[MAIN] Password validated successfully.");
                 break;
             }
 
-            LogService.Error("Incorrect administrator password.");
+            LogService.Error("[MAIN] Incorrect administrator password.");
             await MostrarPasswordIncorrecta();
         }
 
@@ -93,14 +98,14 @@ public partial class MainWindow : Window
         // 2) ARRANCAR ISCSID SOLO SI ES NECESARIO
         // ------------------------------------------------------------
         StatusBarText.Text = "Checking iSCSI service...";
-        Log("Checking iscsid service status...");
+        LogService.Debug("[MAIN] Checking iscsid service status...");
 
         var statusCheck = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
 
         if (!statusCheck.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
         {
             StatusBarText.Text = "Starting iSCSI service...";
-            Log("iscsid not active. Starting service...");
+            LogService.Write("[MAIN] iscsid not active. Starting service...");
             ShellHelper.EjecutarComoRoot("systemctl start iscsid");
         }
 
@@ -110,7 +115,7 @@ public partial class MainWindow : Window
         // 3) CARGAR SESSIONS
         // ------------------------------------------------------------
         StatusBarText.Text = "Loading iSCSI information...";
-        Log("Loading global iSCSI session overview...");
+        LogService.Debug("[MAIN] Loading global iSCSI session overview...");
         await LoadSessionsAsync();
 
         // ------------------------------------------------------------
@@ -118,12 +123,12 @@ public partial class MainWindow : Window
         // ------------------------------------------------------------
         if (StatusPanel is StatusView status)
         {
-            Log("Refreshing StatusView...");
+            LogService.Debug("[MAIN] Refreshing StatusView...");
             await status.RefreshStatus();
         }
 
         StatusBarText.Text = "Ready.";
-        Log("Initialization completed. System ready.");
+        LogService.Write("[MAIN] Initialization completed. System ready.");
     }
 
     // ============================================================
@@ -131,6 +136,8 @@ public partial class MainWindow : Window
     // ============================================================
     private async Task WaitForDaemonReady()
     {
+        LogService.Debug("[MAIN] Waiting for iscsid to become active...");
+
         for (int i = 0; i < 40; i++)
         {
             var result = ShellHelper.EjecutarComoRoot(
@@ -139,14 +146,14 @@ public partial class MainWindow : Window
 
             if (result.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
             {
-                Log("iscsid is active.");
+                LogService.Debug("[MAIN] iscsid is active.");
                 return;
             }
 
             await Task.Delay(120);
         }
 
-        LogService.Error("iscsid did not reach active state within timeout.");
+        LogService.Error("[MAIN] iscsid did not reach active state within timeout.");
     }
 
     // ============================================================
@@ -154,12 +161,16 @@ public partial class MainWindow : Window
     // ============================================================
     private async Task SolicitarPassword()
     {
+        LogService.Debug("[MAIN] Opening password dialog...");
+
         var dialog = new PasswordDialog
         {
             WindowStartupLocation = WindowStartupLocation.CenterScreen
         };
 
         Credenciales.AdminPassword = await dialog.ShowDialog<string?>(this) ?? string.Empty;
+
+        LogService.Debug("[MAIN] Password dialog closed.");
     }
 
     // ============================================================
@@ -167,6 +178,8 @@ public partial class MainWindow : Window
     // ============================================================
     private async Task MostrarPasswordIncorrecta()
     {
+        LogService.Debug("[MAIN] Showing incorrect password dialog...");
+
         var dialog = new Window
         {
             Width = 380,
@@ -216,6 +229,8 @@ public partial class MainWindow : Window
         dialog.Content = border;
 
         await dialog.ShowDialog(this);
+
+        LogService.Debug("[MAIN] Incorrect password dialog closed.");
     }
 
     // ============================================================
@@ -223,12 +238,14 @@ public partial class MainWindow : Window
     // ============================================================
     private async Task LoadSessionsAsync()
     {
+        LogService.Debug("[MAIN] Loading sessions...");
+
         using (LoadingService.Show("Loading sessions..."))
         {
             if (SessionsPanel is SessionsView sessions)
                 await sessions.CargarSesiones();
 
-            Log("Sessions loaded.");
+            LogService.Debug("[MAIN] Sessions loaded.");
         }
     }
 
@@ -237,18 +254,20 @@ public partial class MainWindow : Window
     // ============================================================
     public async Task DiscoverTargets(string ip)
     {
+        LogService.Write($"[MAIN] Discovering targets on portal {ip}...");
+
         using (LoadingService.Show("Discovering targets..."))
         {
-            Log($"Discovering targets on portal {ip}...");
             await IscsiHelper.Descubrir(ip);
         }
     }
 
     public async Task ConnectTarget(IscsiDestino d)
     {
+        LogService.Write($"[MAIN] Connecting to target {d.Iqn}...");
+
         using (LoadingService.Show("Connecting to target..."))
         {
-            Log($"Connecting to target {d.Iqn}...");
             await IscsiHelper.Conectar(d);
             await Task.Delay(1500);
 
@@ -259,9 +278,10 @@ public partial class MainWindow : Window
 
     public async Task DisconnectTarget(IscsiDestino d)
     {
+        LogService.Write($"[MAIN] Disconnecting target {d.Iqn}...");
+
         using (LoadingService.Show("Disconnecting target..."))
         {
-            Log($"Disconnecting target {d.Iqn}...");
             await IscsiHelper.Desconectar(d);
             await Task.Delay(1500);
 
@@ -272,9 +292,10 @@ public partial class MainWindow : Window
 
     public async Task InitializeDisk(IscsiDestino d, string label, string fsType)
     {
+        LogService.Write($"[MAIN] Initializing disk for {d.Iqn} with FS={fsType}, Label={label}");
+
         using (LoadingService.Show("Initializing disk..."))
         {
-            Log($"Initializing disk for {d.Iqn} with FS {fsType} and label {label}...");
             await IscsiHelper.InicializarDestino(d, label, fsType);
             await Task.Delay(1500);
 
@@ -301,11 +322,11 @@ public partial class MainWindow : Window
                 UseShellExecute = false
             });
 
-            Log($"Opened mountpoint: {destino.MountPoint}");
+            LogService.Write($"[MAIN] Opened mountpoint: {destino.MountPoint}");
         }
         catch (Exception ex)
         {
-            LogService.Error($"Failed to open folder: {ex.Message}");
+            LogService.Error($"[MAIN] Failed to open folder: {ex.Message}");
         }
     }
 
@@ -314,10 +335,12 @@ public partial class MainWindow : Window
     // ============================================================
     private async void OnOpenConfig(object? sender, RoutedEventArgs e)
     {
+        LogService.Debug("[MAIN] Opening configuration window...");
+
         var win = new ConfigWindow();
         await win.ShowDialog(this);
 
-        Log("Configuration updated.");
+        LogService.Write("[MAIN] Configuration updated.");
     }
 
     // ============================================================
@@ -348,6 +371,7 @@ public partial class MainWindow : Window
 
     private async void OnTabSessionsClick(object? sender, PointerPressedEventArgs e)
     {
+        LogService.Debug("[MAIN] Sessions tab clicked → refreshing sessions...");
         await LoadSessionsAsync();
         StatusBarText.Text = "Sessions overview";
     }

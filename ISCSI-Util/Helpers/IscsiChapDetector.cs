@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using ISCSI_Util.Models;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Helpers;
 
@@ -23,12 +24,17 @@ public static class IscsiChapDetector
     // ============================================================
     private static void ReadLocalNodeConfig(IscsiDestino d, ChapResult r)
     {
+        LogService.Debug($"Reading local CHAP config for {d.Iqn} at {d.Ip}");
+
         var show = ShellHelper.EjecutarComoRoot(
             $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 -o show"
         );
 
         if (string.IsNullOrWhiteSpace(show.Stdout))
+        {
+            LogService.Debug("Local node config is empty or missing.");
             return;
+        }
 
         string config = show.Stdout;
 
@@ -52,6 +58,10 @@ public static class IscsiChapDetector
         r.LocalPass   = passEmpty   ? "" : pass;
         r.LocalUserIn = userInEmpty ? "" : userIn;
         r.LocalPassIn = passInEmpty ? "" : passIn;
+
+        LogService.Debug(
+            $"Local CHAP: {r.HasLocalChapConfigured}, Local Mutual: {r.HasLocalMutualConfigured}"
+        );
     }
 
     private static string Extract(string text, string key)
@@ -74,6 +84,8 @@ public static class IscsiChapDetector
     // ============================================================
     private static void ProbeLogin(IscsiDestino d, ChapResult r)
     {
+        LogService.Debug($"Probing login for {d.Iqn} at {d.Ip}");
+
         // Creamos nodo temporal si no existe
         var check = ShellHelper.EjecutarComoRoot(
             $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260"
@@ -83,6 +95,7 @@ public static class IscsiChapDetector
 
         if (!exists)
         {
+            LogService.Debug("Node does not exist locally. Creating temporary node.");
             ShellHelper.EjecutarComoRoot(
                 $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --op=new"
             );
@@ -96,25 +109,35 @@ public static class IscsiChapDetector
         // Logout inmediato si entró
         if (login.ExitCode == 0)
         {
+            LogService.Debug("Login succeeded without CHAP. Logging out.");
             ShellHelper.EjecutarComoRoot(
                 $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --logout"
             );
-            return;
         }
+        else
+        {
+            string err = login.Stderr.ToLowerInvariant();
+            LogService.Debug($"Login failed. stderr: {err}");
 
-        string err = login.Stderr.ToLowerInvariant();
+            if (err.Contains("authorization failure"))
+            {
+                r.RequiresChap = true;
+                LogService.Debug("Server requires CHAP.");
+            }
 
-        if (err.Contains("authorization failure"))
-            r.RequiresChap = true;
-
-        if (err.Contains("incoming authentication") ||
-            err.Contains("mutual") ||
-            err.Contains("reverse"))
-            r.RequiresMutualChap = true;
+            if (err.Contains("incoming authentication") ||
+                err.Contains("mutual") ||
+                err.Contains("reverse"))
+            {
+                r.RequiresMutualChap = true;
+                LogService.Debug("Server requires Mutual CHAP.");
+            }
+        }
 
         // Borrar nodo temporal si lo creamos
         if (!exists)
         {
+            LogService.Debug("Deleting temporary node.");
             ShellHelper.EjecutarComoRoot(
                 $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --op=delete"
             );
@@ -126,6 +149,8 @@ public static class IscsiChapDetector
     // ============================================================
     public static ChapResult Detect(IscsiDestino d)
     {
+        LogService.Write($"Detecting CHAP requirements for {d.Iqn} at {d.Ip}");
+
         var r = new ChapResult();
 
         // 1) Leer configuración local
@@ -133,6 +158,12 @@ public static class IscsiChapDetector
 
         // 2) Intentar login de prueba para saber si el servidor exige CHAP
         ProbeLogin(d, r);
+
+        LogService.Write(
+            $"CHAP detection result for {d.Iqn}: " +
+            $"Requires CHAP={r.RequiresChap}, Requires Mutual={r.RequiresMutualChap}, " +
+            $"Local CHAP={r.HasLocalChapConfigured}, Local Mutual={r.HasLocalMutualConfigured}"
+        );
 
         return r;
     }

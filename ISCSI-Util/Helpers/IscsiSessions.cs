@@ -28,8 +28,9 @@ public static class IscsiSessions
                 .Select(a => a.Address.ToString())
                 .FirstOrDefault() ?? "0.0.0.0";
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Error($"GetLocalIPv4 error: {ex.Message}");
             return "0.0.0.0";
         }
     }
@@ -43,8 +44,9 @@ public static class IscsiSessions
             return a.Length == 4 && b.Length == 4 &&
                    a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Error($"MismaSubred error: {ex.Message}");
             return false;
         }
     }
@@ -52,7 +54,6 @@ public static class IscsiSessions
     // ============================================================
     //   1) SESIONES ACTIVAS
     // ============================================================
-
     private static List<IscsiDestino> ObtenerSesionesActivas()
     {
         var list = new List<IscsiDestino>();
@@ -62,9 +63,12 @@ public static class IscsiSessions
             long id = NextId();
             var sw = Stopwatch.StartNew();
 
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → SesionesActivas()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → ObtenerSesionesActivas()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m session");
+
+            if (result.ExitCode != 0)
+                LogService.Debug($"[SESSIONS_HELPER] #{id} iscsiadm exit={result.ExitCode}");
 
             if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
             {
@@ -73,16 +77,18 @@ public static class IscsiSessions
                     if (!line.Contains("iqn.")) continue;
 
                     var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 4) continue;
+                    if (parts.Length < 4)
+                    {
+                        LogService.Debug($"[SESSIONS_HELPER] #{id} línea ignorada: {line}");
+                        continue;
+                    }
 
-                    // Ejemplo:
-                    // tcp: [1] 192.168.10.20:3260,1 iqn.2013-03.com.wdc:mycloud...
-                    string portal = parts[2].Split(',')[0];  // ✔ portal completo
+                    string portal = parts[2].Split(',')[0];
                     string iqn = parts[3];
 
                     list.Add(new IscsiDestino
                     {
-                        Ip = portal,          // ✔ portal completo
+                        Ip = portal,
                         Iqn = iqn,
                         Conectado = true
                     });
@@ -103,7 +109,6 @@ public static class IscsiSessions
     // ============================================================
     //   2) NODOS CONFIGURADOS
     // ============================================================
-
     private static List<IscsiDestino> ObtenerNodos()
     {
         var list = new List<IscsiDestino>();
@@ -113,9 +118,12 @@ public static class IscsiSessions
             long id = NextId();
             var sw = Stopwatch.StartNew();
 
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → Nodos()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → ObtenerNodos()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m node");
+
+            if (result.ExitCode != 0)
+                LogService.Debug($"[SESSIONS_HELPER] #{id} iscsiadm exit={result.ExitCode}");
 
             if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
             {
@@ -124,14 +132,18 @@ public static class IscsiSessions
                     if (!line.Contains("iqn.")) continue;
 
                     var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 2) continue;
+                    if (parts.Length < 2)
+                    {
+                        LogService.Debug($"[SESSIONS_HELPER] #{id} línea ignorada: {line}");
+                        continue;
+                    }
 
-                    string portal = parts[0].Split(',')[0];  // ✔ portal completo
+                    string portal = parts[0].Split(',')[0];
                     string iqn = parts[1];
 
                     list.Add(new IscsiDestino
                     {
-                        Ip = portal,          // ✔ portal completo
+                        Ip = portal,
                         Iqn = iqn,
                         Conectado = false
                     });
@@ -152,7 +164,6 @@ public static class IscsiSessions
     // ============================================================
     //   3) DISCOVERYDB
     // ============================================================
-
     private static List<IscsiDestino> ObtenerDiscoveryDb()
     {
         var list = new List<IscsiDestino>();
@@ -162,25 +173,32 @@ public static class IscsiSessions
             long id = NextId();
             var sw = Stopwatch.StartNew();
 
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → DiscoveryDB()");
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → ObtenerDiscoveryDb()");
 
             var result = ShellHelper.EjecutarComoRoot("iscsiadm -m discoverydb -t sendtargets -o show");
 
-            if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
+            if (result.ExitCode != 0)
+                LogService.Debug($"[SESSIONS_HELPER] #{id} iscsiadm exit={result.ExitCode}");
+
+            if (!string.IsNullOrWhiteSpace(result.Stdout))
             {
                 foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (!line.Contains("iqn.")) continue;
 
                     var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 2) continue;
+                    if (parts.Length < 2)
+                    {
+                        LogService.Debug($"[SESSIONS_HELPER] #{id} línea ignorada: {line}");
+                        continue;
+                    }
 
-                    string portal = parts[0].Split(',')[0];  // ✔ portal completo
+                    string portal = parts[0].Split(',')[0];
                     string iqn = parts[1];
 
                     list.Add(new IscsiDestino
                     {
-                        Ip = portal,          // ✔ portal completo
+                        Ip = portal,
                         Iqn = iqn,
                         Conectado = false
                     });
@@ -201,7 +219,6 @@ public static class IscsiSessions
     // ============================================================
     //   4) FUSIÓN INTELIGENTE
     // ============================================================
-
     private static List<IscsiDestino> Fusionar(
         List<IscsiDestino> sesiones,
         List<IscsiDestino> nodos,
@@ -209,12 +226,13 @@ public static class IscsiSessions
     {
         try
         {
+            LogService.Debug("[SESSIONS_HELPER] Fusionando listas...");
+
             var todos = new List<IscsiDestino>();
             todos.AddRange(sesiones);
             todos.AddRange(nodos);
             todos.AddRange(discoverydb);
 
-            // Agrupar por IQN + portal completo
             var grupos = todos.GroupBy(x => $"{x.Iqn}|{x.Ip}");
 
             var final = new List<IscsiDestino>();
@@ -240,13 +258,16 @@ public static class IscsiSessions
                 final.Add(lista.First());
             }
 
+            LogService.Debug($"[SESSIONS_HELPER] Fusionados={final.Count}");
+
             return final
                 .OrderByDescending(x => x.Conectado)
                 .ThenBy(x => x.Iqn)
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Error($"[SESSIONS_HELPER] Fusionar error: {ex.Message}");
             return new List<IscsiDestino>();
         }
     }
@@ -254,34 +275,45 @@ public static class IscsiSessions
     // ============================================================
     //   5) COMPLETAR INFO SOLO PARA CONECTADOS
     // ============================================================
-
     private static async Task CompletarInfo(List<IscsiDestino> destinos)
     {
         long id = NextId();
 
         try
         {
+            LogService.Debug($"[SESSIONS_HELPER] #{id} → CompletarInfo()");
+
             var conectados = destinos.Where(x => x.Conectado).ToList();
 
             foreach (var d in conectados)
             {
                 try
                 {
+                    LogService.Debug($"[SESSIONS_HELPER] #{id} completando info para {d.Iqn}");
                     await IscsiHelper.CompletarInformacionDestino(d, id);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    LogService.Error($"[SESSIONS_HELPER] CompletarInfo error en {d.Iqn}: {ex.Message}");
+                }
             }
+
+            LogService.Debug($"[SESSIONS_HELPER] #{id} ← CompletarInfo OK");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SESSIONS_HELPER] CompletarInfo general: {ex.Message}");
+        }
     }
 
     // ============================================================
     //   6) VISTA GLOBAL FINAL
     // ============================================================
-
     public static async Task<List<IscsiDestino>> ObtenerVistaGlobal()
     {
         long id = NextId();
+
+        LogService.Write($"[SESSIONS_HELPER] #{id} ObtenerVistaGlobal()");
 
         try
         {
@@ -293,10 +325,13 @@ public static class IscsiSessions
 
             await CompletarInfo(fusion);
 
+            LogService.Write($"[SESSIONS_HELPER] #{id} VistaGlobal={fusion.Count}");
+
             return fusion;
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Error($"[SESSIONS_HELPER] ObtenerVistaGlobal error: {ex.Message}");
             return new List<IscsiDestino>();
         }
     }

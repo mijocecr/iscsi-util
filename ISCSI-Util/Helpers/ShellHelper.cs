@@ -16,51 +16,63 @@ public static class ShellHelper
 
         LogService.Debug($"[SHELL] #{callId} → EjecutarComoRoot('{command}')");
 
-        var psi = new ProcessStartInfo
+        try
         {
-            FileName = "sudo",
-            Arguments = $"-S bash -c \"{command.Replace("\"", "\\\"")}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            var psi = new ProcessStartInfo
+            {
+                FileName = "sudo",
+                Arguments = $"-S bash -c \"{command.Replace("\"", "\\\"")}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-        using var process = new Process { StartInfo = psi };
+            using var process = new Process { StartInfo = psi };
 
-        process.Start();
+            process.Start();
 
-        if (!string.IsNullOrEmpty(Credenciales.AdminPassword))
-        {
-            var pass = Credenciales.AdminPassword.TrimEnd('\r', '\n');
-            process.StandardInput.WriteLine(pass);
-            process.StandardInput.Flush();
+            if (!string.IsNullOrEmpty(Credenciales.AdminPassword))
+            {
+                var pass = Credenciales.AdminPassword.TrimEnd('\r', '\n');
+                process.StandardInput.WriteLine(pass);
+                process.StandardInput.Flush();
+            }
+
+            process.StandardInput.Close();
+
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
+
+            const int timeoutMs = 15000;
+
+            if (!process.WaitForExit(timeoutMs))
+            {
+                try { process.Kill(); } catch { }
+
+                LogService.Error($"[SHELL] #{callId} TIMEOUT ejecutando '{command}'");
+                return (1, "", "Timeout");
+            }
+
+            sw.Stop();
+            LogService.Debug($"[SHELL] #{callId} ← exit={process.ExitCode} en {sw.ElapsedMilliseconds} ms");
+
+            if (stderr.Contains("incorrect password", StringComparison.OrdinalIgnoreCase) ||
+                stderr.Contains("Sorry, try again", StringComparison.OrdinalIgnoreCase) ||
+                stderr.Contains("no password was provided", StringComparison.OrdinalIgnoreCase))
+            {
+                LogService.Error($"[SHELL] #{callId} PASSWORD_INCORRECT");
+                return (1001, stdout, "PASSWORD_INCORRECT");
+            }
+
+            return (process.ExitCode, stdout, stderr);
         }
-
-        process.StandardInput.Close();
-
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-
-        const int timeoutMs = 15000;
-
-        if (!process.WaitForExit(timeoutMs))
+        catch (Exception ex)
         {
-            try { process.Kill(); } catch { }
-            return (1, "", "Timeout");
+            LogService.Error($"[SHELL] #{callId} EXCEPTION: {ex.Message}");
+            return (1, "", ex.Message);
         }
-
-        sw.Stop();
-
-        if (stderr.Contains("incorrect password", StringComparison.OrdinalIgnoreCase) ||
-            stderr.Contains("Sorry, try again", StringComparison.OrdinalIgnoreCase) ||
-            stderr.Contains("no password was provided", StringComparison.OrdinalIgnoreCase))
-        {
-            return (1001, stdout, "PASSWORD_INCORRECT");
-        }
-
-        return (process.ExitCode, stdout, stderr);
     }
 
     // ---------------------------------------------------------
@@ -68,28 +80,42 @@ public static class ShellHelper
     // ---------------------------------------------------------
     public static async Task<string> RunCleanAsync(string command)
     {
-        var psi = new ProcessStartInfo
+        LogService.Debug($"[SHELL] RunCleanAsync('{command}')");
+
+        try
         {
-            FileName = "/bin/bash",
-            Arguments = $"-c \"{command}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            var psi = new ProcessStartInfo
+            {
+                FileName = "/bin/bash",
+                Arguments = $"-c \"{command}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-        using var process = new Process { StartInfo = psi };
+            using var process = new Process { StartInfo = psi };
 
-        process.Start();
+            process.Start();
 
-        string stdout = await process.StandardOutput.ReadToEndAsync();
-        string stderr = await process.StandardError.ReadToEndAsync();
+            string stdout = await process.StandardOutput.ReadToEndAsync();
+            string stderr = await process.StandardError.ReadToEndAsync();
 
-        await process.WaitForExitAsync();
+            await process.WaitForExitAsync();
 
-        if (!string.IsNullOrWhiteSpace(stderr))
+            if (!string.IsNullOrWhiteSpace(stderr))
+            {
+                LogService.Error($"[SHELL] RunCleanAsync stderr: {stderr}");
+                return string.Empty;
+            }
+
+            LogService.Debug($"[SHELL] RunCleanAsync OK");
+            return stdout.Trim();
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SHELL] RunCleanAsync exception: {ex.Message}");
             return string.Empty;
-
-        return stdout.Trim();
+        }
     }
 }

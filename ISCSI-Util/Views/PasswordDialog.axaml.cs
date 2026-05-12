@@ -4,22 +4,29 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views
 {
     public partial class PasswordDialog : Window
     {
-        private bool _closeApp = true; 
+        private bool _closeApp = true;
 
         public PasswordDialog()
         {
+            LogService.Debug("[PWD_DIALOG] Inicializando diálogo de contraseña.");
+
             InitializeComponent();
             this.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
             this.Closed += (s, e) =>
             {
+                LogService.Debug($"[PWD_DIALOG] Closed → closeApp={_closeApp}");
+
                 if (_closeApp)
                 {
+                    LogService.Write("[PWD_DIALOG] Cerrando aplicación por cierre del diálogo.");
+
                     var lifetime = Avalonia.Application.Current?.ApplicationLifetime
                         as IClassicDesktopStyleApplicationLifetime;
 
@@ -34,25 +41,27 @@ namespace ISCSI_Util.Views
 
             if (string.IsNullOrWhiteSpace(pass))
             {
+                LogService.Debug("[PWD_DIALOG] Contraseña vacía, mostrando error.");
                 ShowError("Password cannot be empty.");
                 return;
             }
 
-            // No cerrar la app cuando devolvemos la contraseña
+            LogService.Write("[PWD_DIALOG] Contraseña aceptada por el usuario.");
+
             _closeApp = false;
             Close(pass);
         }
 
         private void OnCancel(object? sender, RoutedEventArgs e)
         {
-            // Cancel sí debe cerrar la app
+            LogService.Write("[PWD_DIALOG] Cancelado por el usuario. Cerrando aplicación.");
             _closeApp = true;
             Close(null);
         }
 
         private void OnClose(object? sender, RoutedEventArgs e)
         {
-            // Cerrar app si el usuario pulsa el botón Close
+            LogService.Write("[PWD_DIALOG] Botón Close pulsado. Cerrando aplicación.");
             _closeApp = true;
             Close(null);
         }
@@ -60,16 +69,24 @@ namespace ISCSI_Util.Views
         private void OnPasswordKeyDown(object? sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
+            {
+                LogService.Debug("[PWD_DIALOG] Enter presionado → aceptar.");
                 OnAccept(sender, e);
+            }
             else if (e.Key == Key.Escape)
+            {
+                LogService.Debug("[PWD_DIALOG] Escape presionado → cancelar.");
                 OnCancel(sender, e);
+            }
         }
 
         private void ShowError(string message)
         {
+            LogService.Debug($"[PWD_DIALOG] Error mostrado: {message}");
+
             ErrorText.Text = message;
             ErrorText.IsVisible = true;
-            
+
             PwdBox.Text = "";
             PwdBox.Focus();
         }

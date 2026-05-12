@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using ISCSI_Util.Models;
 using ISCSI_Util.Helpers;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views;
 
@@ -11,6 +12,8 @@ public partial class ChapDialog : Window
 
     public ChapDialog(IscsiDestino destino)
     {
+        LogService.Debug($"[CHAP_DIALOG] Inicializando diálogo para {destino.Iqn} ({destino.Ip})");
+
         InitializeComponent();
         _destino = destino;
 
@@ -23,7 +26,14 @@ public partial class ChapDialog : Window
             ? destino.LocalPass
             : destino.PasswordChap;
 
-        CancelBtn.Click += (_, _) => Close();
+        LogService.Debug($"[CHAP_DIALOG] Valores iniciales cargados. User='{UserBox.Text}'");
+
+        CancelBtn.Click += (_, _) =>
+        {
+            LogService.Debug("[CHAP_DIALOG] Cancelado por el usuario.");
+            Close();
+        };
+
         ApplyBtn.Click += ApplyChanges;
     }
 
@@ -31,6 +41,8 @@ public partial class ChapDialog : Window
     {
         string user = UserBox.Text?.Trim() ?? "";
         string pass = PassBox.Text?.Trim() ?? "";
+
+        LogService.Write($"[CHAP_DIALOG] Aplicando CHAP para {_destino.Iqn} con usuario '{user}'");
 
         // --------------------------------------------------------------
         // 1) Guardar en el modelo (preferencia del usuario)
@@ -42,6 +54,8 @@ public partial class ChapDialog : Window
         // --------------------------------------------------------------
         // 2) Aplicar a iscsiadm (solo CHAP outgoing)
         // --------------------------------------------------------------
+        LogService.Debug("[CHAP_DIALOG] Actualizando CHAP en iscsiadm...");
+
         ShellHelper.EjecutarComoRoot(
             $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.authmethod --value=CHAP"
         );
@@ -57,6 +71,8 @@ public partial class ChapDialog : Window
         // --------------------------------------------------------------
         // 3) Refrescar estado CHAP real
         // --------------------------------------------------------------
+        LogService.Debug("[CHAP_DIALOG] Ejecutando detección CHAP...");
+
         var r = IscsiChapDetector.Detect(_destino);
 
         _destino.RequiresChap = r.RequiresChap;
@@ -73,6 +89,13 @@ public partial class ChapDialog : Window
         _destino.UsaChap = _destino.RequiresChap || _destino.HasLocalChapConfigured;
         _destino.UsaMutualChap = _destino.RequiresMutualChap || _destino.HasLocalMutualConfigured;
 
+        LogService.Write(
+            $"[CHAP_DIALOG] Resultado CHAP para {_destino.Iqn}: " +
+            $"Requires={_destino.RequiresChap}, Mutual={_destino.RequiresMutualChap}, " +
+            $"LocalCHAP={_destino.HasLocalChapConfigured}, LocalMutual={_destino.HasLocalMutualConfigured}"
+        );
+
+        LogService.Debug("[CHAP_DIALOG] Cerrando diálogo.");
         Close();
     }
 }

@@ -25,54 +25,67 @@ public static class ConfigManager
 
     public static void Load()
     {
+        LogService.Debug("[CONFIG] Load() iniciado.");
+
         try
         {
             if (!Directory.Exists(ConfigDir))
+            {
+                LogService.Debug($"[CONFIG] Creando carpeta de configuración: {ConfigDir}");
                 Directory.CreateDirectory(ConfigDir);
+            }
 
             if (!File.Exists(ConfigPath))
             {
+                LogService.Debug("[CONFIG] config.json no existe. Generando archivo nuevo...");
                 Save();
                 return;
             }
 
             var json = File.ReadAllText(ConfigPath);
 
-            // JSON vacío → regenerar
             if (string.IsNullOrWhiteSpace(json))
             {
+                LogService.Error("[CONFIG] config.json vacío. Regenerando...");
                 Save();
                 return;
             }
 
             var cfg = JsonSerializer.Deserialize<ConfigData>(json);
 
-            // JSON corrupto → regenerar
             if (cfg == null)
             {
+                LogService.Error("[CONFIG] config.json corrupto. Regenerando...");
                 Save();
                 return;
             }
 
-            // Asignar valores (con fallback si faltan)
             DefaultPermissions = cfg.DefaultPermissions;
             MountBasePath = cfg.MountBasePath ?? "/mnt/iscsi";
             LogPath = cfg.LogPath ?? LogPath;
             Verbose = cfg.Verbose;
 
-            // Asegurar carpeta de logs
+            LogService.Debug($"[CONFIG] Valores cargados: perms={DefaultPermissions}, mount={MountBasePath}, logs={LogPath}, verbose={Verbose}");
+
             if (!Directory.Exists(LogPath))
+            {
+                LogService.Debug($"[CONFIG] Creando carpeta de logs: {LogPath}");
                 Directory.CreateDirectory(LogPath);
+            }
+
+            LogService.Debug("[CONFIG] Load() completado.");
         }
-        catch
+        catch (Exception ex)
         {
-            // fallback seguro
+            LogService.Error($"[CONFIG] ERROR Load(): {ex.Message}");
             Save();
         }
     }
 
     public static void Save()
     {
+        LogService.Debug("[CONFIG] Save() iniciado.");
+
         var cfg = new ConfigData
         {
             DefaultPermissions = DefaultPermissions,
@@ -87,13 +100,21 @@ public static class ConfigManager
         });
 
         if (!Directory.Exists(ConfigDir))
+        {
+            LogService.Debug($"[CONFIG] Creando carpeta de configuración: {ConfigDir}");
             Directory.CreateDirectory(ConfigDir);
+        }
 
         File.WriteAllText(ConfigPath, json);
+        LogService.Debug($"[CONFIG] Archivo guardado en {ConfigPath}");
 
-        // Crear carpeta de logs si no existe
         if (!Directory.Exists(LogPath))
+        {
+            LogService.Debug($"[CONFIG] Creando carpeta de logs: {LogPath}");
             Directory.CreateDirectory(LogPath);
+        }
+
+        LogService.Debug("[CONFIG] Save() completado.");
     }
 
     private class ConfigData
