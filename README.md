@@ -69,7 +69,7 @@ makepkg -si
 
 ---
 
-## 🚀 Running iSCSI‑Util
+## Running iSCSI‑Util
 
 ### From source:
 ```bash
