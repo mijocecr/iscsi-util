@@ -53,17 +53,17 @@ iSCSI‑Util is available in the Arch User Repository.
 
 Install with yay:
 ```bash
-yay -S iscsi-util
+yay -S iscsi-util-bin
 ```
 Install with paru:
 ```bash
-paru -S iscsi-util
+paru -S iscsi-util-bin
 ```
 Manual AUR clone:
 
 ```bash
-git clone https://aur.archlinux.org/iscsi-util.git
-cd iscsi-util
+git clone https://aur.archlinux.org/iscsi-util-bin.git
+cd iscsi-util-bin
 makepkg -si
 ```
 
