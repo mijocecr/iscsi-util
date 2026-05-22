@@ -45,7 +45,7 @@
             <TextBlock x:Name="StatusBarText"
                        Text="Ready."
                        TextAlignment="Center"
-                       FontSize="13"
+                       FontSize="14"
                        Foreground="{DynamicResource SteamText}"
                        PointerPressed="OnTabStatusBarClick"
                        Opacity="0.85"/>

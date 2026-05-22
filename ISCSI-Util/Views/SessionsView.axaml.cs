@@ -108,8 +108,9 @@ public partial class SessionsView : UserControl
         {
             Text = d.Iqn,
             Classes = { "IqnList" },
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 260
+            TextAlignment = TextAlignment.Left,
+           // TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 380
         });
 
         panel.Children.Add(new TextBlock
