@@ -105,31 +105,6 @@ Each section is designed to guide the user through the required steps with clear
 
 ---
 
-## Project Structure
-
-The application follows a modular architecture that separates interface, logic, and data handling:
-
-- **Models** — Represent targets, sessions, authentication settings, and configuration data.  
-- **Helpers** — Execute system commands and interact with the underlying iSCSI tools.  
-- **Utils** — Handle file operations, JSON persistence, and path management.  
-- **Views** — Provide the graphical interface for each functional area.  
-
-
-This structure ensures maintainability and allows the project to grow in a controlled and predictable way.
-
----
-
-## Roadmap
-
-Future improvements may include:
-
-
-- Enhanced monitoring and real‑time status updates  
-- Additional tools for inspecting LUNs and storage properties  
-- Integration with other system administration utilities
-
----
-
 ## Contributing
 
 Contributions, suggestions, and issue reports are welcome.  
