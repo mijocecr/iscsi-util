@@ -1,5 +1,7 @@
 # iSCSI‑Util
 
+ISCSI -> (Internet Small Computer System Interface)
+
 iSCSI‑Util is a graphical application designed to simplify the management of iSCSI connections on Linux systems.  
 It provides a clear and accessible interface for discovering storage targets, establishing sessions, configuring authentication, and reviewing system activity, without requiring direct interaction with command‑line tools.
 
