@@ -109,9 +109,10 @@
                     <!-- TÍTULO -->
                     <TextBlock Grid.Row="0"
                                Text="Session Details"
+                               
                                FontSize="15"
                                FontWeight="Bold"
-                               HorizontalAlignment="Left"
+                               HorizontalAlignment="Center"
                                Foreground="{StaticResource SteamBlue}"/>
 
                     <!-- SEPARADOR -->

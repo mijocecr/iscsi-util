@@ -216,6 +216,7 @@ public partial class MainWindow : Window
         {
             Content = "OK",
             Width = 90,
+            HorizontalContentAlignment= Avalonia.Layout.HorizontalAlignment.Center,
             Classes = { "SteamButton" },
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
         };

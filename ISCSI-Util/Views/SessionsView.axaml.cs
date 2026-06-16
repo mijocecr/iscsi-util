@@ -29,6 +29,7 @@ public partial class SessionsView : UserControl
     // ============================================================
     //   CARGAR SESIONES + NODOS
     // ============================================================
+   
     public async Task CargarSesiones()
     {
         long id = ++_loadId;
@@ -48,9 +49,17 @@ public partial class SessionsView : UserControl
                 .Where(d => redesLocales.Any(r => d.Ip.StartsWith(r)))
                 .ToList();
 
-            // Marcar accesibilidad
+            // ------------------------------------------------------
+            // COMPLETAR INFORMACIÓN (LO QUE FALTABA)
+            // ------------------------------------------------------
             foreach (var d in _destinos)
+            {
                 d.EsAccesible = redesLocales.Any(r => d.Ip.StartsWith(r));
+
+                
+                await IscsiHelper.CompletarInformacionDestino(d, 0);
+                d.Persistir = IscsiHelper.DetectarPersistencia(d);
+            }
 
             // Mantener selección si existe
             if (_selected != null)
@@ -69,6 +78,7 @@ public partial class SessionsView : UserControl
         }
     }
 
+    
     // ============================================================
     //   PINTAR LISTA
     // ============================================================
@@ -159,8 +169,8 @@ public partial class SessionsView : UserControl
         AddDetail("Partition:", d.PartitionPath ?? "-");
         AddDetail("FS:", d.TieneFilesystem ? d.FsType : "RAW");
         AddDetail("Mount:", d.MountPoint ?? "-");
-        AddDetail("Vendor:", d.Vendor ?? "-");
-        AddDetail("Model:", d.Model ?? "-");
+       // AddDetail("Vendor:", d.Vendor ?? "-");
+       // AddDetail("Model:", d.Model ?? "-");
         AddDetail("Persist:", d.Persistir ? "Yes" : "No");
 
         // ============================
@@ -191,7 +201,7 @@ public partial class SessionsView : UserControl
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("110,190"),
+            ColumnDefinitions = new ColumnDefinitions("70,190"),
             Margin = new Thickness(0, 0, 0, 4)
         };
 
