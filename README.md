@@ -1,5 +1,7 @@
 # iSCSI‑Util
 
+ISCSI -> (Internet Small Computer System Interface)
+
 iSCSI‑Util is a graphical application designed to simplify the management of iSCSI connections on Linux systems.  
 It provides a clear and accessible interface for discovering storage targets, establishing sessions, configuring authentication, and reviewing system activity, without requiring direct interaction with command‑line tools.
 
@@ -94,38 +96,14 @@ To function correctly, iSCSI‑Util requires:
 
 iSCSI‑Util is organized into several sections, each focused on a specific aspect of iSCSI management:
 
+- **Status** —  Review system‑level information, iSCSI service state, and overall health.
 - **Targets** — Discover and review available iSCSI targets.  
 - **Sessions** — Monitor active connections and their status.  
 - **Configuration** — Manage authentication and advanced options.  
 - **Logs** — Inspect relevant system messages.  
-- **Disk Tools** — Initialize and prepare newly attached storage devices.
+
 
 Each section is designed to guide the user through the required steps with clear labels, structured layouts, and informative messages.
-
----
-
-## Project Structure
-
-The application follows a modular architecture that separates interface, logic, and data handling:
-
-- **Models** — Represent targets, sessions, authentication settings, and configuration data.  
-- **Helpers** — Execute system commands and interact with the underlying iSCSI tools.  
-- **Utils** — Handle file operations, JSON persistence, and path management.  
-- **Views** — Provide the graphical interface for each functional area.  
-- **ViewModels** — Connect the interface with the application logic.
-
-This structure ensures maintainability and allows the project to grow in a controlled and predictable way.
-
----
-
-## Roadmap
-
-Future improvements may include:
-
-
-- Enhanced monitoring and real‑time status updates  
-- Additional tools for inspecting LUNs and storage properties  
-- Integration with other system administration utilities
 
 ---
 
