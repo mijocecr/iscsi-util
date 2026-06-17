@@ -164,7 +164,7 @@ public partial class SessionsView : UserControl
 
         AddDetail("IQN:", d.Iqn, true);
         AddDetail("IP:", d.Ip);
-        AddDetail("Estado:", d.Conectado ? "Connected" : "Disconnected");
+        AddDetail("Status:", d.Conectado ? "Connected" : "Disconnected");
         AddDetail("Device:", d.DevicePath ?? "-");
         AddDetail("Partition:", d.PartitionPath ?? "-");
         AddDetail("FS:", d.TieneFilesystem ? d.FsType : "RAW");
