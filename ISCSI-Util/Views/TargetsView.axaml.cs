@@ -4,6 +4,7 @@ using Avalonia.Media.Imaging;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -183,8 +184,13 @@ public partial class TargetsView : UserControl
                 await Task.Run(async () =>
                 {
                     await IscsiHelper.CompletarInformacionDestino(destino, 0);
-                    destino.Persistir = IscsiHelper.DetectarPersistencia(destino);
+                    destino.Persistir = destino.Conectado &&
+                                        IscsiPersistenceManager.Detect(destino);
                 });
+            }
+            else
+            {
+                destino.Persistir = false;
             }
 
             destino.InfoCompleta = true;
@@ -320,6 +326,9 @@ public partial class TargetsView : UserControl
                         await IscsiHelper.Desconectar(destino);
                 }
 
+                destino.Persistir = destino.Conectado &&
+                                    IscsiPersistenceManager.Detect(destino);
+
                 await RefreshTargetsList();
                 await LoadTargetDetailsAsync(destino);
             };
@@ -327,10 +336,7 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(connectBtn);
         }
 
-        // ============================================================
-        // BOTÓN INIT (CORREGIDO)
-        // ============================================================
-
+        // INIT
         if (destino.InfoCompleta &&
             destino.Conectado &&
             !destino.TieneFilesystem &&
@@ -378,7 +384,8 @@ public partial class TargetsView : UserControl
                 await Task.Run(async () =>
                 {
                     await IscsiHelper.CompletarInformacionDestino(destino, 0);
-                    destino.Persistir = IscsiHelper.DetectarPersistencia(destino);
+                    destino.Persistir = destino.Conectado &&
+                                        IscsiPersistenceManager.Detect(destino);
                 });
             }
 
@@ -406,18 +413,26 @@ public partial class TargetsView : UserControl
         BtnHeaderUnmount.IsVisible = false;
         BtnHeaderOpen.IsVisible = false;
 
-        ChkPersistent.IsChecked = destino.Persistir;
+        // Persistencia solo si está conectado
+        ChkPersistent.IsEnabled = destino.Conectado;
+        ChkPersistent.IsChecked = destino.Conectado && destino.Persistir;
 
         ChkPersistent.Checked += async (_, _) =>
         {
+            if (!destino.Conectado)
+                return;
+
             destino.Persistir = true;
-            await IscsiHelper.AplicarPersistencia(destino);
+            await IscsiPersistenceManager.ApplyAsync(destino);
         };
 
         ChkPersistent.Unchecked += async (_, _) =>
         {
+            if (!destino.Conectado)
+                return;
+
             destino.Persistir = false;
-            await IscsiHelper.AplicarPersistencia(destino);
+            await IscsiPersistenceManager.RemoveAsync(destino);
         };
 
         var infoGrid = new Grid
