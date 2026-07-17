@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/ISCSI-Util.csproj": {}
+    "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj": {}
   },
   "projects": {
-    "/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/ISCSI-Util.csproj": {
+    "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/ISCSI-Util.csproj",
+        "projectUniqueName": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
         "projectName": "ISCSI-Util",
-        "projectPath": "/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/ISCSI-Util.csproj",
+        "projectPath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
         "packagesPath": "/home/miguel/.nuget/packages/",
-        "outputPath": "/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/obj/",
+        "outputPath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/home/miguel/.nuget/NuGet/NuGet.Config"
@@ -83,15 +83,11 @@
           "downloadDependencies": [
             {
               "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[9.0.16, 9.0.16]"
+              "version": "[9.0.18, 9.0.18]"
             },
             {
               "name": "Microsoft.NETCore.App.Host.linux-x64",
-              "version": "[9.0.16, 9.0.16]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Ref",
-              "version": "[9.0.16, 9.0.16]"
+              "version": "[9.0.18, 9.0.18]"
             }
           ],
           "frameworkReferences": {
@@ -99,7 +95,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.108/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.110/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
