@@ -245,8 +245,11 @@ public partial class TargetsView : UserControl
         var iqnText = new TextBlock
         {
             Cursor = new Cursor(StandardCursorType.Hand),
-            Text = destino.Iqn,
-            FontSize = 14,
+            //Text = destino.Iqn,
+            Text = destino.Iqn.Substring(destino.Iqn.LastIndexOf(':') + 1),
+TextAlignment = TextAlignment.Left,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 18,
             FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
