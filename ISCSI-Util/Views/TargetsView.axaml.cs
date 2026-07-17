@@ -417,23 +417,12 @@ public partial class TargetsView : UserControl
         ChkPersistent.IsEnabled = destino.Conectado;
         ChkPersistent.IsChecked = destino.Conectado && destino.Persistir;
 
-        ChkPersistent.Checked += async (_, _) =>
-        {
-            if (!destino.Conectado)
-                return;
+        // Evitar acumulación de handlers
+        ChkPersistent.Checked -= OnPersistentChecked;
+        ChkPersistent.Unchecked -= OnPersistentUnchecked;
 
-            destino.Persistir = true;
-            await IscsiPersistenceManager.ApplyAsync(destino);
-        };
-
-        ChkPersistent.Unchecked += async (_, _) =>
-        {
-            if (!destino.Conectado)
-                return;
-
-            destino.Persistir = false;
-            await IscsiPersistenceManager.RemoveAsync(destino);
-        };
+        ChkPersistent.Checked += OnPersistentChecked;
+        ChkPersistent.Unchecked += OnPersistentUnchecked;
 
         var infoGrid = new Grid
         {
@@ -488,6 +477,28 @@ public partial class TargetsView : UserControl
             destino.Conectado &&
             !string.IsNullOrWhiteSpace(destino.MountPoint) &&
             Directory.Exists(destino.MountPoint);
+    }
+
+    // ============================================================
+    // HANDLERS DE PERSISTENCIA
+    // ============================================================
+
+    private async void OnPersistentChecked(object? sender, RoutedEventArgs e)
+    {
+        if (_selected == null || !_selected.Conectado)
+            return;
+
+        _selected.Persistir = true;
+        await IscsiPersistenceManager.ApplyAsync(_selected);
+    }
+
+    private async void OnPersistentUnchecked(object? sender, RoutedEventArgs e)
+    {
+        if (_selected == null || !_selected.Conectado)
+            return;
+
+        _selected.Persistir = false;
+        await IscsiPersistenceManager.RemoveAsync(_selected);
     }
 
     // ============================================================
