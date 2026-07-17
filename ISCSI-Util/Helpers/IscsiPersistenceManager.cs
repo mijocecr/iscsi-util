@@ -294,17 +294,17 @@ public static class IscsiPersistenceManager
     }
 
     private static async Task CrearScriptYServicio(IscsiDestino d, string portal, long id)
-    {
-        LogService.Debug($"[PERSIST] #{id} CrearScriptYServicio → {d.Iqn}");
+{
+    LogService.Debug($"[PERSIST] #{id} CrearScriptYServicio → {d.Iqn}");
 
-        string safe = SystemdSafe(d.Iqn);
+    string safe = SystemdSafe(d.Iqn);
 
-        string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
-        string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
+    string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
+    string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
-        LogService.Debug($"[PERSIST] #{id} script={scriptPath}, service={servicePath}");
+    LogService.Debug($"[PERSIST] #{id} script={scriptPath}, service={servicePath}");
 
-        string scriptContent =
+    string scriptContent =
 $@"#!/bin/bash
 TARGET=""{d.Iqn}""
 PORTAL=""{portal}""
@@ -335,43 +335,43 @@ mount -a -O _netdev
 exit 0
 ";
 
-        File.WriteAllText("/tmp/tmp_script.sh", scriptContent);
-        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_script.sh {scriptPath}");
-        ShellHelper.EjecutarComoRoot($"chmod 755 {scriptPath}");
-        ShellHelper.EjecutarComoRoot($"chown root:root {scriptPath}");
+    File.WriteAllText("/tmp/tmp_script.sh", scriptContent);
+    ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_script.sh {scriptPath}");
+    ShellHelper.EjecutarComoRoot($"chmod 755 {scriptPath}");
+    ShellHelper.EjecutarComoRoot($"chown root:root {scriptPath}");
 
-        string serviceContent =
+    // ============================================================
+    // UNIT FILE CORREGIDO (NO BLOQUEA EL ARRANQUE)
+    // ============================================================
+
+    string serviceContent =
 $@"[Unit]
 Description=Connect iSCSI target and mount {d.Iqn}
-After=network-online.target NetworkManager-wait-online.service iscsid.service iscsi.service remote-fs.target
-Requires=network-online.target NetworkManager-wait-online.service iscsid.service iscsi.service
-Before=remote-fs-pre.target
-Wants=remote-fs-pre.target
+Wants=network-online.target iscsid.service iscsi.service
+After=network-online.target iscsid.service iscsi.service
 
 [Service]
 Type=oneshot
 ExecStart={scriptPath}
 RemainAfterExit=yes
-Restart=on-failure
-RestartSec=5
-TimeoutSec=60
+TimeoutSec=30
 
 [Install]
 WantedBy=multi-user.target
 ";
 
-        File.WriteAllText("/tmp/tmp_service.service", serviceContent);
-        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_service.service {servicePath}");
-        ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
-        ShellHelper.EjecutarComoRoot($"chown root:root {servicePath}");
+    File.WriteAllText("/tmp/tmp_service.service", serviceContent);
+    ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_service.service {servicePath}");
+    ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
+    ShellHelper.EjecutarComoRoot($"chown root:root {servicePath}");
 
-        // Opcional: validar sintaxis
-        ShellHelper.EjecutarComoRoot($"systemd-analyze verify {servicePath}");
+    ShellHelper.EjecutarComoRoot($"systemd-analyze verify {servicePath}");
 
-        LogService.Debug($"[PERSIST] #{id} Script y servicio creados.");
-        await Task.CompletedTask;
-    }
+    LogService.Debug($"[PERSIST] #{id} Script y servicio creados.");
+    await Task.CompletedTask;
+}
 
+  
     private static void FixCachyOSPresets(long id)
     {
         LogService.Debug($"[PERSIST] #{id} Aplicando FIX de presets para CachyOS...");
