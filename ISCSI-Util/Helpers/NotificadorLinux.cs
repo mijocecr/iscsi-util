@@ -6,11 +6,15 @@ namespace ISCSI_Util.Helpers;
 
 /// <summary>
 /// Sends desktop notifications to Linux using notify-send.
+/// Includes anti-spam protection to avoid D-Bus saturation.
 /// Supports duration, urgency, and icons.
 /// Falls back to console output if notify-send is not available.
 /// </summary>
 public static class NotificadorLinux
 {
+    private static string _lastMessage = "";
+    private static DateTime _lastTime = DateTime.MinValue;
+
     /// <summary>
     /// Sends a desktop notification.
     /// </summary>
@@ -26,6 +30,21 @@ public static class NotificadorLinux
     {
         try
         {
+            // ============================================================
+            // ANTI-SPAM: evitar notificaciones idénticas en < 1 segundo
+            // ============================================================
+            if (mensaje == _lastMessage &&
+                (DateTime.Now - _lastTime).TotalMilliseconds < 1000)
+            {
+                return;
+            }
+
+            _lastMessage = mensaje;
+            _lastTime = DateTime.Now;
+
+            // ============================================================
+            // Verificar notify-send
+            // ============================================================
             if (!NotifySendDisponible())
             {
                 Console.WriteLine($"[NOTIFICACIÓN] {mensaje}");

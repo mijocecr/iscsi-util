@@ -13,8 +13,11 @@ public static class ConfigManager
     private static readonly string ConfigPath =
         Path.Combine(ConfigDir, "config.json");
 
-    public static int DefaultPermissions { get; set; } = 755;
-    public static string MountBasePath { get; set; } = "/mnt/iscsi";
+    public static int DefaultPermissions { get; set; } = 777;
+    
+    public static string MountBasePath { get; set; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".mnt", "iscsi");
+
 
     // Ruta por defecto: ~/.local/share/iscsi-util/logs
     public static string LogPath { get; set; } =
