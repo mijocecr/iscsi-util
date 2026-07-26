@@ -414,6 +414,52 @@ WantedBy=multi-user.target
     // Reutiliza tu helper existente
     private static string SystemdSafe(string s)
         => IscsiHelper.SanitizarNombre(s);
+    
+    
+
+    public static bool DetectFstab(IscsiDestino d)
+    {
+        try
+        {
+            if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+                return false;
+
+            // Partimos del IQN y lo convertimos al formato que aparece en las rutas de fstab
+            // Ej: iqn.2013-03.com.wdc:mycloudex2ultra:mjcc
+            // → iqn_2013_03_com_wdc_mycloudex2ultra_mjcc
+            string token = IscsiHelper.SanitizarNombre(d.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
+
+            var lines = File.ReadAllLines("/etc/fstab");
+
+            foreach (var raw in lines)
+            {
+                string line = raw.Trim();
+
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    continue;
+
+                if (line.Contains(token, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+
+
+
+
+
+
+
+    
 }
 
 //------
