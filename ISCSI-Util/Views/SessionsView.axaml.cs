@@ -119,6 +119,7 @@ public partial class SessionsView : UserControl
 
         var panel = new StackPanel { Spacing = 2 };
 
+        // IQN
         panel.Children.Add(new TextBlock
         {
             Text = d.Iqn,
@@ -128,6 +129,7 @@ public partial class SessionsView : UserControl
             MaxWidth = 380
         });
 
+        // Portal real
         panel.Children.Add(new TextBlock
         {
             Text = d.PortalReal ?? d.Ip,
@@ -135,17 +137,15 @@ public partial class SessionsView : UserControl
             FontSize = 12
         });
 
-        string fs = d.TieneFilesystem ? d.FsType : "RAW";
-        string mpPersistente = ObtenerMountpointPersistente(d);
-
-        string mpMostrar =
-            d.Persistir
-                ? mpPersistente
-                : (!string.IsNullOrWhiteSpace(d.MountPoint) ? d.MountPoint : "(no mount)");
+        // FS + mount runtime
+        string fs = d.Conectado && d.TieneFilesystem ? d.FsType : "RAW";
+        string mpRuntime = d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint)
+            ? d.MountPoint!
+            : "(no mount)";
 
         panel.Children.Add(new TextBlock
         {
-            Text = $"{fs} | {mpMostrar}",
+            Text = $"{fs} | {mpRuntime}",
             Foreground = (IBrush)Resources["SteamBlue"]!,
             FontSize = 12
         });
@@ -168,69 +168,62 @@ public partial class SessionsView : UserControl
     // ============================================================
 
     private void PintarDetalles(IscsiDestino d)
-{
-    if (!_destinos.Contains(d))
-        return;
-
-    DetailsPanel.Children.Clear();
-
-    // 1) Identidad y estado
-    AddDetail("IQN:", d.Iqn, true);
-    AddDetail("IP:", d.PortalReal ?? d.Ip);
-    AddDetail("Status:", d.Conectado ? "Connected" : "Disconnected");
-
-    // 2) Device / Partition / FS (solo si está conectado y detectado)
-    AddDetail("Device:", d.Conectado && !string.IsNullOrWhiteSpace(d.DevicePath) ? d.DevicePath! : "-");
-    AddDetail("Partition:", d.Conectado && !string.IsNullOrWhiteSpace(d.PartitionPath) ? d.PartitionPath! : "-");
-    AddDetail("FS:", d.Conectado && d.TieneFilesystem ? d.FsType : "RAW");
-
-    // 3) Mount runtime (lo que está montado ahora)
-    string mpRuntime = !string.IsNullOrWhiteSpace(d.MountPoint) ? d.MountPoint! : "-";
-    AddDetail("Mount (runtime):", mpRuntime);
-
-    // 4) Mount persistente (lo que debería usarse si hay persistencia)
-    string mpPersistente = ObtenerMountpointPersistente(d);
-    string mpPersistShow = d.Persistir ? mpPersistente : "-";
-    AddDetail("Mount (persistent):", mpPersistShow);
-
-    // 5) Persistencia
-    AddDetail("Persist:", d.Persistir ? "Yes" : "No");
-
-    // 6) Botón Open: solo abre lo que REALMENTE existe
-    string mpAbrir = null;
-
-    if (d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint) && Directory.Exists(d.MountPoint))
-        mpAbrir = d.MountPoint;
-    else if (d.Persistir && Directory.Exists(mpPersistente))
-        mpAbrir = mpPersistente;
-
-    BtnOpen.IsEnabled = !string.IsNullOrWhiteSpace(mpAbrir);
-    BtnOpen.Click -= OnOpen;
-    BtnOpen.Click += (_, _) =>
     {
-        if (string.IsNullOrWhiteSpace(mpAbrir))
+        if (!_destinos.Contains(d))
             return;
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = mpAbrir,
-            UseShellExecute = true
-        });
-    };
+        DetailsPanel.Children.Clear();
 
-    // 7) Botón Mount / Unmount
-    BtnMount.IsEnabled = d.EsAccesible;
-    BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
-    BtnMount.Click -= OnMount;
-    BtnMount.Click += OnMount;
-}
+        // Sesión
+        AddDetail("IQN:", d.Iqn, true);
+        AddDetail("Portal:", d.PortalReal ?? d.Ip);
+        AddDetail("Status:", d.Conectado ? "Connected" : "Disconnected");
 
+        // Disco
+        AddDetail("Device:", d.Conectado && !string.IsNullOrWhiteSpace(d.DevicePath) ? d.DevicePath! : "-");
+        AddDetail("Partition:", d.Conectado && !string.IsNullOrWhiteSpace(d.PartitionPath) ? d.PartitionPath! : "-");
+        AddDetail("FS:", d.Conectado && d.TieneFilesystem ? d.FsType : "RAW");
+
+        // Mount runtime
+        string mpRuntime = d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint)
+            ? d.MountPoint!
+            : "-";
+        AddDetail("Mount (runtime):", mpRuntime);
+
+        // Mount persistente
+        string mpPersistente = ObtenerMountpointPersistente(d);
+        string mpPersistShow = d.Persistir ? mpPersistente : "-";
+        AddDetail("Mount (persistent):", mpPersistShow);
+
+        // Persistencia
+        AddDetail("Persist:", d.Persistir ? "Yes" : "No");
+
+        // Botón Open
+        string mpAbrir = null;
+
+        if (d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint) && Directory.Exists(d.MountPoint))
+            mpAbrir = d.MountPoint;
+        else if (d.Persistir && Directory.Exists(mpPersistente))
+            mpAbrir = mpPersistente;
+
+        BtnOpen.IsEnabled = !string.IsNullOrWhiteSpace(mpAbrir);
+
+        BtnOpen.Click -= OnOpen;
+        BtnOpen.Click += OnOpen;
+
+        // Botón Mount / Unmount
+        BtnMount.IsEnabled = d.EsAccesible;
+        BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
+
+        BtnMount.Click -= OnMount;
+        BtnMount.Click += OnMount;
+    }
 
     private void AddDetail(string label, string value, bool wrap = false)
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("70,190"),
+            ColumnDefinitions = new ColumnDefinitions("110,190"),
             Margin = new Thickness(0, 0, 0, 4)
         };
 
@@ -244,7 +237,7 @@ public partial class SessionsView : UserControl
         {
             Text = value,
             Classes = { "DetailValue" },
-            TextWrapping = TextWrapping.Wrap,
+            TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
             MaxWidth = 190
         };
 
@@ -277,24 +270,28 @@ public partial class SessionsView : UserControl
         await CargarSesiones();
     }
 
-    private void OnOpen(object? s, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnOpen(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_selected == null)
             return;
 
-        string mpAbrir =
-            _selected.Persistir
-                ? ObtenerMountpointPersistente(_selected)
-                : _selected.MountPoint;
+        string mpPersistente = ObtenerMountpointPersistente(_selected);
 
-        if (!string.IsNullOrWhiteSpace(mpAbrir) &&
-            Directory.Exists(mpAbrir))
+        string mpAbrir =
+            _selected.Conectado && !string.IsNullOrWhiteSpace(_selected.MountPoint)
+                ? _selected.MountPoint
+                : (_selected.Persistir ? mpPersistente : null);
+
+        if (string.IsNullOrWhiteSpace(mpAbrir))
+            return;
+
+        if (!Directory.Exists(mpAbrir))
+            return;
+
+        Process.Start(new ProcessStartInfo
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = mpAbrir,
-                UseShellExecute = true
-            });
-        }
+            FileName = mpAbrir,
+            UseShellExecute = true
+        });
     }
 }

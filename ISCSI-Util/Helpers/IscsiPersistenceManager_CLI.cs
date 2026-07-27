@@ -68,11 +68,12 @@ public static class IscsiPersistenceManager_CLI
 
         string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
+        // ⭐ FIX: evitar contraseña al iniciar sesión
         string unit = $@"
 [Unit]
 Description=iSCSI persistent mount for {d.Iqn}
-After=network-online.target iscsid.service
-Requires=network-online.target
+After=network-online.target iscsid.service iscsi.service
+Requires=network-online.target iscsid.service iscsi.service
 
 [Service]
 Type=oneshot

@@ -39,7 +39,6 @@ public static class IscsiPersistenceManager
         string safe = Safe(d.Iqn);
         string mp = Path.Combine(ConfigManager.MountBasePath, safe);
 
-        // FSTAB
         try
         {
             if (File.Exists("/etc/fstab"))
@@ -54,7 +53,6 @@ public static class IscsiPersistenceManager
         }
         catch { }
 
-        // SYSTEMD
         string service = $"/etc/systemd/system/iscsi-{safe}.service";
         if (File.Exists(service))
         {
@@ -86,35 +84,32 @@ public static class IscsiPersistenceManager
             string safe = Safe(d.Iqn);
             string mp = Path.Combine(ConfigManager.MountBasePath, safe);
 
-            // Crear directorio persistente
             if (!Directory.Exists(mp))
             {
                 Directory.CreateDirectory(mp);
                 ShellHelper.EjecutarComoRoot($"chmod {ConfigManager.DefaultPermissions} \"{mp}\"");
             }
 
-            // Obtener UUID
             var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
             string uuid = ExtraerUUID(blkid.Stdout);
 
             if (string.IsNullOrWhiteSpace(uuid))
                 throw new Exception("No UUID detected.");
 
-            // FSTAB
             string fs = d.FsType == "ntfs" ? "ntfs-3g" : d.FsType;
             string entry = $"UUID={uuid} {mp} {fs} defaults,_netdev 0 0";
 
             ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
             ShellHelper.EjecutarComoRoot($"bash -c \"echo '{entry}' >> /etc/fstab\"");
 
-            // SYSTEMD UNIT
             string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
+            // ⭐ ACTUALIZACIÓN: dependencias correctas para evitar contraseña
             string unit = $@"
 [Unit]
 Description=iSCSI persistent mount for {d.Iqn}
-After=network-online.target iscsid.service
-Requires=network-online.target
+After=network-online.target iscsid.service iscsi.service
+Requires=network-online.target iscsid.service iscsi.service
 
 [Service]
 Type=oneshot
@@ -162,10 +157,8 @@ WantedBy=multi-user.target
             string safe = Safe(d.Iqn);
             string mp = Path.Combine(ConfigManager.MountBasePath, safe);
 
-            // FSTAB
             ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
 
-            // SYSTEMD
             string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
             if (File.Exists(servicePath))
@@ -189,9 +182,6 @@ WantedBy=multi-user.target
         await Task.CompletedTask;
     }
 
-    // ============================================================
-    // EXTRAER UUID
-    // ============================================================
     private static string ExtraerUUID(string blkidOut)
     {
         if (string.IsNullOrWhiteSpace(blkidOut))
