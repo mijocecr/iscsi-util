@@ -68,7 +68,7 @@ public static class IscsiPersistenceManager_CLI
 
         string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
-        // ⭐ FIX: evitar contraseña al iniciar sesión
+        // ⭐ LOGIN AUTOMÁTICO + MOUNT PERSISTENTE
         string unit = $@"
 [Unit]
 Description=iSCSI persistent mount for {d.Iqn}
@@ -77,6 +77,7 @@ Requires=network-online.target iscsid.service iscsi.service
 
 [Service]
 Type=oneshot
+ExecStartPre=/usr/bin/iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --login
 ExecStart=/usr/bin/mount {mp}
 RemainAfterExit=yes
 
@@ -99,6 +100,7 @@ WantedBy=multi-user.target
     // ============================================================
     // REMOVE
     // ============================================================
+   
     public static async Task RemoveAsync(IscsiDestino d)
     {
         if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
@@ -107,8 +109,10 @@ WantedBy=multi-user.target
         string safe = Safe(d.Iqn);
         string mp = Path.Combine(ConfigManager.MountBasePath, safe);
 
+        // 1) Eliminar entrada fstab
         ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
 
+        // 2) Eliminar servicio systemd
         string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
         if (File.Exists(servicePath))
@@ -119,10 +123,26 @@ WantedBy=multi-user.target
 
         ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
+        // ⭐ 3) LOGOUT COMPLETO
+        ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --logout"
+        );
+
+        // ⭐ 4) ELIMINAR NODO
+        ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --op delete"
+        );
+
+        // ⭐ 5) ELIMINAR REGISTRO DE DISCOVERY
+        ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m discovery -t sendtargets -p {d.PortalReal} --op delete"
+        );
+
         d.Persistir = false;
 
         await Task.CompletedTask;
     }
+
 
     private static string ExtraerUUID(string blkidOut)
     {

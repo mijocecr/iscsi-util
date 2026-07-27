@@ -25,12 +25,11 @@ public static class IscsiPersistenceManager
     }
 
     // ============================================================
-    // DETECTAR PERSISTENCIA (fstab + systemd)
+    // DETECTAR PERSISTENCIA
     // ============================================================
     public static bool Detect(IscsiDestino d)
     {
         long id = NextTraceId();
-
         if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
             return false;
 
@@ -65,12 +64,11 @@ public static class IscsiPersistenceManager
     }
 
     // ============================================================
-    // APPLY PERSISTENCE (fstab + systemd)
+    // APPLY PERSISTENCE
     // ============================================================
     public static async Task ApplyAsync(IscsiDestino d)
     {
         long id = NextTraceId();
-
         if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
         {
             LogService.Error($"[PERSIST] #{id} Destino inválido.");
@@ -104,7 +102,7 @@ public static class IscsiPersistenceManager
 
             string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
-            // ⭐ ACTUALIZACIÓN: dependencias correctas para evitar contraseña
+            // ⭐ LOGIN AUTOMÁTICO + MOUNT PERSISTENTE
             string unit = $@"
 [Unit]
 Description=iSCSI persistent mount for {d.Iqn}
@@ -113,6 +111,7 @@ Requires=network-online.target iscsid.service iscsi.service
 
 [Service]
 Type=oneshot
+ExecStartPre=/usr/bin/iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --login
 ExecStart=/usr/bin/mount {mp}
 RemainAfterExit=yes
 
@@ -141,12 +140,12 @@ WantedBy=multi-user.target
     }
 
     // ============================================================
-    // REMOVE PERSISTENCE
+    // REMOVE PERSISTENCIA (VERSIÓN FINAL)
     // ============================================================
+    
     public static async Task RemoveAsync(IscsiDestino d)
     {
         long id = NextTraceId();
-
         if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
             return;
 
@@ -157,8 +156,10 @@ WantedBy=multi-user.target
             string safe = Safe(d.Iqn);
             string mp = Path.Combine(ConfigManager.MountBasePath, safe);
 
+            // 1) Eliminar entrada fstab
             ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
 
+            // 2) Eliminar servicio systemd
             string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
             if (File.Exists(servicePath))
@@ -168,6 +169,21 @@ WantedBy=multi-user.target
             }
 
             ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
+
+            // ⭐ 3) LOGOUT COMPLETO
+            ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --logout"
+            );
+
+            // ⭐ 4) ELIMINAR NODO
+            ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --op delete"
+            );
+
+            // ⭐ 5) ELIMINAR REGISTRO DE DISCOVERY
+            ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m discovery -t sendtargets -p {d.PortalReal} --op delete"
+            );
 
             d.Persistir = false;
 
@@ -181,6 +197,7 @@ WantedBy=multi-user.target
 
         await Task.CompletedTask;
     }
+
 
     private static string ExtraerUUID(string blkidOut)
     {
