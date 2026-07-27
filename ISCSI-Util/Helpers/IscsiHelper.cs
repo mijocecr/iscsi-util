@@ -426,7 +426,51 @@ public static async Task CompletarInformacionDestino(IscsiDestino d, long parent
     }
 }
 
-    
+public static async Task ConectarSesion(SessionInfo s)
+{
+    if (s == null)
+        return;
+
+    // LOGIN
+    var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --login";
+    var res = ShellHelper.EjecutarComoRoot(cmd);
+
+    if (res.ExitCode == 0)
+    {
+        s.Connected = true;
+        s.ConnectedSince = DateTime.Now;
+    }
+    else
+    {
+        LogService.Error($"[ISCSI] Error al conectar sesión {s.Iqn}: {res.Stderr}");
+    }
+
+    await Task.CompletedTask;
+}
+
+
+public static async Task DesconectarSesion(SessionInfo s)
+{
+    if (s == null)
+        return;
+
+    // LOGOUT
+    var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --logout";
+    var res = ShellHelper.EjecutarComoRoot(cmd);
+
+    if (res.ExitCode == 0)
+    {
+        s.Connected = false;
+        s.MountPoint = "";
+    }
+    else
+    {
+        LogService.Error($"[ISCSI] Error al desconectar sesión {s.Iqn}: {res.Stderr}");
+    }
+
+    await Task.CompletedTask;
+}
+
     
     
 /*

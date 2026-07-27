@@ -83,7 +83,7 @@
     ============================================================ -->
     <Grid RowDefinitions="*,*" Margin="15" RowSpacing="6">
 
-        <!-- LISTA DE SESIONES -->
+        <!-- LISTA DE SESIONES REALES -->
         <Border Classes="SteamCard" Padding="6">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="SessionsList"
@@ -92,7 +92,7 @@
             </ScrollViewer>
         </Border>
 
-        <!-- PANEL DE DETALLES -->
+        <!-- PANEL DE DETALLES DE SESIÓN -->
         <Border Grid.Row="1"
                 Classes="SteamCard"
                 Padding="10">
@@ -109,7 +109,6 @@
                     <!-- TÍTULO -->
                     <TextBlock Grid.Row="0"
                                Text="Session Details"
-                               
                                FontSize="15"
                                FontWeight="Bold"
                                HorizontalAlignment="Center"
@@ -122,7 +121,7 @@
                                Opacity="0.35"
                                Margin="0,0,0,2"/>
 
-                    <!-- DETALLES (compactado) -->
+                    <!-- DETALLES -->
                     <ScrollViewer Grid.Row="2"
                                   VerticalScrollBarVisibility="Auto"
                                   Margin="0,0,0,0">
@@ -143,12 +142,12 @@
                     <Button x:Name="BtnOpen"
                             Content="Open"
                             Classes="SteamButton"
-                            Width="80"/>
+                            Width="95"/>
 
                     <Button x:Name="BtnMount"
-                            Content="Mount"
+                            Content="Connect"
                             Classes="SteamButton"
-                            Width="80"/>
+                            Width="95"/>
 
                 </StackPanel>
 

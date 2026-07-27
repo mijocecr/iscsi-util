@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ISCSI-Util")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d5cc5699e40d890511778a77d9d6e7b6842ad603")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d5f6e4b9c558b9462ce733fa83edc5ce42acd0c8")]
 [assembly: System.Reflection.AssemblyProductAttribute("ISCSI-Util")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ISCSI-Util")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -580,6 +580,12 @@ namespace ISCSI_Util.Helpers
                 string iqn = partes.LastOrDefault(p => p.StartsWith("iqn."));
                 if (iqn == null) continue;
 
+                // Ejemplo línea:
+                // tcp: [6] 192.168.10.20:3260,1 iqn.2013-03.com.wdc:mycloudex2ultra:mjcc (non-flash)
+                //
+                // partes[2] = "192.168.10.20:3260,1"
+                // portal = "192.168.10.20:3260"
+
                 string portal = partes[2].Trim().Split(',')[0];
 
                 lista.Add(new IscsiDestino

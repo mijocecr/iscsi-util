@@ -6,19 +6,17 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
-using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
+using ISCSI_Util.Helpers;
 using ISCSI_Util.Services;
-using System.IO;
-using System.Linq;
 
 namespace ISCSI_Util.Views;
 
 public partial class SessionsView : UserControl
 {
     private static long _loadId;
-    private List<IscsiDestino> _destinos = new();
-    private IscsiDestino? _selected;
+    private List<SessionInfo> _sesiones = new();
+    private SessionInfo? _selected;
 
     public SessionsView()
     {
@@ -27,20 +25,7 @@ public partial class SessionsView : UserControl
     }
 
     // ============================================================
-    //   HELPER: MOUNTPOINT PERSISTENTE
-    // ============================================================
-
-    private string ObtenerMountpointPersistente(IscsiDestino d)
-    {
-        string safe = IscsiHelper.SanitizarNombre(d.Iqn)
-            .Replace('.', '_')
-            .Replace('-', '_');
-
-        return Path.Combine(ConfigManager.MountBasePath, safe);
-    }
-
-    // ============================================================
-    //   CARGAR SESIONES + NODOS
+    //   CARGAR SESIONES REALES
     // ============================================================
 
     public async Task CargarSesiones()
@@ -50,25 +35,14 @@ public partial class SessionsView : UserControl
 
         try
         {
-            var nuevos = await IscsiSessions.ObtenerVistaGlobal();
-            _destinos = nuevos ?? new List<IscsiDestino>();
+            var nuevas = await IscsiSessions.ObtenerVistaGlobal(); // ahora devuelve SessionInfo
+            _sesiones = nuevas ?? new List<SessionInfo>();
 
-            var redesLocales = NetworkHelper.ObtenerRedesLocales();
-
-            _destinos = _destinos
-                .Where(d => redesLocales.Any(r => d.Ip.StartsWith(r)))
-                .ToList();
-
-            foreach (var d in _destinos)
-            {
-                d.EsAccesible = redesLocales.Any(r => d.Ip.StartsWith(r));
-
-                await IscsiHelper.CompletarInformacionDestino(d, id);
-                d.Persistir = IscsiHelper.DetectarPersistencia(d);
-            }
-
+            // Mantener selección previa
             if (_selected != null)
-                _selected = _destinos.Find(x => x.Iqn == _selected.Iqn && x.Ip == _selected.Ip);
+                _selected = _sesiones.Find(x => x.Iqn == _selected.Iqn &&
+                                                x.Portal == _selected.Portal &&
+                                                x.LunId == _selected.LunId);
 
             PintarLista();
 
@@ -78,7 +52,7 @@ public partial class SessionsView : UserControl
         catch (Exception ex)
         {
             Console.WriteLine($"[SESSIONS] ERROR: {ex.Message}");
-            _destinos.Clear();
+            _sesiones.Clear();
             PintarLista();
         }
     }
@@ -91,154 +65,231 @@ public partial class SessionsView : UserControl
     {
         SessionsList.Children.Clear();
 
-        foreach (var d in _destinos)
+        foreach (var s in _sesiones)
         {
-            var card = CrearTarjeta(d);
+            var card = CrearTarjeta(s);
 
-            if (_selected == d)
+            if (_selected == s)
                 card.BorderBrush = Brushes.Gold;
 
             SessionsList.Children.Add(card);
         }
     }
+    
+   private Border CrearTarjeta(SessionInfo s)
+{
+    // ============================================================
+    // 1. Preparar datos
+    // ============================================================
 
-    private Border CrearTarjeta(IscsiDestino d)
+    string fs = string.IsNullOrWhiteSpace(s.Filesystem) ? "RAW" : s.Filesystem;
+    string mp = string.IsNullOrWhiteSpace(s.MountPoint) ? "(no mount)" : s.MountPoint;
+
+    // Título principal = nombre del destino (IQN)
+    string titulo = s.Iqn;
+
+    // ============================================================
+    // 2. Tarjeta Steam
+    // ============================================================
+
+    var border = new Border
     {
-        var border = new Border
-        {
-            Cursor = new Cursor(StandardCursorType.Hand),
-            Classes = { "SteamCard" },
-            BorderBrush = d.Conectado
-                ? (IBrush)Resources["SteamGreen"]!
-                : (IBrush)Resources["SteamBlue"]!,
-            BorderThickness = new Thickness(2),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(8),
-            Margin = new Thickness(0, 0, 0, 6)
-        };
+        Cursor = new Cursor(StandardCursorType.Hand),
+        Classes = { "SteamCard" },
+        BorderBrush = s.Connected
+            ? (IBrush)Resources["SteamGreen"]!
+            : (IBrush)Resources["SteamBlue"]!,
+        BorderThickness = new Thickness(2),
+        CornerRadius = new CornerRadius(8),
+        Padding = new Thickness(12),
+        Margin = new Thickness(0, 0, 0, 10)
+    };
 
-        var panel = new StackPanel { Spacing = 2 };
+    var panel = new StackPanel { Spacing = 6 };
 
-        // IQN
-        panel.Children.Add(new TextBlock
-        {
-            Text = d.Iqn,
-            Classes = { "IqnList" },
-            TextAlignment = TextAlignment.Left,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 380
-        });
+    // ============================================================
+    // 3. Título (destino / IQN)
+    // ============================================================
 
-        // Portal real
-        panel.Children.Add(new TextBlock
-        {
-            Text = d.PortalReal ?? d.Ip,
-            Foreground = Brushes.WhiteSmoke,
-            FontSize = 12
-        });
+    panel.Children.Add(new TextBlock
+    {
+        Text = titulo,
+        FontSize = 16,
+        FontWeight = FontWeight.Bold,
+        Foreground = (IBrush)Resources["SteamBlue"]!,
+        TextWrapping = TextWrapping.Wrap,
+        MaxWidth = 380
+    });
 
-        // FS + mount runtime
-        string fs = d.Conectado && d.TieneFilesystem ? d.FsType : "RAW";
-        string mpRuntime = d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint)
-            ? d.MountPoint!
-            : "(no mount)";
+    // ============================================================
+    // 4. FS + mount (línea secundaria)
+    // ============================================================
 
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"{fs} | {mpRuntime}",
-            Foreground = (IBrush)Resources["SteamBlue"]!,
-            FontSize = 12
-        });
+    panel.Children.Add(new TextBlock
+    {
+        Text = $"{fs} | {mp}",
+        Foreground = (IBrush)Resources["SteamGreen"]!,
+        FontSize = 10,
+        TextWrapping = TextWrapping.Wrap
+    });
 
-        border.Child = panel;
+    // ============================================================
+    // 5. Portal
+    // ============================================================
 
-        border.PointerPressed += (_, _) =>
-        {
-            _selected = _destinos.Find(x => x.Iqn == d.Iqn && x.Ip == d.Ip);
-            PintarLista();
-            if (_selected != null)
-                PintarDetalles(_selected);
-        };
+    panel.Children.Add(new TextBlock
+    {
+        Text = s.Portal,
+        Foreground = Brushes.Gray,
+        FontSize = 12,
+        TextWrapping = TextWrapping.Wrap
+    });
 
-        return border;
-    }
+    // ============================================================
+    // 6. LUN
+    // ============================================================
 
+    panel.Children.Add(new TextBlock
+    {
+        Text = $"LUN {s.LunId}",
+        Foreground = Brushes.LightGray,
+        FontSize = 12
+    });
+
+    border.Child = panel;
+
+    // ============================================================
+    // 7. Selección
+    // ============================================================
+
+    border.PointerPressed += (_, _) =>
+    {
+        _selected = _sesiones.Find(x =>
+            x.Iqn == s.Iqn &&
+            x.Portal == s.Portal &&
+            x.LunId == s.LunId);
+
+        PintarLista();
+        if (_selected != null)
+            PintarDetalles(_selected);
+    };
+
+    return border;
+}
+
+
+   
     // ============================================================
     //   PINTAR DETALLES
     // ============================================================
 
-    private void PintarDetalles(IscsiDestino d)
+    private void PintarDetalles(SessionInfo s)
     {
-        if (!_destinos.Contains(d))
+        if (s == null)
             return;
 
         DetailsPanel.Children.Clear();
 
-        // Sesión
-        AddDetail("IQN:", d.Iqn, true);
-        AddDetail("Portal:", d.PortalReal ?? d.Ip);
-        AddDetail("Status:", d.Conectado ? "Connected" : "Disconnected");
+        // Normalized values
+        string fs   = string.IsNullOrWhiteSpace(s.Filesystem) ? "RAW" : s.Filesystem;
+        string mp   = string.IsNullOrWhiteSpace(s.MountPoint) ? "-" : s.MountPoint;
+        string dev  = string.IsNullOrWhiteSpace(s.Device)     ? "-" : s.Device;
+        string auth = string.IsNullOrWhiteSpace(s.Auth)       ? "-" : s.Auth;
 
-        // Disco
-        AddDetail("Device:", d.Conectado && !string.IsNullOrWhiteSpace(d.DevicePath) ? d.DevicePath! : "-");
-        AddDetail("Partition:", d.Conectado && !string.IsNullOrWhiteSpace(d.PartitionPath) ? d.PartitionPath! : "-");
-        AddDetail("FS:", d.Conectado && d.TieneFilesystem ? d.FsType : "RAW");
+        // Human-readable size
+        string size = s.SizeGb > 0 ? FormatSize(s.SizeGb) : "-";
 
-        // Mount runtime
-        string mpRuntime = d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint)
-            ? d.MountPoint!
-            : "-";
-        AddDetail("Mount (runtime):", mpRuntime);
+        // ============================
+        //  SESSION
+        // ============================
+        AddDetail("Target (IQN):", s.Iqn, true);
+        AddDetail("Portal:", s.Portal);
+        AddDetail("Status:", s.Connected ? "Connected" : "Disconnected");
+        AddDetail("C. Since:", s.ConnectedSince.ToString("yyyy-MM-dd HH:mm:ss"));
 
-        // Mount persistente
-        string mpPersistente = ObtenerMountpointPersistente(d);
-        string mpPersistShow = d.Persistir ? mpPersistente : "-";
-        AddDetail("Mount (persistent):", mpPersistShow);
+        // ============================
+        //  DISK
+        // ============================
+        AddDetail("Device:", dev);
+        AddDetail("Filesystem:", fs);
+        AddDetail("Mountpoint:", mp);
 
-        // Persistencia
-        AddDetail("Persist:", d.Persistir ? "Yes" : "No");
+        // ============================
+        //  LUN
+        // ============================
+        AddDetail("LUN:", s.LunId.ToString());
 
-        // Botón Open
-        string mpAbrir = null;
+        // ============================
+        //  HARDWARE
+        // ============================
+        AddDetail("Size:", size);
 
-        if (d.Conectado && !string.IsNullOrWhiteSpace(d.MountPoint) && Directory.Exists(d.MountPoint))
-            mpAbrir = d.MountPoint;
-        else if (d.Persistir && Directory.Exists(mpPersistente))
-            mpAbrir = mpPersistente;
+        // ============================
+        //  AUTH
+        // ============================
+        AddDetail("Auth:", auth);
 
-        BtnOpen.IsEnabled = !string.IsNullOrWhiteSpace(mpAbrir);
+        // ============================
+        //  BUTTONS
+        // ============================
 
+        BtnOpen.IsEnabled = mp != "-" && System.IO.Directory.Exists(mp);
         BtnOpen.Click -= OnOpen;
         BtnOpen.Click += OnOpen;
 
-        // Botón Mount / Unmount
-        BtnMount.IsEnabled = d.EsAccesible;
-        BtnMount.Content = d.Conectado ? "Unmount" : "Mount";
-
+        BtnMount.Content = s.Connected ? "Disconnect" : "Connect";
+        BtnMount.IsEnabled = true;
         BtnMount.Click -= OnMount;
         BtnMount.Click += OnMount;
     }
 
-    private void AddDetail(string label, string value, bool wrap = false)
+    private string FormatSize(double sizeGb)
+    {
+        // Convert GB → TB or MB depending on magnitude
+        if (sizeGb >= 1024)
+        {
+            double tb = sizeGb / 1024.0;
+            return $"{tb:0.##} TB";
+        }
+        else if (sizeGb < 1)
+        {
+            double mb = sizeGb * 1024.0;
+            return $"{mb:0.##} MB";
+        }
+        else
+        {
+            return $"{sizeGb:0.##} GB";
+        }
+    }
+
+
+
+
+    private void AddDetail(string label, string value, bool wrap = true)
     {
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("110,190"),
+            ColumnDefinitions = new ColumnDefinitions("120, *"),
             Margin = new Thickness(0, 0, 0, 4)
         };
 
+        // Label (left column)
         grid.Children.Add(new TextBlock
         {
             Text = label,
-            Classes = { "DetailLabel" }
+            Classes = { "DetailLabel" },
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
         });
 
+        // Value (right column)
         var val = new TextBlock
         {
             Text = value,
             Classes = { "DetailValue" },
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
-            MaxWidth = 190
+            TextTrimming = TextTrimming.None,
+            MaxWidth = 380,   // suficiente para mountpoints largos
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
         };
 
         Grid.SetColumn(val, 1);
@@ -246,6 +297,7 @@ public partial class SessionsView : UserControl
 
         DetailsPanel.Children.Add(grid);
     }
+
 
     // ============================================================
     //  ACCIONES
@@ -256,41 +308,41 @@ public partial class SessionsView : UserControl
         if (_selected == null)
             return;
 
-        if (_selected.Conectado)
+        if (_selected.Connected)
         {
-            using (LoadingService.Show("Unmounting..."))
-                await IscsiHelper.Desconectar(_selected);
+            using (LoadingService.Show("Disconnecting..."))
+                await IscsiHelper.DesconectarSesion(_selected);
+
+            // ============================
+            // LIMPIAR DETALLES AL DESCONECTAR
+            // ============================
+            _selected = null;
+            DetailsPanel.Children.Clear();
         }
         else
         {
             using (LoadingService.Show("Connecting..."))
-                await IscsiHelper.Conectar(_selected);
+                await IscsiHelper.ConectarSesion(_selected);
         }
 
         await CargarSesiones();
     }
 
+    
     private void OnOpen(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_selected == null)
             return;
 
-        string mpPersistente = ObtenerMountpointPersistente(_selected);
-
-        string mpAbrir =
-            _selected.Conectado && !string.IsNullOrWhiteSpace(_selected.MountPoint)
-                ? _selected.MountPoint
-                : (_selected.Persistir ? mpPersistente : null);
-
-        if (string.IsNullOrWhiteSpace(mpAbrir))
+        if (string.IsNullOrWhiteSpace(_selected.MountPoint))
             return;
 
-        if (!Directory.Exists(mpAbrir))
+        if (!System.IO.Directory.Exists(_selected.MountPoint))
             return;
 
         Process.Start(new ProcessStartInfo
         {
-            FileName = mpAbrir,
+            FileName = _selected.MountPoint,
             UseShellExecute = true
         });
     }

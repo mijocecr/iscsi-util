@@ -68,26 +68,27 @@ public static class IscsiCore
                 destinos.Add(d);
             }
 
-            await Task.Run(() =>
+            // ============================================================
+            // NUEVA DETECCIÓN CHAP (igual que GUI)
+            // ============================================================
+            foreach (var d in destinos)
             {
-                foreach (var d in destinos)
-                {
-                    var chap = IscsiChapDetector.Detect(d);
+                var raw = ShellHelper.EjecutarComoRoot(
+                    $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op show"
+                ).Stdout;
 
-                    d.RequiresChap = chap.RequiresChap;
-                    d.RequiresMutualChap = chap.RequiresMutualChap;
-                    d.HasLocalChapConfigured = chap.HasLocalChapConfigured;
-                    d.HasLocalMutualConfigured = chap.HasLocalMutualConfigured;
+                bool chapEnabled = raw.Contains("node.session.auth.authmethod = CHAP");
+                bool hasReverse = raw.Contains("node.session.auth.username_in") ||
+                                  raw.Contains("node.session.auth.password_in");
 
-                    d.LocalUser = chap.LocalUser;
-                    d.LocalPass = chap.LocalPass;
-                    d.LocalUserIn = chap.LocalUserIn;
-                    d.LocalPassIn = chap.LocalPassIn;
+                d.UsaChap = chapEnabled && !hasReverse;
+                d.UsaMutualChap = chapEnabled && hasReverse;
 
-                    d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
-                    d.UsaMutualChap = d.RequiresMutualChap || d.HasLocalMutualConfigured;
-                }
-            });
+                d.LocalUser = ExtractValue(raw, "node.session.auth.username");
+                d.LocalPass = ExtractValue(raw, "node.session.auth.password");
+                d.LocalUserIn = ExtractValue(raw, "node.session.auth.username_in");
+                d.LocalPassIn = ExtractValue(raw, "node.session.auth.password_in");
+            }
 
             return destinos;
         }
@@ -96,6 +97,17 @@ public static class IscsiCore
             LogService.Error($"[CORE] #{id} ERROR Discover: {ex.Message}");
             return destinos;
         }
+    }
+
+    private static string ExtractValue(string raw, string key)
+    {
+        var line = raw.Split('\n').FirstOrDefault(l => l.Contains(key));
+        if (line == null) return "";
+
+        var parts = line.Split('=', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2) return "";
+
+        return parts[1].Trim();
     }
 
     // ---------------------------------------------------------
@@ -117,7 +129,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // DETECTAR FS (igual que GUI)
+    // DETECTAR FS
     // ---------------------------------------------------------
     private static string DetectarFsType(string blkidOutput)
     {
@@ -140,7 +152,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // COMPLETE INFO (CLI) → delega en IscsiHelper.CompletarInformacionDestino
+    // COMPLETE INFO
     // ---------------------------------------------------------
     public static async Task CompleteInfo(IscsiDestino d)
     {
@@ -160,7 +172,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // CONNECT (CLI) → igual que IscsiHelper.Conectar, pero sin GUI
+    // CONNECT
     // ---------------------------------------------------------
     public static async Task Connect(IscsiDestino d)
     {
@@ -169,7 +181,6 @@ public static class IscsiCore
 
         try
         {
-            // 1) Mountpoint persistente igual que GUI
             string safe = IscsiHelper.SanitizarNombre(d.Iqn)
                 .Replace('.', '_')
                 .Replace('-', '_');
@@ -184,13 +195,11 @@ public static class IscsiCore
                 );
             }
 
-            // 2) Comprobar si ya está conectado
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
             bool yaConectado = sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase);
 
             var (ipSolo, _) = NormalizarPortal(d.Ip);
 
-            // 3) LOGIN
             if (!yaConectado)
             {
                 var checkNode = ShellHelper.EjecutarComoRoot(
@@ -254,7 +263,6 @@ public static class IscsiCore
                 await Task.Delay(300);
             }
 
-            // 4) Detectar symlink + partición + FS + mountpoint (igual que GUI)
             await IscsiHelper.CompletarInformacionDestino(d, id);
 
             if (!d.TieneFilesystem)
@@ -264,7 +272,6 @@ public static class IscsiCore
                 return;
             }
 
-            // 5) Montar si no está montado
             var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
 
             if (mpCheck.ExitCode != 0)
@@ -287,7 +294,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // DISCONNECT (CLI) → igual que IscsiHelper.Desconectar
+    // DISCONNECT
     // ---------------------------------------------------------
     public static async Task Disconnect(IscsiDestino d)
     {
@@ -367,7 +374,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // DISCONNECT + DELETE NODE (CLI) → alineado con GUI.Desconectar_Borrar
+    // DISCONNECT + DELETE NODE
     // ---------------------------------------------------------
     public static async Task DisconnectDelete(IscsiDestino d)
     {
@@ -419,7 +426,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // INITIALIZE (CLI) → igual que IscsiHelper.InicializarDestino
+    // INITIALIZE
     // ---------------------------------------------------------
     public static async Task Initialize(IscsiDestino d, string label, string fsType)
     {
@@ -439,7 +446,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // OBTENER PORTAL REAL (CLI) → igual que GUI
+    // OBTENER PORTAL REAL
     // ---------------------------------------------------------
     public static string? ObtenerPortalReal(IscsiDestino d)
     {
@@ -480,7 +487,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // MOUNT (CLI) → usa PartitionPath y luego CompleteInfo
+    // MOUNT
     // ---------------------------------------------------------
     public static async Task Mount(IscsiDestino d)
     {
