@@ -11,7 +11,7 @@ namespace ISCSI_Util.Helpers;
 public static class IscsiCore
 {
     // ---------------------------------------------------------
-    // DISCOVER (CLI-safe, igual que GUI.Descubrir)
+    // DISCOVER (CLI-safe)
     // ---------------------------------------------------------
     public static async Task<List<IscsiDestino>> Discover(string ip)
     {
@@ -27,10 +27,7 @@ public static class IscsiCore
             );
 
             if (string.IsNullOrWhiteSpace(discovery.Stdout))
-            {
-                LogService.Debug($"[CORE] #{id} Discovery vacío.");
                 return destinos;
-            }
 
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
 
@@ -152,7 +149,7 @@ public static class IscsiCore
     }
 
     // ---------------------------------------------------------
-    // COMPLETE INFO
+    // COMPLETE INFO (CLI-only)
     // ---------------------------------------------------------
     public static async Task CompleteInfo(IscsiDestino d)
     {
@@ -161,7 +158,7 @@ public static class IscsiCore
 
         try
         {
-            await IscsiHelper.CompletarInformacionDestino(d, id);
+            CompletarInfoCLI(d);
             LogService.Debug($"[CORE] #{id} >>> FIN CompleteInfo()");
         }
         catch (Exception ex)
@@ -171,6 +168,64 @@ public static class IscsiCore
         }
     }
 
+    // ---------------------------------------------------------
+    // COMPLETAR INFO SOLO PARA CLI (NO GUI)
+    // ---------------------------------------------------------
+   
+    private static void CompletarInfoCLI(IscsiDestino d)
+    {
+        var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/")
+            .Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var (ipSolo, _) = NormalizarPortal(d.Ip);
+
+        // 1) Detectar symlink del disco base (igual que GUI)
+        var link = byPath.FirstOrDefault(l =>
+            l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
+            l.Contains("lun", StringComparison.OrdinalIgnoreCase) &&
+            !l.Contains("part", StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (link == null)
+        {
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.FsType = null;
+            d.TieneFilesystem = false;
+            return;
+        }
+
+        d.DevicePath = "/dev/disk/by-path/" + link.Trim();
+
+        // 2) Detectar partición real
+        var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}").Stdout;
+        var lsblkLines = lsblkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var l in lsblkLines)
+        {
+            var p = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length == 2 && p[1] == "part")
+            {
+                d.PartitionPath = "/dev/" + p[0];
+                break;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(d.PartitionPath))
+        {
+            d.TieneFilesystem = false;
+            return;
+        }
+
+        // 3) Detectar filesystem
+        var blkidRaw = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}").Stdout;
+        d.FsType = DetectarFsType(blkidRaw);
+
+        d.TieneFilesystem = !string.IsNullOrWhiteSpace(d.FsType);
+    }
+
+
+    
     // ---------------------------------------------------------
     // CONNECT
     // ---------------------------------------------------------
@@ -263,12 +318,11 @@ public static class IscsiCore
                 await Task.Delay(300);
             }
 
-            await IscsiHelper.CompletarInformacionDestino(d, id);
+            CompletarInfoCLI(d);
 
             if (!d.TieneFilesystem)
             {
                 d.Conectado = true;
-                LogService.Debug($"[CORE] #{id} >>> FIN Connect() (NO_FS)");
                 return;
             }
 
@@ -284,7 +338,6 @@ public static class IscsiCore
             }
 
             d.Conectado = true;
-            LogService.Debug($"[CORE] #{id} >>> FIN Connect()");
         }
         catch (Exception ex)
         {
@@ -363,8 +416,6 @@ public static class IscsiCore
             d.PartitionPath = null;
             d.FsType = null;
             d.MountPoint = null;
-
-            LogService.Debug($"[CORE] #{id} >>> FIN Disconnect()");
         }
         catch (Exception ex)
         {
@@ -415,8 +466,6 @@ public static class IscsiCore
 
             d.Persistir = false;
             d.PersistenteReal = false;
-
-            LogService.Debug($"[CORE] #{id} >>> FIN DisconnectDelete()");
         }
         catch (Exception ex)
         {
