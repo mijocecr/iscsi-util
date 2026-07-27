@@ -1,251 +1,139 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
+using ISCSI_Util.Services;
 
-namespace ISCSI_Util.Helpers
+namespace ISCSI_Util.Helpers;
+
+public static class IscsiPersistenceManager_CLI
 {
-    public static class IscsiPersistenceManager_CLI
+    private static string Safe(string iqn)
     {
-        // --------------------------------------------------------------
-        // APPLY — MISMO PATRÓN QUE LA GUI, SIN AVALONIA
-        // --------------------------------------------------------------
-        public static async Task ApplyAsync(IscsiDestino d)
+        return IscsiHelper.SanitizarNombre(iqn)
+            .Replace('.', '_')
+            .Replace('-', '_');
+    }
+
+    // ============================================================
+    // DETECT
+    // ============================================================
+    public static bool Detect(IscsiDestino d)
+    {
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+            return false;
+
+        string safe = Safe(d.Iqn);
+        string mp = Path.Combine(ConfigManager.MountBasePath, safe);
+
+        if (File.Exists("/etc/fstab"))
         {
-            if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
-                return;
-
-            // 1) Igual que GUI
-            EnsureMountPoint(d);
-
-            // 2) Igual que GUI
-            EnsureMountDirectory(d);
-
-            // 3) Igual que GUI
-            string portalPersistencia = ObtenerPortalPersistencia(d);
-
-            // 4) Igual que GUI
-            await GuardarEnFstab(d);
-
-            // 5) Igual que GUI
-            await CrearScriptYServicio(d, portalPersistencia);
-
-            // 6) Igual que GUI
-            FixCachyOSPresets();
-
-            // 7) Igual que GUI
-            await EnableServicio(d);
+            string fstab = File.ReadAllText("/etc/fstab");
+            if (fstab.Contains(mp, StringComparison.OrdinalIgnoreCase))
+                return true;
         }
 
-        // --------------------------------------------------------------
-        // REMOVE — MISMO PATRÓN QUE LA GUI
-        // --------------------------------------------------------------
-        public static async Task RemoveAsync(IscsiDestino d)
+        string service = $"/etc/systemd/system/iscsi-{safe}.service";
+        return File.Exists(service);
+    }
+
+    // ============================================================
+    // APPLY
+    // ============================================================
+    public static async Task ApplyAsync(IscsiDestino d)
+    {
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+            return;
+
+        string safe = Safe(d.Iqn);
+        string mp = Path.Combine(ConfigManager.MountBasePath, safe);
+
+        if (!Directory.Exists(mp))
         {
-            if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
-                return;
-
-            string safe = SafeName(d.Iqn);
-            string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
-            string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
-
-            ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-{safe}.service");
-            ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
-            ShellHelper.EjecutarComoRoot($"rm -f {scriptPath}");
-
-            if (!string.IsNullOrWhiteSpace(d.MountPoint))
-            {
-                string mpEsc = d.MountPoint.Replace("/", "\\/");
-                ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
-            }
-
-            ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
-
-            await Task.CompletedTask;
+            Directory.CreateDirectory(mp);
+            ShellHelper.EjecutarComoRoot($"chmod {ConfigManager.DefaultPermissions} \"{mp}\"");
         }
 
-        // --------------------------------------------------------------
-        // DETECT — MISMO PATRÓN QUE LA GUI
-        // --------------------------------------------------------------
-        public static bool Detect(IscsiDestino d)
-        {
-            if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
-                return false;
+        var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
+        string uuid = ExtraerUUID(blkid.Stdout);
 
-            if (!string.IsNullOrWhiteSpace(d.MountPoint) && File.Exists("/etc/fstab"))
-            {
-                string fstab = File.ReadAllText("/etc/fstab");
-                if (fstab.Contains($" {d.MountPoint} "))
-                    return true;
-            }
+        if (string.IsNullOrWhiteSpace(uuid))
+            throw new Exception("No UUID detected.");
 
-            string safe = SafeName(d.Iqn);
-            string service = $"/etc/systemd/system/iscsi-{safe}.service";
+        string fs = d.FsType == "ntfs" ? "ntfs-3g" : d.FsType;
+        string entry = $"UUID={uuid} {mp} {fs} defaults,_netdev 0 0";
 
-            return File.Exists(service);
-        }
+        ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
+        ShellHelper.EjecutarComoRoot($"bash -c \"echo '{entry}' >> /etc/fstab\"");
 
-        // --------------------------------------------------------------
-        // HELPERS — MISMO PATRÓN QUE LA GUI
-        // --------------------------------------------------------------
+        string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
-        private static void EnsureMountPoint(IscsiDestino d)
-        {
-            if (!string.IsNullOrWhiteSpace(d.MountPoint))
-                return;
-
-            string basePath = "/mnt/iscsi";
-            string safe = SafeName(d.Iqn);
-
-            d.MountPoint = Path.Combine(basePath, safe);
-        }
-
-        private static void EnsureMountDirectory(IscsiDestino d)
-        {
-            if (!Directory.Exists(d.MountPoint))
-            {
-                Directory.CreateDirectory(d.MountPoint);
-                ShellHelper.EjecutarComoRoot($"chmod 755 \"{d.MountPoint}\"");
-            }
-        }
-
-        private static string ObtenerPortalPersistencia(IscsiDestino d)
-        {
-            string portalReal = IscsiCore.ObtenerPortalReal(d);
-            return string.IsNullOrWhiteSpace(portalReal) ? d.Ip : portalReal;
-        }
-
-        private static async Task GuardarEnFstab(IscsiDestino d)
-        {
-            Console.WriteLine("=== DEBUG FSTAB ===");
-            Console.WriteLine($"PartitionPath: {d.PartitionPath}");
-            Console.WriteLine($"MountPoint:    {d.MountPoint}");
-            Console.WriteLine($"FsType:        {d.FsType}");
-
-            if (string.IsNullOrWhiteSpace(d.PartitionPath))
-            {
-                Console.WriteLine("ERROR: PartitionPath vacío → NO se puede escribir en fstab");
-                return;
-            }
-
-            var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
-
-            Console.WriteLine($"blkid stdout: {blkid.Stdout}");
-            Console.WriteLine($"blkid stderr: {blkid.Stderr}");
-
-            string uuid = blkid.Stdout.Split(' ')
-                .FirstOrDefault(s => s.StartsWith("UUID=", StringComparison.OrdinalIgnoreCase))?
-                .Replace("UUID=", "")
-                .Trim('"');
-
-            Console.WriteLine($"UUID detectado: {uuid}");
-
-            if (string.IsNullOrWhiteSpace(uuid))
-            {
-                Console.WriteLine("ERROR: UUID vacío → NO se puede escribir en fstab");
-                return;
-            }
-
-            string entry = $"UUID={uuid} {d.MountPoint} auto _netdev 0 0";
-            string mpEsc = d.MountPoint.Replace("/", "\\/");
-
-            Console.WriteLine($"Entrada fstab generada: {entry}");
-            Console.WriteLine("Ejecutando sed para eliminar entradas previas...");
-
-            var sed = ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
-            Console.WriteLine($"sed stdout: {sed.Stdout}");
-            Console.WriteLine($"sed stderr: {sed.Stderr}");
-
-            Console.WriteLine("Ejecutando echo para añadir entrada nueva...");
-
-            var echo = ShellHelper.EjecutarComoRoot($"bash -c 'echo \"{entry}\" >> /etc/fstab'");
-            Console.WriteLine($"echo stdout: {echo.Stdout}");
-            Console.WriteLine($"echo stderr: {echo.Stderr}");
-
-            Console.WriteLine("=== FIN DEBUG FSTAB ===");
-        }
-
-
-        private static async Task CrearScriptYServicio(IscsiDestino d, string portal)
-        {
-            string safe = SafeName(d.Iqn);
-
-            string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
-            string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
-
-            string scriptContent =
-$@"#!/bin/bash
-TARGET=""{d.Iqn}""
-PORTAL=""{portal}""
-MOUNTPOINT=""{d.MountPoint}""
-
-iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --login
-mount -a -O _netdev
-exit 0
-";
-
-            File.WriteAllText("/tmp/tmp_script.sh", scriptContent);
-            ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_script.sh {scriptPath}");
-            ShellHelper.EjecutarComoRoot($"chmod 755 {scriptPath}");
-
-            string serviceContent =
-$@"[Unit]
-Description=Connect iSCSI target and mount {d.Iqn}
+        string unit = $@"
+[Unit]
+Description=iSCSI persistent mount for {d.Iqn}
 After=network-online.target iscsid.service
+Requires=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart={scriptPath}
+ExecStart=/usr/bin/mount {mp}
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 ";
 
-            File.WriteAllText("/tmp/tmp_service.service", serviceContent);
-            ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_service.service {servicePath}");
-            ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
+        File.WriteAllText("/tmp/tmp_unit.service", unit);
+        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_unit.service {servicePath}");
+        ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
 
-            await Task.CompletedTask;
-        }
+        ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
+        ShellHelper.EjecutarComoRoot($"systemctl enable iscsi-{safe}.service");
 
-        private static void FixCachyOSPresets()
+        d.Persistir = true;
+
+        await Task.CompletedTask;
+    }
+
+    // ============================================================
+    // REMOVE
+    // ============================================================
+    public static async Task RemoveAsync(IscsiDestino d)
+    {
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+            return;
+
+        string safe = Safe(d.Iqn);
+        string mp = Path.Combine(ConfigManager.MountBasePath, safe);
+
+        ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
+
+        string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
+
+        if (File.Exists(servicePath))
         {
-            if (!File.Exists("/etc/cachyos-release"))
-                return;
-
-            string presetPath = "/etc/systemd/system-preset/99-iscsi.preset";
-            string presetContent = "enable iscsi-*.service\nenable iscsi.service\n";
-
-            ShellHelper.EjecutarComoRoot($"bash -c \"echo '{presetContent}' > {presetPath}\"");
-            ShellHelper.EjecutarComoRoot("systemctl preset-all --verbose");
+            ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-{safe}.service");
+            ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
         }
 
-        private static async Task EnableServicio(IscsiDestino d)
+        ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
+
+        d.Persistir = false;
+
+        await Task.CompletedTask;
+    }
+
+    private static string ExtraerUUID(string blkidOut)
+    {
+        if (string.IsNullOrWhiteSpace(blkidOut))
+            return "";
+
+        foreach (var part in blkidOut.Split(' '))
         {
-            string safe = SafeName(d.Iqn);
-            string unitPath = $"/etc/systemd/system/iscsi-{safe}.service";
-            string symlinkPath = $"/etc/systemd/system/multi-user.target.wants/iscsi-{safe}.service";
-
-            ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
-            ShellHelper.EjecutarComoRoot($"systemctl enable --force iscsi-{safe}.service");
-
-            await Task.Delay(300);
-
-            if (!File.Exists(symlinkPath))
-                ShellHelper.EjecutarComoRoot($"ln -s {unitPath} {symlinkPath}");
+            if (part.StartsWith("UUID=", StringComparison.OrdinalIgnoreCase))
+                return part.Replace("UUID=", "").Trim().Trim('"');
         }
 
-        private static string SafeName(string s)
-        {
-            return s
-                .Replace(":", "_")
-                .Replace(".", "_")
-                .Replace("-", "_")
-                .Replace(",", "_")
-                .Replace(";", "_")
-                .Replace("/", "_");
-        }
+        return "";
     }
 }

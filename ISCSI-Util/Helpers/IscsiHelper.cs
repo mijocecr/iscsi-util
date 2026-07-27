@@ -311,9 +311,9 @@ public static class IscsiHelper
     // ============================================================
     //  COMPLETAR INFORMACIÓN — DevicePath, PartitionPath, FS
     // ============================================================
-
     
-    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+    
+public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
 {
     long id = NextTraceId();
     TraceIn(id, "CompletarInformacion", d.Iqn);
@@ -322,7 +322,127 @@ public static class IscsiHelper
     {
         if (!d.Conectado)
         {
-            LogService.Debug($"[ISCSI] #{id} Target {d.Iqn} no está conectado. Saltando detección.");
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.MountPoint = null;
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            return;
+        }
+
+        // 1) Detectar symlink correcto
+        var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var portal = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
+        var (ipSolo, _) = NormalizarPortal(portal);
+
+        var match = byPath.FirstOrDefault(l =>
+            l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
+            l.Contains("lun", StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (match == null)
+        {
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.MountPoint = null;
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            return;
+        }
+
+        d.DevicePath = "/dev/disk/by-path/" + match.Trim();
+
+        // 2) Detectar partición real
+        var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
+        var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        string? part = null;
+
+        foreach (var line in lines)
+        {
+            var p = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length == 2 && p[1] == "part")
+            {
+                part = "/dev/" + p[0];
+                break;
+            }
+        }
+
+        d.PartitionPath = part;
+
+        // 3) Detectar filesystem
+        if (d.PartitionPath == null)
+        {
+            d.TieneFilesystem = false;
+            d.FsType = "";
+        }
+        else
+        {
+            var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}");
+            d.FsType = DetectarFsType(blkid.Stdout);
+            d.TieneFilesystem = !string.IsNullOrWhiteSpace(d.FsType);
+        }
+
+        // 4) Detectar mountpoint runtime
+        d.MountPoint = null;
+
+        var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var m in mounts)
+        {
+            if (d.PartitionPath != null && m.StartsWith(d.PartitionPath + " "))
+            {
+                d.MountPoint = m.Split(' ')[2];
+                break;
+            }
+
+            if (d.DevicePath != null && m.StartsWith(d.DevicePath + " "))
+            {
+                d.MountPoint = m.Split(' ')[2];
+                break;
+            }
+        }
+
+        // 5) Detectar persistencia
+        d.Persistir = DetectarPersistencia(d);
+
+        if (d.Persistir)
+        {
+            string safe = SanitizarNombre(d.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
+
+            d.MountPoint = Path.Combine(ConfigManager.MountBasePath, safe);
+        }
+
+        TraceOut(id, "CompletarInformacion");
+    }
+    catch (Exception ex)
+    {
+        LogService.Error($"[ISCSI] #{id} ERROR CompletarInformacion: {ex.Message}");
+    }
+}
+
+    
+    
+    
+/*
+    
+    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
+{
+    long id = NextTraceId();
+    TraceIn(id, "CompletarInformacion", d.Iqn);
+
+    try
+    {
+        // ============================================================
+        // 1. SI NO ESTÁ CONECTADO → NO HAY DEVICE, NO HAY MOUNTPOINT
+        // ============================================================
+        if (!d.Conectado)
+        {
             d.TieneFilesystem = false;
             d.FsType = "";
             d.MountPoint = "";
@@ -331,12 +451,13 @@ public static class IscsiHelper
             return;
         }
 
-        LogService.Debug($"[ISCSI] #{id} Buscando symlink en /dev/disk/by-path para {d.Iqn}...");
-
+        // ============================================================
+        // 2. DETECTAR SYMLINK REAL EN /dev/disk/by-path
+        // ============================================================
         var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        var (ipSolo, port) = NormalizarPortal(d.Ip);
+        var (ipSolo, _) = NormalizarPortal(d.Ip);
 
         var match = byPath.FirstOrDefault(l =>
             l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
@@ -346,19 +467,18 @@ public static class IscsiHelper
         if (match != null)
         {
             d.DevicePath = "/dev/disk/by-path/" + match.Trim();
-            LogService.Debug($"[ISCSI] #{id} Symlink detectado: {d.DevicePath}");
         }
         else
         {
-            LogService.Error($"[ISCSI] #{id} No se encontró symlink para {d.Iqn}.");
+            d.DevicePath = null;
             d.PartitionPath = null;
+            d.MountPoint = "";
             return;
         }
 
         // ============================================================
-        // DETECCIÓN FIABLE DE PARTICIÓN (CORREGIDO)
+        // 3. DETECTAR PARTICIÓN REAL
         // ============================================================
-
         var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
         var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
@@ -375,57 +495,14 @@ public static class IscsiHelper
         }
 
         d.PartitionPath = partition;
-        LogService.Debug($"[ISCSI] #{id} PartitionPath = {d.PartitionPath ?? "(sin partición)"}");
 
         // ============================================================
-        // DETECCIÓN DE MOUNTPOINT
+        // 4. DETECTAR FILESYSTEM
         // ============================================================
-
-        var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        string[] posibles =
-        {
-            d.PartitionPath ?? "",
-            d.DevicePath ?? "",
-            d.PartitionPath != null ? "/dev/" + Path.GetFileName(d.PartitionPath) : "",
-            "/dev/" + Path.GetFileName(d.DevicePath ?? "")
-        };
-
-        d.MountPoint = "";
-
-        foreach (var m in mounts)
-        {
-            foreach (var p in posibles)
-            {
-                if (!string.IsNullOrWhiteSpace(p) && m.StartsWith(p + " "))
-                {
-                    var parts = m.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 3)
-                    {
-                        d.MountPoint = parts[2];
-                        LogService.Debug($"[ISCSI] #{id} MountPoint detectado: {d.MountPoint}");
-                        break;
-                    }
-                }
-            }
-
-            if (!string.IsNullOrEmpty(d.MountPoint))
-                break;
-        }
-
-        if (string.IsNullOrWhiteSpace(d.MountPoint))
-            LogService.Debug($"[ISCSI] #{id} No se detectó mountpoint para {d.Iqn}.");
-
-        // ============================================================
-        // DETECCIÓN DE FILESYSTEM
-        // ============================================================
-
         if (d.PartitionPath == null)
         {
             d.TieneFilesystem = false;
             d.FsType = "";
-            LogService.Debug($"[ISCSI] #{id} RAW sin partición → no hay filesystem.");
         }
         else
         {
@@ -441,20 +518,62 @@ public static class IscsiHelper
                 outBlk.Contains("TYPE=\"vfat\"") ||
                 outBlk.Contains("TYPE=\"exfat\"");
 
-            if (d.TieneFilesystem)
-            {
-                d.FsType = DetectarFsType(outBlk);
-                LogService.Debug($"[ISCSI] #{id} Filesystem detectado: {d.FsType}");
-            }
-            else
-            {
-                d.FsType = "";
-                LogService.Debug($"[ISCSI] #{id} No se detectó filesystem en {d.PartitionPath}");
-            }
+            d.FsType = d.TieneFilesystem ? DetectarFsType(outBlk) : "";
         }
 
-        d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
-        d.UsaMutualChap = d.RequiresMutualChap || d.HasLocalMutualConfigured;
+        // ============================================================
+        // 5. DETECTAR MOUNTPOINT RUNTIME (si está montado)
+        // ============================================================
+        d.MountPoint = "";
+
+        var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        string[] posibles =
+        {
+            d.PartitionPath ?? "",
+            d.DevicePath ?? "",
+            d.PartitionPath != null ? "/dev/" + Path.GetFileName(d.PartitionPath) : "",
+            "/dev/" + Path.GetFileName(d.DevicePath ?? "")
+        };
+
+        foreach (var m in mounts)
+        {
+            foreach (var p in posibles)
+            {
+                if (!string.IsNullOrWhiteSpace(p) && m.StartsWith(p + " "))
+                {
+                    var parts = m.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 3)
+                    {
+                        d.MountPoint = parts[2];
+                        break;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(d.MountPoint))
+                break;
+        }
+
+        // ============================================================
+        // 6. DETECTAR PERSISTENCIA (fstab)
+        // ============================================================
+        d.Persistir = IscsiHelper.DetectarPersistencia(d);
+
+        // ============================================================
+        // 7. SI ES PERSISTENTE → USAR MOUNTPOINT PERSISTENTE
+        // ============================================================
+        if (d.Persistir)
+        {
+            string safe = IscsiHelper.SanitizarNombre(d.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
+
+            string mpPersistente = Path.Combine(ConfigManager.MountBasePath, safe);
+
+            d.MountPoint = mpPersistente;
+        }
 
         TraceOut(id, "CompletarInformacion");
     }
@@ -463,6 +582,7 @@ public static class IscsiHelper
         LogService.Error($"[ISCSI] #{id} ERROR CompletarInformacion: {ex.Message}");
     }
 }
+*/
 
     
 // ======================================================================
@@ -876,16 +996,23 @@ public static async Task Desconectar(IscsiDestino d)
 //  DESCONECTAR + BORRAR NODO — versión completa
 // ======================================================================
 
+
 public static async Task Desconectar_Borrar(IscsiDestino d)
 {
     long id = NextTraceId();
+
+    if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+        return;
+
     TraceIn(id, "Desconectar_Borrar", d.Iqn);
 
     using (LoadingService.Show($"Removing {d.Iqn}..."))
     {
         try
         {
-            // Desmontar
+            // ============================================================
+            // 1) DESMONTAR SI ESTÁ MONTADO
+            // ============================================================
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
                 var mpCheck = ShellHelper.EjecutarComoRoot(
@@ -909,13 +1036,18 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
                 }
             }
 
+            // ============================================================
+            // 2) BORRAR DIRECTORIO DE MOUNTPOINT
+            // ============================================================
             if (!string.IsNullOrWhiteSpace(d.MountPoint) &&
                 Directory.Exists(d.MountPoint))
             {
                 ShellHelper.EjecutarComoRoot($"rm -rf \"{d.MountPoint}\"");
             }
 
-            // Logout solo del IQN
+            // ============================================================
+            // 3) LOGOUT SOLO DEL IQN
+            // ============================================================
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
 
             if (!string.IsNullOrWhiteSpace(sesiones) &&
@@ -933,37 +1065,33 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
                 await Task.Delay(300);
             }
 
-            // Limpiar fstab por UUID si es posible
-            if (!string.IsNullOrWhiteSpace(d.PartitionPath))
+            // ============================================================
+            // 4) ELIMINAR PERSISTENCIA MODERNA (fstab + systemd)
+            // ============================================================
+            string safe = IscsiHelper.SanitizarNombre(d.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
+
+            string mpPersistente = Path.Combine(ConfigManager.MountBasePath, safe);
+
+            // FSTAB
+            string mpEsc = mpPersistente.Replace("/", "\\/");
+            ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
+
+            // SYSTEMD
+            string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
+
+            if (File.Exists(servicePath))
             {
-                var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
-                string uuid = blkid.Stdout.Split(' ')
-                    .FirstOrDefault(s => s.StartsWith("UUID=", StringComparison.OrdinalIgnoreCase))?
-                    .Replace("UUID=", "")
-                    .Trim('"');
-
-                if (!string.IsNullOrWhiteSpace(uuid))
-                {
-                    ShellHelper.EjecutarComoRoot(
-                        $"sed -i '\\#UUID={uuid} #d' /etc/fstab"
-                    );
-                }
+                ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-{safe}.service");
+                ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
             }
-
-            // Si tienes units antiguas basadas en SafeName, las limpias aquí
-            string safe = d.SafeName;
-
-            ShellHelper.EjecutarComoRoot(
-                $"rm -f /etc/systemd/system/{safe}.mount"
-            );
-
-            ShellHelper.EjecutarComoRoot(
-                $"rm -f /etc/systemd/system/{safe}.automount"
-            );
 
             ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
-            // Borrar nodo y discoverydb
+            // ============================================================
+            // 5) BORRAR NODO Y DISCOVERYDB
+            // ============================================================
             var (ipSolo2, _) = NormalizarPortal(d.Ip);
 
             ShellHelper.EjecutarComoRoot(
@@ -974,33 +1102,35 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
                 $"iscsiadm -m discoverydb -t sendtargets -p {ipSolo2} --op=delete"
             );
 
-            // Reset de estado del destino
-            d.Conectado      = false;
+            // ============================================================
+            // 6) RESET COMPLETO DEL OBJETO
+            // ============================================================
+            d.Conectado = false;
             d.TieneFilesystem = false;
-            d.DevicePath     = null;
-            d.PartitionPath  = null;
-            d.MountPoint     = null;
-            d.FsType         = null;
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.MountPoint = null;
+            d.FsType = null;
 
-            d.RequiresChap          = false;
-            d.RequiresMutualChap    = false;
-            d.HasLocalChapConfigured   = false;
+            d.RequiresChap = false;
+            d.RequiresMutualChap = false;
+            d.HasLocalChapConfigured = false;
             d.HasLocalMutualConfigured = false;
 
-            d.LocalUser   = "";
-            d.LocalPass   = "";
+            d.LocalUser = "";
+            d.LocalPass = "";
             d.LocalUserIn = "";
             d.LocalPassIn = "";
 
-            d.UsaChap        = false;
-            d.UsaMutualChap  = false;
+            d.UsaChap = false;
+            d.UsaMutualChap = false;
 
-            d.UsuarioChap        = "";
-            d.PasswordChap       = "";
-            d.UsuarioMutualChap  = "";
+            d.UsuarioChap = "";
+            d.PasswordChap = "";
+            d.UsuarioMutualChap = "";
             d.PasswordMutualChap = "";
 
-            d.Persistir       = false;
+            d.Persistir = false;
             d.PersistenteReal = false;
 
             NotificadorLinux.Enviar($"Target {d.Iqn} fully removed");

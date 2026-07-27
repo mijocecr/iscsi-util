@@ -11,7 +11,6 @@ namespace ISCSI_Util.Helpers
         public static async Task Run()
         {
             AskPasswordOnce();
-            
 
             while (true)
             {
@@ -59,9 +58,6 @@ namespace ISCSI_Util.Helpers
                 Console.ReadLine();
             }
         }
-
-     
-      
 
         // ==========================================================
         // PASSWORD
@@ -356,6 +352,7 @@ namespace ISCSI_Util.Helpers
                 index++;
             }
         }
+
         // ==========================================================
         // DISCONNECT ALL SESSIONS
         // ==========================================================
@@ -403,74 +400,67 @@ namespace ISCSI_Util.Helpers
         // ==========================================================
         // APPLY PERSISTENCE (CLI)
         // ==========================================================
-        
         private static async Task ApplyPersistence()
-{
-    Console.Clear();
-    Console.WriteLine("=== Apply persistence ===\n");
+        {
+            Console.Clear();
+            Console.WriteLine("=== Apply persistence ===\n");
 
-    var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
-    var lista = ParseActiveSessions(sesiones);
+            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
+            var lista = ParseActiveSessions(sesiones);
 
-    if (lista.Count == 0)
-    {
-        Console.WriteLine("No active sessions.");
-        return;
-    }
+            if (lista.Count == 0)
+            {
+                Console.WriteLine("No active sessions.");
+                return;
+            }
 
-    Console.WriteLine("Active sessions:\n");
-    for (int i = 0; i < lista.Count; i++)
-        Console.WriteLine($"{i + 1}) {lista[i].Iqn} ({lista[i].Ip})");
+            Console.WriteLine("Active sessions:\n");
+            for (int i = 0; i < lista.Count; i++)
+                Console.WriteLine($"{i + 1}) {lista[i].Iqn} ({lista[i].Ip})");
 
-    Console.Write("\nSelect target: ");
-    if (!int.TryParse(Console.ReadLine(), out int idx))
-        return;
+            Console.Write("\nSelect target: ");
+            if (!int.TryParse(Console.ReadLine(), out int idx))
+                return;
 
-    idx--;
-    if (idx < 0 || idx >= lista.Count)
-        return;
+            idx--;
+            if (idx < 0 || idx >= lista.Count)
+                return;
 
-    var destino = lista[idx];
+            var destino = lista[idx];
 
-    var portalReal = IscsiCore.ObtenerPortalReal(destino);
-    if (!string.IsNullOrWhiteSpace(portalReal))
-        destino.Ip = portalReal;
+            var portalReal = IscsiCore.ObtenerPortalReal(destino);
+            if (!string.IsNullOrWhiteSpace(portalReal))
+                destino.Ip = portalReal;
 
-    // Igual que GUI: completar info, montar si hace falta, completar de nuevo
-    await IscsiCore.CompleteInfo(destino);
+            await IscsiCore.CompleteInfo(destino);
 
-    if (!destino.TieneFilesystem)
-    {
-        Console.WriteLine("Cannot apply persistence: no filesystem detected.");
-        return;
-    }
+            if (!destino.TieneFilesystem)
+            {
+                Console.WriteLine("Cannot apply persistence: no filesystem detected.");
+                return;
+            }
 
-    if (string.IsNullOrWhiteSpace(destino.MountPoint))
-    {
-        Console.WriteLine("Target is not mounted. Mounting...");
-        await IscsiCore.Mount(destino);
-        await IscsiCore.CompleteInfo(destino);
-    }
+            if (string.IsNullOrWhiteSpace(destino.MountPoint))
+            {
+                Console.WriteLine("Target is not mounted. Mounting...");
+                await IscsiCore.Mount(destino);
+                await IscsiCore.CompleteInfo(destino);
+            }
 
-    // ==========================================================
-    // TRAZAS DE DEPURACIÓN ANTES DE PERSISTIR
-    // ==========================================================
-    Console.WriteLine("\n=== DEBUG APPLY ===");
-    Console.WriteLine($"IQN:           {destino.Iqn}");
-    Console.WriteLine($"IP:            {destino.Ip}");
-    Console.WriteLine($"DevicePath:    {destino.DevicePath}");
-    Console.WriteLine($"PartitionPath: {destino.PartitionPath}");
-    Console.WriteLine($"MountPoint:    {destino.MountPoint}");
-    Console.WriteLine($"FsType:        {destino.FsType}");
-    Console.WriteLine($"TieneFS:       {destino.TieneFilesystem}");
-    Console.WriteLine("=== FIN DEBUG APPLY ===\n");
-    // ==========================================================
+            Console.WriteLine("\n=== DEBUG APPLY ===");
+            Console.WriteLine($"IQN:           {destino.Iqn}");
+            Console.WriteLine($"IP:            {destino.Ip}");
+            Console.WriteLine($"DevicePath:    {destino.DevicePath}");
+            Console.WriteLine($"PartitionPath: {destino.PartitionPath}");
+            Console.WriteLine($"MountPoint:    {destino.MountPoint}");
+            Console.WriteLine($"FsType:        {destino.FsType}");
+            Console.WriteLine($"TieneFS:       {destino.TieneFilesystem}");
+            Console.WriteLine("=== FIN DEBUG APPLY ===\n");
 
-    await IscsiPersistenceManager_CLI.ApplyAsync(destino);
+            await IscsiPersistenceManager_CLI.ApplyAsync(destino);
 
-    Console.WriteLine("\nPersistence applied.");
-}
-
+            Console.WriteLine("\nPersistence applied.");
+        }
 
         // ==========================================================
         // REMOVE PERSISTENCE (CLI)

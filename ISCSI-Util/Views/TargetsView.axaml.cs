@@ -191,7 +191,8 @@ public partial class TargetsView : UserControl
                 });
             }
 
-            destino.Persistir = IscsiPersistenceManager.DetectFstab(destino);
+            destino.Persistir = IscsiPersistenceManager.Detect(destino);
+            
 
             destino.InfoCompleta = true;
             destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
@@ -397,7 +398,7 @@ public partial class TargetsView : UserControl
     Console.WriteLine($"IQN: {destino.Iqn}");
     Console.WriteLine($"MountPoint: {destino.MountPoint}");
     Console.WriteLine($"Conectado: {destino.Conectado}");
-    Console.WriteLine($"DetectFstab: {IscsiPersistenceManager.DetectFstab(destino)}");
+    Console.WriteLine($"DetectFstab: {IscsiPersistenceManager.Detect(destino)}");
     
     _selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
     if (_selected == null)
@@ -413,7 +414,7 @@ public partial class TargetsView : UserControl
     BtnHeaderOpen.IsVisible = false;
 
     // 🔥 Persistencia REAL del destino seleccionado
-    bool persistente = IscsiPersistenceManager.DetectFstab(destino);
+    bool persistente = IscsiPersistenceManager.Detect(destino);
 
     BtnTogglePersist.IsEnabled = destino.Conectado;
     BtnTogglePersist.Content = persistente ? "Remove Persist" : "Persist";
@@ -481,7 +482,7 @@ public partial class TargetsView : UserControl
 
     private void UpdatePersistButton(IscsiDestino destino)
     {
-        bool persistente = IscsiPersistenceManager.DetectFstab(destino);
+        bool persistente = IscsiPersistenceManager.Detect(destino);
 
         BtnTogglePersist.IsEnabled = destino.Conectado;
         BtnTogglePersist.Content = persistente ? "Remove Persist" : "Persist";
@@ -492,7 +493,7 @@ public partial class TargetsView : UserControl
         if (_selected == null)
             return;
 
-        bool persistente = IscsiPersistenceManager.DetectFstab(_selected);
+        bool persistente = IscsiPersistenceManager.Detect(_selected);
 
         if (!persistente)
         {
