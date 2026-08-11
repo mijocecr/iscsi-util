@@ -56,7 +56,7 @@ namespace ISCSI_Util.Helpers
                         break;
                 }
 
-                Console.WriteLine("Press ENTER to continue...");
+                Console.WriteLine("\nPress ENTER to continue...");
                 Console.ReadLine();
             }
         }
@@ -402,79 +402,63 @@ namespace ISCSI_Util.Helpers
         // ==========================================================
         // APPLY PERSISTENCE (CLI)
         // ==========================================================
-        
         private static async Task ApplyPersistence()
-{
-    Console.Clear();
-    Console.WriteLine("=== Apply persistence ===\n");
+        {
+            Console.Clear();
+            Console.WriteLine("=== Apply persistence ===\n");
 
-    var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
-    var lista = ParseActiveSessions(sesiones);
+            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
+            var lista = ParseActiveSessions(sesiones);
 
-    if (lista.Count == 0)
-    {
-        Console.WriteLine("No active sessions.");
-        return;
-    }
+            if (lista.Count == 0)
+            {
+                Console.WriteLine("No active sessions.");
+                return;
+            }
 
-    Console.WriteLine("Active sessions:\n");
-    for (int i = 0; i < lista.Count; i++)
-        Console.WriteLine($"{i + 1}) {lista[i].Iqn} ({lista[i].Ip})");
+            Console.WriteLine("Active sessions:\n");
+            for (int i = 0; i < lista.Count; i++)
+                Console.WriteLine($"{i + 1}) {lista[i].Iqn} ({lista[i].Ip})");
 
-    Console.Write("\nSelect target: ");
-    if (!int.TryParse(Console.ReadLine(), out int idx))
-        return;
+            Console.Write("\nSelect target: ");
+            if (!int.TryParse(Console.ReadLine(), out int idx))
+                return;
 
-    idx--;
-    if (idx < 0 || idx >= lista.Count)
-        return;
+            idx--;
+            if (idx < 0 || idx >= lista.Count)
+                return;
 
-    var destino = lista[idx];
+            var destino = lista[idx];
 
-    // ⭐ FIX 1: Normalizar portal y NO tocar destino.Ip
-    var portalReal = IscsiCore.ObtenerPortalReal(destino);
-    if (!string.IsNullOrWhiteSpace(portalReal))
-        destino.PortalReal = portalReal.Split(',')[0];
+            var portalReal = IscsiCore.ObtenerPortalReal(destino);
+            if (!string.IsNullOrWhiteSpace(portalReal))
+                destino.PortalReal = portalReal.Split(',')[0];
 
-    // ⭐ FIX 2: Asignar MountPoint ANTES de Mount()
-    string safe = IscsiHelper.SanitizarNombre(destino.Iqn)
-        .Replace('.', '_')
-        .Replace('-', '_');
+            string safe = IscsiHelper.SanitizarNombre(destino.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
 
-    destino.MountPoint = Path.Combine(ConfigManager.MountBasePath, safe);
+            destino.MountPoint = Path.Combine(ConfigManager.MountBasePath, safe);
 
-    await IscsiCore.CompleteInfo(destino);
+            await IscsiCore.CompleteInfo(destino);
 
-    if (!destino.TieneFilesystem)
-    {
-        Console.WriteLine("Cannot apply persistence: no filesystem detected.");
-        return;
-    }
+            if (!destino.TieneFilesystem)
+            {
+                Console.WriteLine("Cannot apply persistence: no filesystem detected.");
+                return;
+            }
 
-    if (string.IsNullOrWhiteSpace(destino.MountPoint))
-    {
-        Console.WriteLine("Target is not mounted. Mounting...");
-        await IscsiCore.Mount(destino);
-        await IscsiCore.CompleteInfo(destino);
-    }
-/*
-    Console.WriteLine("\n=== DEBUG APPLY ===");
-    Console.WriteLine($"IQN:           {destino.Iqn}");
-    Console.WriteLine($"IP:            {destino.Ip}");
-    Console.WriteLine($"PortalReal:    {destino.PortalReal}");
-    Console.WriteLine($"DevicePath:    {destino.DevicePath}");
-    Console.WriteLine($"PartitionPath: {destino.PartitionPath}");
-    Console.WriteLine($"MountPoint:    {destino.MountPoint}");
-    Console.WriteLine($"FsType:        {destino.FsType}");
-    Console.WriteLine($"TieneFS:       {destino.TieneFilesystem}");
-    Console.WriteLine("=== FIN DEBUG APPLY ===\n");*/
+            if (string.IsNullOrWhiteSpace(destino.MountPoint))
+            {
+                Console.WriteLine("Target is not mounted. Mounting...");
+                await IscsiCore.Mount(destino);
+                await IscsiCore.CompleteInfo(destino);
+            }
 
-    await IscsiPersistenceManager_CLI.ApplyAsync(destino);
+            await IscsiPersistenceManager_CLI.ApplyAsync(destino);
 
-    Console.WriteLine("\nPersistence applied.");
-}
-
-
+            Console.WriteLine("\nPersistence applied.");
+        }
 
         // ==========================================================
         // REMOVE PERSISTENCE (CLI)
@@ -509,7 +493,7 @@ namespace ISCSI_Util.Helpers
 
             var portalReal = IscsiCore.ObtenerPortalReal(destino);
             if (!string.IsNullOrWhiteSpace(portalReal))
-                destino.Ip = portalReal;
+                destino.PortalReal = portalReal.Split(',')[0]; // FIX: Se asigna a PortalReal en vez de sobreescribir Ip
 
             await IscsiCore.CompleteInfo(destino);
 
@@ -551,7 +535,7 @@ namespace ISCSI_Util.Helpers
 
             var portalReal = IscsiCore.ObtenerPortalReal(destino);
             if (!string.IsNullOrWhiteSpace(portalReal))
-                destino.Ip = portalReal;
+                destino.PortalReal = portalReal.Split(',')[0]; // FIX: Se asigna a PortalReal en vez de sobreescribir Ip
 
             await IscsiCore.CompleteInfo(destino);
 
@@ -559,6 +543,7 @@ namespace ISCSI_Util.Helpers
 
             Console.WriteLine($"\nPersistence: {(persist ? "YES" : "NO")}");
         }
+
         // ---------------------------------------------------------
         // LIST SESSIONS
         // ---------------------------------------------------------
@@ -576,6 +561,7 @@ namespace ISCSI_Util.Helpers
             }
 
             Console.WriteLine(result.Stdout);
+            await Task.CompletedTask;
         }
 
         // ---------------------------------------------------------
@@ -590,21 +576,17 @@ namespace ISCSI_Util.Helpers
                 if (!line.Contains("iqn.")) continue;
 
                 var partes = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                string iqn = partes.LastOrDefault(p => p.StartsWith("iqn."));
+                string? iqn = partes.LastOrDefault(p => p.StartsWith("iqn."));
                 if (iqn == null) continue;
 
-                // Ejemplo línea:
-                // tcp: [6] 192.168.10.20:3260,1 iqn.2013-03.com.wdc:mycloudex2ultra:mjcc (non-flash)
-                //
-                // partes[2] = "192.168.10.20:3260,1"
-                // portal = "192.168.10.20:3260"
-
-                string portal = partes[2].Trim().Split(',')[0];
+                string rawPortal = partes[2].Trim().Split(',')[0];
+                string ipOnly = rawPortal.Split(':')[0]; // Extraer solo la dirección IP pura
 
                 lista.Add(new IscsiDestino
                 {
                     Iqn = iqn,
-                    Ip = portal,
+                    Ip = ipOnly,
+                    PortalReal = rawPortal,
                     Conectado = true
                 });
             }
