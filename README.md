@@ -135,4 +135,4 @@ It focuses on reliability and does not modify any ISCSI settings outside the use
 ---
 Youtube Video
 ---
-**https://youtu.be/X6z2KGqEbQ0?si=5YxSp8ePP_80V0AZ**
+**https://youtu.be/y89rcjFPikw**
