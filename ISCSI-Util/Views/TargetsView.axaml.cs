@@ -448,7 +448,7 @@ public partial class TargetsView : UserControl
 
         bool persistente = IscsiPersistenceManager.Detect(destino);
         BtnTogglePersist.IsEnabled = destino.Conectado;
-        BtnTogglePersist.Content = persistente ? "Remove Persist" : "Persist";
+        BtnTogglePersist.Content = persistente ? "No Autostart" : "Autostart";
 
         var infoGrid = new Grid
         {
@@ -506,6 +506,7 @@ public partial class TargetsView : UserControl
     // PERSISTENCE & HEADER EVENTS
     // ============================================================
 
+    
     private async void OnTogglePersist(object? sender, RoutedEventArgs e)
     {
         if (_selected == null)
@@ -515,16 +516,25 @@ public partial class TargetsView : UserControl
 
         using (LoadingService.Show(persistente ? "Removing persistence..." : "Applying persistence..."))
         {
-            await IscsiHelper.CompletarInformacionDestino(_selected, 0);
+            // 1) Permite que la UI rinda/dibuje el spinner y comience la animación
+            await Task.Delay(50); 
 
-            if (!persistente)
-                await IscsiPersistenceManager.ApplyAsync(_selected);
-            else
-                await IscsiPersistenceManager.RemoveAsync(_selected);
+            // 2) Descarga el trabajo pesado fuera del hilo de UI usando Task.Run
+            await Task.Run(async () =>
+            {
+                await IscsiHelper.CompletarInformacionDestino(_selected, 0);
+
+                if (!persistente)
+                    await IscsiPersistenceManager.ApplyAsync(_selected);
+                else
+                    await IscsiPersistenceManager.RemoveAsync(_selected);
+            });
         }
 
         await RefreshTargetsList();
     }
+    
+    
 
     private async void OnHeaderUnmount(object? sender, RoutedEventArgs e)
     {

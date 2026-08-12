@@ -648,7 +648,7 @@ public static class IscsiHelper
             d.TieneFilesystem = true;
             d.FsType = DetectarFsType(blkid.Stdout);
 
-            // 7) Montar
+          // 7) Montar y asignar permisos de usuario para KDE
             if (!d.TieneFilesystem)
             {
                 d.Conectado = true;
@@ -660,11 +660,39 @@ public static class IscsiHelper
 
             if (mpCheck.ExitCode != 0)
             {
-                var mountFs = d.FsType == "ntfs" ? "ntfs-3g" : d.FsType;
+                // A) Obtener el usuario real de la sesión de KDE (evita usar 'root' si la app corre con sudo)
+                string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER");
+                if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
+                {
+                    usuarioReal = ShellHelper.EjecutarComoRoot("logname").Stdout?.Trim() ?? "1000";
+                }
 
-                ShellHelper.EjecutarComoRoot(
-                    $"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\""
-                );
+                // Obtener UID y GID del usuario
+                string uid = ShellHelper.EjecutarComoRoot($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
+                string gid = ShellHelper.EjecutarComoRoot($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
+
+                string fsLower = (d.FsType ?? "").ToLowerInvariant();
+
+                // B) Montar según el tipo de Filesystem
+                if (fsLower == "ntfs" || fsLower == "exfat" || fsLower == "vfat")
+                {
+                    // En NTFS/exFAT asignamos el usuario mediante opciones de montaje (-o)
+                    string driver = fsLower == "ntfs" ? "ntfs-3g" : fsLower;
+                    ShellHelper.EjecutarComoRoot(
+                        $"mount -t {driver} -o uid={uid},gid={gid},umask=000 {d.PartitionPath} \"{d.MountPoint}\""
+                    );
+                }
+                else
+                {
+                    // En ext4 / xfs / btrfs montamos de forma estándar
+                    ShellHelper.EjecutarComoRoot(
+                        $"mount -t {d.FsType} {d.PartitionPath} \"{d.MountPoint}\""
+                    );
+
+                    // IMPRESCINDIBLE PARA KDE/ext4: Cambiar la propiedad de la raíz del montaje al usuario
+                    ShellHelper.EjecutarComoRoot($"chown -R {uid}:{gid} \"{d.MountPoint}\"");
+                    ShellHelper.EjecutarComoRoot($"chmod 777 \"{d.MountPoint}\"");
+                }
             }
 
             d.Conectado = true;
