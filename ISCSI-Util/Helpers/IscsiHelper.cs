@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
@@ -104,7 +104,7 @@ public static class IscsiHelper
     }
 
     // ============================================================
-    //  DETECTAR CHAP / MUTUAL CHAP (ACTUALIZADO)
+    //  DETECTAR CHAP / MUTUAL CHAP
     // ============================================================
 
     public static void DetectarChap(IscsiDestino d)
@@ -203,7 +203,7 @@ public static class IscsiHelper
     }
 
     // ============================================================
-    //  DISCOVER — Descubrir destinos iSCSI (ACTUALIZADO)
+    //  DISCOVER — Descubrir destinos iSCSI
     // ============================================================
 
     public static async Task<List<IscsiDestino>> Descubrir(string ip)
@@ -215,253 +215,272 @@ public static class IscsiHelper
 
         var destinos = new List<IscsiDestino>();
 
-        using (LoadingService.Show($"Discovering targets at {ip}..."))
-        {
-            try
-            {
-                LogService.Debug($"[ISCSI] #{id} Ejecutando discovery sendtargets...");
-                var discovery = await Task.Run(() =>
-                    ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
-                );
-
-                if (string.IsNullOrWhiteSpace(discovery.Stdout))
-                {
-                    LogService.Debug($"[ISCSI] #{id} Discovery vacío.");
-                    TraceOut(id, "Descubrir", "EMPTY");
-                    return destinos;
-                }
-
-                var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
-
-                int countParseados = 0;
-
-                foreach (var line in discovery.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (!line.Contains("iqn.")) continue;
-
-                    var partes = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-                    var portalRaw = partes[0];
-                    var portal = portalRaw.Split(',')[0];
-
-                    if (!portal.Contains(":"))
-                        portal = $"{portal}:3260";
-
-                    if (!portal.StartsWith(ip))
-                        continue;
-
-                    string iqn = partes.LastOrDefault(s => s.StartsWith("iqn."));
-                    if (string.IsNullOrWhiteSpace(iqn))
-                        continue;
-
-                    bool conectado = sesiones.Contains(iqn, StringComparison.OrdinalIgnoreCase);
-
-                    destinos.Add(new IscsiDestino
-                    {
-                        Ip = portal,
-                        PortalReal = portal,
-                        Iqn = iqn,
-                        Conectado = conectado,
-                        Seleccionado = false,
-                        TieneFilesystem = false
-                    });
-
-                    countParseados++;
-                }
-
-                LogService.Debug($"[ISCSI] #{id} Targets parseados: {countParseados}");
-
-                LogService.Debug($"[ISCSI] #{id} Detectando CHAP en paralelo para {destinos.Count} targets...");
-
-                await Task.Run(() =>
-                {
-                    foreach (var d in destinos)
-                    {
-                        var chap = IscsiChapDetector.Detect(d);
-
-                        d.RequiresChap = chap.RequiresChap;
-                        d.RequiresMutualChap = chap.RequiresMutualChap;
-                        d.HasLocalChapConfigured = chap.HasLocalChapConfigured;
-                        d.HasLocalMutualConfigured = chap.HasLocalMutualConfigured;
-
-                        d.LocalUser = chap.LocalUser;
-                        d.LocalPass = chap.LocalPass;
-                        d.LocalUserIn = chap.LocalUserIn;
-                        d.LocalPassIn = chap.LocalPassIn;
-
-                        d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
-                        d.UsaMutualChap = d.RequiresMutualChap || d.HasLocalMutualConfigured;
-                    }
-                });
-
-                LogService.Debug($"[ISCSI] #{id} CHAP detection completed.");
-
-                TraceOut(id, "Descubrir", $"OK ({destinos.Count} targets)");
-                return destinos;
-            }
-            catch (Exception ex)
-            {
-                LogService.Error($"[ISCSI] #{id} ERROR Descubrir: {ex.Message}");
-                TraceOut(id, "Descubrir", "ERROR");
-                return destinos;
-            }
-        }
-    }
-
-    // ============================================================
-    //  COMPLETAR INFORMACIÓN — DevicePath, PartitionPath, FS
-    // ============================================================
-
-    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
-    {
-        long id = NextTraceId();
-        TraceIn(id, "CompletarInformacion", d.Iqn);
-
         try
         {
-            if (!d.Conectado)
-            {
-                LogService.Debug($"[ISCSI] #{id} Target {d.Iqn} no está conectado. Saltando detección.");
-                d.TieneFilesystem = false;
-                d.FsType = "";
-                d.MountPoint = "";
-                return;
-            }
-
-            LogService.Debug($"[ISCSI] #{id} Buscando symlink en /dev/disk/by-path para {d.Iqn}...");
-
-            var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            var (ipSolo, port) = NormalizarPortal(d.Ip);
-
-            var match = byPath.FirstOrDefault(l =>
-                l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
-                l.Contains("lun", StringComparison.OrdinalIgnoreCase)
+            LogService.Debug($"[ISCSI] #{id} Ejecutando discovery sendtargets...");
+            var discovery = await Task.Run(() =>
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
             );
 
-            if (match != null)
+            if (string.IsNullOrWhiteSpace(discovery.Stdout))
             {
-                d.DevicePath = "/dev/disk/by-path/" + match.Trim();
-                LogService.Debug($"[ISCSI] #{id} Symlink detectado: {d.DevicePath}");
-            }
-            else
-            {
-                LogService.Error($"[ISCSI] #{id} No se encontró symlink para {d.Iqn}.");
-                return;
+                LogService.Debug($"[ISCSI] #{id} Discovery vacío.");
+                TraceOut(id, "Descubrir", "EMPTY");
+                return destinos;
             }
 
-            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
-            var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
 
-            if (lines.Length > 1)
+            int countParseados = 0;
+
+            foreach (var line in discovery.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
-                d.PartitionPath = "/dev/" + lines[1].Trim();
-            }
-            else
-            {
-                d.PartitionPath = null;
-            }
+                if (!line.Contains("iqn.")) continue;
 
-            LogService.Debug($"[ISCSI] #{id} PartitionPath = {d.PartitionPath ?? "(sin partición)"}");
+                var partes = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                var portalRaw = partes[0];
+                var portal = portalRaw.Split(',')[0];
 
-            string[] posibles =
-            {
-                d.PartitionPath ?? "",
-                d.DevicePath ?? "",
-                d.PartitionPath != null ? "/dev/" + Path.GetFileName(d.PartitionPath) : "",
-                "/dev/" + Path.GetFileName(d.DevicePath ?? "")
-            };
+                if (!portal.Contains(":"))
+                    portal = $"{portal}:3260";
 
-            d.MountPoint = "";
+                if (!portal.StartsWith(ip))
+                    continue;
 
-            foreach (var m in mounts)
-            {
-                foreach (var p in posibles)
+                string iqn = partes.LastOrDefault(s => s.StartsWith("iqn."));
+                if (string.IsNullOrWhiteSpace(iqn))
+                    continue;
+
+                bool conectado = sesiones.Contains(iqn, StringComparison.OrdinalIgnoreCase);
+
+                destinos.Add(new IscsiDestino
                 {
-                    if (!string.IsNullOrWhiteSpace(p) && m.StartsWith(p + " "))
-                    {
-                        var parts = m.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 3)
-                        {
-                            d.MountPoint = parts[2];
-                            LogService.Debug($"[ISCSI] #{id} MountPoint detectado: {d.MountPoint}");
-                            break;
-                        }
-                    }
-                }
+                    Ip = portal,
+                    PortalReal = portal,
+                    Iqn = iqn,
+                    Conectado = conectado,
+                    Seleccionado = false,
+                    TieneFilesystem = false
+                });
 
-                if (!string.IsNullOrEmpty(d.MountPoint))
-                    break;
+                countParseados++;
             }
 
-            if (string.IsNullOrWhiteSpace(d.MountPoint))
-                LogService.Debug($"[ISCSI] #{id} No se detectó mountpoint para {d.Iqn}.");
+            LogService.Debug($"[ISCSI] #{id} Targets parseados: {countParseados}");
+            LogService.Debug($"[ISCSI] #{id} Detectando CHAP en paralelo para {destinos.Count} targets...");
 
-            if (d.PartitionPath == null)
+            await Task.Run(() =>
             {
-                d.TieneFilesystem = false;
-                d.FsType = "";
-                LogService.Debug($"[ISCSI] #{id} RAW sin partición → no hay filesystem.");
-            }
-            else
-            {
-                var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {d.PartitionPath}");
-                string outBlk = blkid.Stdout ?? "";
-
-                d.TieneFilesystem =
-                    outBlk.Contains("TYPE=\"ext") ||
-                    outBlk.Contains("TYPE=\"xfs\"") ||
-                    outBlk.Contains("TYPE=\"btrfs\"") ||
-                    outBlk.Contains("TYPE=\"f2fs\"") ||
-                    outBlk.Contains("TYPE=\"ntfs\"") ||
-                    outBlk.Contains("TYPE=\"vfat\"") ||
-                    outBlk.Contains("TYPE=\"exfat\"");
-
-                if (d.TieneFilesystem)
+                foreach (var d in destinos)
                 {
-                    d.FsType = DetectarFsType(outBlk);
-                    LogService.Debug($"[ISCSI] #{id} Filesystem detectado: {d.FsType}");
-                }
-                else
-                {
-                    d.FsType = "";
-                    LogService.Debug($"[ISCSI] #{id} No se detectó filesystem en {d.PartitionPath}");
-                }
-            }
+                    var chap = IscsiChapDetector.Detect(d);
 
-            d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
-            d.UsaMutualChap = d.RequiresMutualChap || d.HasLocalMutualConfigured;
+                    d.RequiresChap = chap.RequiresChap;
+                    d.RequiresMutualChap = chap.RequiresMutualChap;
+                    d.HasLocalChapConfigured = chap.HasLocalChapConfigured;
+                    d.HasLocalMutualConfigured = chap.HasLocalMutualConfigured;
 
-            TraceOut(id, "CompletarInformacion");
+                    d.LocalUser = chap.LocalUser;
+                    d.LocalPass = chap.LocalPass;
+                    d.LocalUserIn = chap.LocalUserIn;
+                    d.LocalPassIn = chap.LocalPassIn;
+
+                    d.UsaChap = d.RequiresChap || d.HasLocalChapConfigured;
+                    d.UsaMutualChap = d.RequiresMutualChap || d.HasLocalMutualConfigured;
+                }
+            });
+
+            LogService.Debug($"[ISCSI] #{id} CHAP detection completed.");
+
+            TraceOut(id, "Descubrir", $"OK ({destinos.Count} targets)");
+            return destinos;
         }
         catch (Exception ex)
         {
-            LogService.Error($"[ISCSI] #{id} ERROR CompletarInformacion: {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR Descubrir: {ex.Message}");
+            TraceOut(id, "Descubrir", "ERROR");
+            return destinos;
         }
     }
-// ======================================================================
-//  CONECTAR — Login iSCSI + detección + montaje (ACTUALIZADO)
-// ======================================================================
 
-public static async Task Conectar(IscsiDestino d)
+    
+    public static async Task CompletarInformacionDestino(IscsiDestino d, long parentId)
 {
     long id = NextTraceId();
-    TraceIn(id, "Conectar", d.Iqn);
+    TraceIn(id, "CompletarInformacion", d.Iqn);
 
-    LogService.Debug($"[ISCSI] #{id} >>> INICIO Conectar() para IQN={d.Iqn}, IP={d.Ip}");
-
-    using (LoadingService.Show($"Connecting to {d.Iqn}..."))
+    try
     {
+        // 1) Verificar la sesión activa en el Kernel independientemente del flag de la UI
+        string sessionOutput = ShellHelper.EjecutarComoRoot($"iscsiadm -m session 2>/dev/null | grep -i \"{d.Iqn}\"").Stdout;
+        d.Conectado = !string.IsNullOrWhiteSpace(sessionOutput);
+
+        if (!d.Conectado)
+        {
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.MountPoint = null;
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            return;
+        }
+
+        // 2) Detectar symlink / dispositivo activo
+        var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var portal = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
+        var (ipSolo, _) = NormalizarPortal(portal);
+
+        var match = byPath.FirstOrDefault(l =>
+            l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
+            l.Contains("lun", StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (match == null)
+        {
+            d.DevicePath = null;
+            d.PartitionPath = null;
+            d.MountPoint = null;
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            return;
+        }
+
+        d.DevicePath = "/dev/disk/by-path/" + match.Trim();
+
+        // 3) Detectar si existe una partición o si es un dispositivo formateado en raw (Superfloppy)
+        var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
+        var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        string? targetPath = null;
+
+        foreach (var line in lines)
+        {
+            var p = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length == 2 && p[1] == "part")
+            {
+                targetPath = "/dev/" + p[0];
+                d.PartitionPath = targetPath;
+                break;
+            }
+        }
+
+        // Si no hay partición, evaluamos directamente el dispositivo raw (DevicePath)
+        if (targetPath == null)
+        {
+            d.PartitionPath = null;
+            targetPath = d.DevicePath;
+        }
+
+        // 4) Detectar Filesystem (evaluando targetPath, ya sea partición o disco completo)
+        var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {targetPath}");
+        d.FsType = DetectarFsType(blkid.Stdout);
+
+        d.TieneFilesystem = !string.IsNullOrWhiteSpace(d.FsType) &&
+                             !d.FsType.Equals("raw", StringComparison.OrdinalIgnoreCase);
+
+        // 5) Detectar punto de montaje en runtime
+        d.MountPoint = null;
+
+        var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var m in mounts)
+        {
+            if (d.PartitionPath != null && m.StartsWith(d.PartitionPath + " "))
+            {
+                d.MountPoint = m.Split(' ')[2];
+                break;
+            }
+
+            if (d.DevicePath != null && m.StartsWith(d.DevicePath + " "))
+            {
+                d.MountPoint = m.Split(' ')[2];
+                break;
+            }
+        }
+
+        // 6) Detectar persistencia
+        d.Persistir = DetectarPersistencia(d);
+
+        if (d.Persistir && string.IsNullOrEmpty(d.MountPoint))
+        {
+            string safe = SanitizarNombre(d.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
+
+            d.MountPoint = Path.Combine(ConfigManager.MountBasePath, safe);
+        }
+
+        TraceOut(id, "CompletarInformacion");
+    }
+    catch (Exception ex)
+    {
+        LogService.Error($"[ISCSI] #{id} ERROR CompletarInformacion: {ex.Message}");
+    }
+
+    await Task.CompletedTask;
+}
+    
+    
+    public static async Task ConectarSesion(SessionInfo s)
+    {
+        if (s == null)
+            return;
+
+        var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --login";
+        var res = ShellHelper.EjecutarComoRoot(cmd);
+
+        if (res.ExitCode == 0)
+        {
+            s.Connected = true;
+            s.ConnectedSince = DateTime.Now;
+        }
+        else
+        {
+            LogService.Error($"[ISCSI] Error al conectar sesión {s.Iqn}: {res.Stderr}");
+        }
+
+        await Task.CompletedTask;
+    }
+
+    public static async Task DesconectarSesion(SessionInfo s)
+    {
+        if (s == null)
+            return;
+
+        var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --logout";
+        var res = ShellHelper.EjecutarComoRoot(cmd);
+
+        if (res.ExitCode == 0)
+        {
+            s.Connected = false;
+            s.MountPoint = "";
+        }
+        else
+        {
+            LogService.Error($"[ISCSI] Error al desconectar sesión {s.Iqn}: {res.Stderr}");
+        }
+
+        await Task.CompletedTask;
+    }
+
+    // ======================================================================
+    //  CONECTAR — Login iSCSI + detección + montaje
+    // ======================================================================
+
+    public static async Task Conectar(IscsiDestino d)
+    {
+        long id = NextTraceId();
+        TraceIn(id, "Conectar", d.Iqn);
+
+        LogService.Debug($"[ISCSI] #{id} >>> INICIO Conectar() para IQN={d.Iqn}, IP={d.Ip}");
+
         try
         {
-            // ===============================================================
-            // 1) GENERAR MOUNTPOINT ÚNICO Y LIMPIAR DUPLICADOS
-            // ===============================================================
-
+            // 1) Crear mountpoint único por IQN
             string basePath = ConfigManager.MountBasePath;
 
             string safeIqn = d.Iqn
@@ -476,46 +495,7 @@ public static async Task Conectar(IscsiDestino d)
                 )
             ).Substring(0, 8);
 
-            string finalMountPoint = Path.Combine(basePath, $"{safeIqn}_{hash}");
-
-            // Detectar si ya está montado en otro sitio
-            var mounts = ShellHelper.EjecutarComoRoot("mount").Stdout
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var m in mounts)
-            {
-                if (m.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
-                {
-                    var parts = m.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 3)
-                    {
-                        d.MountPoint = parts[2];
-                        LogService.Debug($"[ISCSI] #{id} LUN ya montado en {d.MountPoint}. Evitando duplicados.");
-                        return;
-                    }
-                }
-            }
-
-            // Limpiar mountpoints huérfanos
-            foreach (var dir in Directory.GetDirectories(basePath))
-            {
-                if (dir.Contains(safeIqn, StringComparison.OrdinalIgnoreCase) &&
-                    !dir.Equals(finalMountPoint, StringComparison.OrdinalIgnoreCase))
-                {
-                    LogService.Debug($"[ISCSI] #{id} Eliminando mountpoint huérfano: {dir}");
-
-                    ShellHelper.EjecutarComoRoot($"umount -l \"{dir}\"");
-
-                    try { Directory.Delete(dir, true); }
-                    catch (Exception ex)
-                    {
-                        LogService.Error($"[ISCSI] #{id} No se pudo eliminar {dir}: {ex.Message}");
-                    }
-                }
-            }
-
-            // Crear mountpoint final
-            d.MountPoint = finalMountPoint;
+            d.MountPoint = Path.Combine(basePath, $"{safeIqn}_{hash}");
 
             if (!Directory.Exists(d.MountPoint))
             {
@@ -525,21 +505,13 @@ public static async Task Conectar(IscsiDestino d)
                 );
             }
 
-            LogService.Debug($"[ISCSI] #{id} MountPoint final = {d.MountPoint}");
-
-            // ===============================================================
-            // 2) COMPROBAR SESIÓN iSCSI
-            // ===============================================================
-
+            // 2) Comprobar si ya está conectado
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
             bool yaConectado = sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase);
 
             var (ipSolo, port) = NormalizarPortal(d.Ip);
 
-            // ===============================================================
             // 3) LOGIN iSCSI
-            // ===============================================================
-
             if (!yaConectado)
             {
                 var checkNode = ShellHelper.EjecutarComoRoot(
@@ -555,6 +527,7 @@ public static async Task Conectar(IscsiDestino d)
                     );
                 }
 
+                // CHAP
                 if (d.UsaChap || d.UsaMutualChap)
                 {
                     ShellHelper.EjecutarComoRoot(
@@ -590,17 +563,9 @@ public static async Task Conectar(IscsiDestino d)
                     }
                 }
 
-                var loginTask = Task.Run(() =>
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --login"
-                    )
+                var loginResult = ShellHelper.EjecutarComoRoot(
+                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --login"
                 );
-
-                var completed = await Task.WhenAny(loginTask, Task.Delay(5000));
-                if (completed != loginTask)
-                    throw new Exception("TIMEOUT en login iSCSI");
-
-                var loginResult = loginTask.Result;
 
                 if (loginResult.ExitCode != 0 &&
                     !loginResult.Stderr.Contains("already present", StringComparison.OrdinalIgnoreCase))
@@ -611,10 +576,7 @@ public static async Task Conectar(IscsiDestino d)
                 await Task.Delay(300);
             }
 
-            // ===============================================================
-            // 4) DETECTAR SYMLINK
-            // ===============================================================
-
+            // 4) Detectar symlink correcto
             d.DevicePath = null;
 
             for (int i = 0; i < 10; i++)
@@ -639,21 +601,25 @@ public static async Task Conectar(IscsiDestino d)
             if (string.IsNullOrWhiteSpace(d.DevicePath))
                 throw new Exception("No se encontró symlink del dispositivo iSCSI.");
 
-            // ===============================================================
-            // 5) DETECTAR PARTICIÓN
-            // ===============================================================
-
-            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {d.DevicePath}");
+            // 5) Detectar partición correcta
+            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
             var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            d.PartitionPath = lines.Length > 1
-                ? "/dev/" + lines[1].Trim()
-                : d.DevicePath;
+            string? partition = null;
 
-            // ===============================================================
-            // 6) DETECTAR FILESYSTEM
-            // ===============================================================
+            foreach (var line in lines)
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 && parts[1] == "part")
+                {
+                    partition = "/dev/" + parts[0];
+                    break;
+                }
+            }
 
+            d.PartitionPath = partition ?? d.DevicePath;
+
+            // 6) Detectar filesystem
             var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
 
             if (string.IsNullOrWhiteSpace(blkid.Stdout))
@@ -661,15 +627,21 @@ public static async Task Conectar(IscsiDestino d)
                 d.TieneFilesystem = false;
                 d.FsType = "";
                 d.Conectado = true;
+
+                TraceOut(id, "Conectar", "RAW_NO_FS");
                 return;
             }
 
             d.TieneFilesystem = true;
             d.FsType = DetectarFsType(blkid.Stdout);
 
-            // ===============================================================
-            // 7) MONTAR
-            // ===============================================================
+            // 7) Montar
+            if (!d.TieneFilesystem)
+            {
+                d.Conectado = true;
+                TraceOut(id, "Conectar", "RAW_NO_MOUNT");
+                return;
+            }
 
             var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
 
@@ -691,280 +663,135 @@ public static async Task Conectar(IscsiDestino d)
         {
             LogService.Error($"[ISCSI] #{id} ERROR Conectar: {ex.Message}");
             NotificadorLinux.Enviar($"[ERROR] Failed to connect target {d.Iqn}", 6000, "critical");
+            throw;
         }
     }
-}
+    
+    // ======================================================================
+    //  OBTENER PORTAL REAL
+    // ======================================================================
 
-
-
-// ======================================================================
-//  OBTENER PORTAL REAL — universal, robusto, multi-servidor
-// ======================================================================
-
-public static string? ObtenerPortalReal(IscsiDestino d)
-{
-    try
-    {
-        var result = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn}"
-        );
-
-        if (string.IsNullOrWhiteSpace(result.Stdout))
-            return null;
-
-        var line = result.Stdout
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault(l => l.Contains(d.Iqn));
-
-        if (line == null)
-            return null;
-
-        var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0)
-            return null;
-
-        var portal = parts[0].Trim();
-
-        if (portal.StartsWith("node.", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        if (!portal.Contains('.') || !portal.Contains(':'))
-            return null;
-
-        return portal;
-    }
-    catch
-    {
-        return null;
-    }
-}
-
-// ======================================================================
-//  FSTAB — EXACTAMENTE COMO EL ORIGINAL (UUID + _netdev)
-// ======================================================================
-
-private static async Task GuardarEnFstab_Original(IscsiDestino d, long id)
-{
-    LogService.Debug($"[ISCSI] #{id} GuardarEnFstab_Original → Iniciando para {d.Iqn}");
-
-    using (LoadingService.Show($"Updating fstab for {d.Iqn}..."))
+    public static string? ObtenerPortalReal(IscsiDestino d)
     {
         try
         {
-            LogService.Debug($"[ISCSI] #{id} Obteniendo UUID de {d.PartitionPath}...");
+            var result = ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn}"
+            );
 
-            var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
-            string uuid = blkid.Stdout.Split(' ')
-                .FirstOrDefault(s => s.StartsWith("UUID="))?
-                .Replace("UUID=", "")
-                .Trim('"');
+            if (string.IsNullOrWhiteSpace(result.Stdout))
+                return null;
 
-            if (string.IsNullOrWhiteSpace(uuid))
-            {
-                LogService.Error($"[ISCSI] #{id} No se pudo obtener UUID para {d.PartitionPath}");
-                return;
-            }
+            var line = result.Stdout
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault(l => l.Contains(d.Iqn));
 
-            LogService.Debug($"[ISCSI] #{id} UUID detectado: {uuid}");
+            if (line == null)
+                return null;
 
-            string entry = $"UUID={uuid} {d.MountPoint} auto _netdev 0 0";
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                return null;
+
+            var portal = parts[0].Trim();
+
+            if (portal.StartsWith("node.", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (!portal.Contains('.') || !portal.Contains(':'))
+                return null;
+
+            return portal;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ======================================================================
+    //  ELIMINAR PERSISTENCIA
+    // ======================================================================
+
+    private static async Task EliminarPersistencia_Original(IscsiDestino d, long id)
+    {
+        LogService.Debug($"[ISCSI] #{id} EliminarPersistencia_Original → Iniciando para {d.Iqn}");
+
+        try
+        {
+            string safe = SystemdSafe(d.Iqn);
+
+            string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
+            string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
+
+            ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-{safe}.service");
+            ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
+            ShellHelper.EjecutarComoRoot($"rm -f {scriptPath}");
+
             string mpEsc = d.MountPoint.Replace("/", "\\/");
+            ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
 
-            LogService.Debug($"[ISCSI] #{id} Entrada fstab generada: {entry}");
+            ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op update --name node.startup --value manual"
+            );
 
-            await Task.Run(() =>
-            {
-                ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
-                ShellHelper.EjecutarComoRoot($"bash -c 'echo \"{entry}\" >> /etc/fstab'");
-            });
-
-            LogService.Debug($"[ISCSI] #{id} fstab actualizado correctamente.");
-
-            TraceOut(id, "GuardarEnFstab_Original");
+            TraceOut(id, "EliminarPersistencia_Original");
         }
         catch (Exception ex)
         {
-            LogService.Error($"[ISCSI] #{id} ERROR GuardarEnFstab_Original: {ex.Message}");
+            LogService.Error($"[ISCSI] #{id} ERROR EliminarPersistencia_Original: {ex.Message}");
         }
-    }
-}
 
-// ======================================================================
-//  CREAR SERVICIO SYSTEMD — EXACTAMENTE COMO EL ORIGINAL + PORTAL REAL
-// ======================================================================
-
-private static async Task CrearServicioPersistencia_Original(IscsiDestino d, long id)
-{
-    LogService.Debug($"[ISCSI] #{id} CrearServicioPersistencia_Original → Iniciando para {d.Iqn}");
-
-    try
-    {
-        string safe = SystemdSafe(d.Iqn);
-
-        string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
-        string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
-
-        LogService.Debug($"[ISCSI] #{id} Rutas generadas: script={scriptPath}, service={servicePath}");
-
-        string scriptContent =
-$@"#!/bin/bash
-TARGET=""{d.Iqn}""
-PORTAL=""{d.Ip}""
-MOUNTPOINT=""{d.MountPoint}""
-
-if [ ""{d.UsuarioChap}"" != """" ]; then
-  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.authmethod --value=CHAP
-  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.username --value=""{d.UsuarioChap}""
-  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.password --value=""{d.PasswordChap}""
-fi
-
-if [ ""{d.UsuarioMutualChap}"" != """" ]; then
-  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.username_in --value=""{d.UsuarioMutualChap}""
-  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --op=update --name node.session.auth.password_in --value=""{d.PasswordMutualChap}""
-fi
-
-if ! iscsiadm -m session | grep -q ""$TARGET""; then
-  iscsiadm -m node -T ""$TARGET"" -p ""$PORTAL"" --login
-  for i in {{1..10}}; do
-    if ls /dev/disk/by-path/*""$TARGET""*lun* &>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
-fi
-
-mount -a -O _netdev
-exit 0
-";
-
-        File.WriteAllText("/tmp/tmp_script.sh", scriptContent);
-
-        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_script.sh {scriptPath}");
-        ShellHelper.EjecutarComoRoot($"chmod 755 {scriptPath}");
-        ShellHelper.EjecutarComoRoot($"chown root:root {scriptPath}");
-
-        string serviceContent =
-$@"[Unit]
-Description=Conectar iSCSI y montar {d.Iqn}
-After=network-online.target NetworkManager-wait-online.service iscsid.service iscsi.service remote-fs.target
-Requires=network-online.target NetworkManager-wait-online.service iscsid.service iscsi.service
-Before=remote-fs-pre.target
-Wants=remote-fs-pre.target
-
-[Service]
-Type=oneshot
-ExecStart={scriptPath}
-RemainAfterExit=yes
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-";
-
-        File.WriteAllText("/tmp/tmp_service.service", serviceContent);
-
-        ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_service.service {servicePath}");
-        ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
-        ShellHelper.EjecutarComoRoot($"chown root:root {servicePath}");
-
-        TraceOut(id, "CrearServicioPersistencia_Original");
-    }
-    catch (Exception ex)
-    {
-        LogService.Error($"[ISCSI] #{id} ERROR CrearServicioPersistencia_Original: {ex.Message}");
+        await Task.CompletedTask;
     }
 
-    await Task.CompletedTask;
-}
+    // ======================================================================
+    //  DETECTAR PERSISTENCIA
+    // ======================================================================
 
-// ======================================================================
-//  ELIMINAR PERSISTENCIA — EXACTAMENTE COMO EL ORIGINAL
-// ======================================================================
-
-private static async Task EliminarPersistencia_Original(IscsiDestino d, long id)
-{
-    LogService.Debug($"[ISCSI] #{id} EliminarPersistencia_Original → Iniciando para {d.Iqn}");
-
-    try
+    public static bool DetectarPersistencia(IscsiDestino d)
     {
-        string safe = SystemdSafe(d.Iqn);
+        if (d == null || string.IsNullOrWhiteSpace(d.MountPoint))
+            return false;
 
-        string scriptPath = $"/usr/local/bin/mount-iscsi-{safe}.sh";
-        string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
-
-        ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-{safe}.service");
-        ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
-        ShellHelper.EjecutarComoRoot($"rm -f {scriptPath}");
-
-        string mpEsc = d.MountPoint.Replace("/", "\\/");
-        ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
-
-        ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op update --name node.startup --value manual"
-        );
-
-        TraceOut(id, "EliminarPersistencia_Original");
-    }
-    catch (Exception ex)
-    {
-        LogService.Error($"[ISCSI] #{id} ERROR EliminarPersistencia_Original: {ex.Message}");
-    }
-
-    await Task.CompletedTask;
-}
-
-// ======================================================================
-//  DETECTAR PERSISTENCIA — EXACTAMENTE COMO EL ORIGINAL
-// ======================================================================
-
-public static bool DetectarPersistencia(IscsiDestino d)
-{
-    if (d == null || string.IsNullOrWhiteSpace(d.MountPoint))
-        return false;
-
-    try
-    {
-        if (File.Exists("/etc/fstab"))
-        {
-            string fstab = File.ReadAllText("/etc/fstab");
-            string pattern = $" {d.MountPoint} ";
-
-            if (fstab.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-    }
-    catch { }
-
-    try
-    {
-        string safe = SystemdSafe(d.Iqn);
-        string service = $"/etc/systemd/system/iscsi-{safe}.service";
-
-        if (File.Exists(service))
-            return true;
-    }
-    catch { }
-
-    return false;
-}
-
-// ======================================================================
-//  DESCONECTAR — desmontaje + logout + limpieza
-// ======================================================================
-public static async Task Desconectar(IscsiDestino d)
-{
-    long id = NextTraceId();
-    TraceIn(id, "Desconectar", d.Iqn);
-
-    using (LoadingService.Show($"Disconnecting {d.Iqn}..."))
-    {
         try
         {
-            // ===============================================================
-            // 1) DESMONTAR SI ESTÁ MONTADO
-            // ===============================================================
+            if (File.Exists("/etc/fstab"))
+            {
+                string fstab = File.ReadAllText("/etc/fstab");
+                string pattern = $" {d.MountPoint} ";
 
+                if (fstab.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { }
+
+        try
+        {
+            string safe = SystemdSafe(d.Iqn);
+            string service = $"/etc/systemd/system/iscsi-{safe}.service";
+
+            if (File.Exists(service))
+                return true;
+        }
+        catch { }
+
+        return false;
+    }
+
+    // ======================================================================
+    //  DESCONECTAR — Desmontaje + logout + limpieza segura
+    // ======================================================================
+
+    public static async Task Desconectar(IscsiDestino d)
+    {
+        long id = NextTraceId();
+        TraceIn(id, "Desconectar", d.Iqn);
+
+        try
+        {
+            // Desmontar si está montado
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
                 var mpCheck = ShellHelper.EjecutarComoRoot(
@@ -988,44 +815,23 @@ public static async Task Desconectar(IscsiDestino d)
                 }
             }
 
-            // ===============================================================
-            // 2) LIMPIAR MOUNTPOINTS HUÉRFANOS DEL MISMO IQN
-            // ===============================================================
-
-            string basePath = ConfigManager.MountBasePath;
-
-            string safeIqn = d.Iqn
-                .Replace(":", "_")
-                .Replace("/", "_")
-                .Replace(".", "_")
-                .Replace("-", "_");
-
-            foreach (var dir in Directory.GetDirectories(basePath))
+            // Uso de rmdir para evitar borrado de datos en caso de que siga montado
+            if (!string.IsNullOrWhiteSpace(d.MountPoint) && Directory.Exists(d.MountPoint))
             {
-                if (dir.Contains(safeIqn, StringComparison.OrdinalIgnoreCase))
-                {
-                    ShellHelper.EjecutarComoRoot($"umount -l \"{dir}\"");
-
-                    try { Directory.Delete(dir, true); }
-                    catch (Exception ex)
-                    {
-                        LogService.Error($"[ISCSI] #{id} No se pudo eliminar {dir}: {ex.Message}");
-                    }
-                }
+                ShellHelper.EjecutarComoRoot($"rmdir \"{d.MountPoint}\"");
             }
 
-            // ===============================================================
-            // 3) LOGOUT iSCSI
-            // ===============================================================
-
+            // Logout solo del IQN seleccionado
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
 
             if (!string.IsNullOrWhiteSpace(sesiones) &&
                 sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
             {
+                var (ipSolo, _) = NormalizarPortal(d.Ip);
+
                 var logoutTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --logout"
+                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --logout"
                     )
                 );
 
@@ -1033,16 +839,12 @@ public static async Task Desconectar(IscsiDestino d)
                 await Task.Delay(300);
             }
 
-            // ===============================================================
-            // 4) LIMPIAR ESTADO DEL OBJETO
-            // ===============================================================
-
-            d.Conectado = false;
+            d.Conectado       = false;
             d.TieneFilesystem = false;
-            d.DevicePath = null;
-            d.PartitionPath = null;
-            d.FsType = null;
-            d.MountPoint = null;
+            d.DevicePath      = null;
+            d.PartitionPath   = null;
+            d.FsType          = null;
+            d.MountPoint      = null;
 
             NotificadorLinux.Enviar($"Target {d.Iqn} disconnected");
             TraceOut(id, "Desconectar");
@@ -1050,29 +852,26 @@ public static async Task Desconectar(IscsiDestino d)
         catch (Exception ex)
         {
             LogService.Error($"[ISCSI] #{id} ERROR Desconectar: {ex.Message}");
+            throw;
         }
     }
-}
 
+    // ======================================================================
+    //  DESCONECTAR + BORRAR NODO — versión completa
+    // ======================================================================
 
-
-// ======================================================================
-//  DESCONECTAR + BORRAR NODO — versión completa
-// ======================================================================
-
-public static async Task Desconectar_Borrar(IscsiDestino d)
-{
-    long id = NextTraceId();
-    TraceIn(id, "Desconectar_Borrar", d.Iqn);
-
-    using (LoadingService.Show($"Removing {d.Iqn}..."))
+    public static async Task Desconectar_Borrar(IscsiDestino d)
     {
+        long id = NextTraceId();
+
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+            return;
+
+        TraceIn(id, "Desconectar_Borrar", d.Iqn);
+
         try
         {
-            // ===============================================================
             // 1) DESMONTAR SI ESTÁ MONTADO
-            // ===============================================================
-
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
             {
                 var mpCheck = ShellHelper.EjecutarComoRoot(
@@ -1096,44 +895,23 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
                 }
             }
 
-            // ===============================================================
-            // 2) LIMPIAR MOUNTPOINTS HUÉRFANOS DEL MISMO IQN
-            // ===============================================================
-
-            string basePath = ConfigManager.MountBasePath;
-
-            string safeIqn = d.Iqn
-                .Replace(":", "_")
-                .Replace("/", "_")
-                .Replace(".", "_")
-                .Replace("-", "_");
-
-            foreach (var dir in Directory.GetDirectories(basePath))
+            // 2) BORRAR DIRECTORIO DE MOUNTPOINT DE FORMA SEGURA (rmdir)
+            if (!string.IsNullOrWhiteSpace(d.MountPoint) && Directory.Exists(d.MountPoint))
             {
-                if (dir.Contains(safeIqn, StringComparison.OrdinalIgnoreCase))
-                {
-                    ShellHelper.EjecutarComoRoot($"umount -l \"{dir}\"");
-
-                    try { Directory.Delete(dir, true); }
-                    catch (Exception ex)
-                    {
-                        LogService.Error($"[ISCSI] #{id} No se pudo eliminar {dir}: {ex.Message}");
-                    }
-                }
+                ShellHelper.EjecutarComoRoot($"rmdir \"{d.MountPoint}\"");
             }
 
-            // ===============================================================
-            // 3) LOGOUT iSCSI
-            // ===============================================================
-
+            // 3) LOGOUT SOLO DEL IQN
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout;
 
             if (!string.IsNullOrWhiteSpace(sesiones) &&
                 sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
             {
+                var (ipSolo, _) = NormalizarPortal(d.Ip);
+
                 var logoutTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --logout"
+                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --logout"
                     )
                 );
 
@@ -1141,33 +919,40 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
                 await Task.Delay(300);
             }
 
-            // ===============================================================
-            // 4) BORRAR FSTAB + SYSTEMD
-            // ===============================================================
+            // 4) ELIMINAR PERSISTENCIA (fstab + systemd)
+            string safe = SanitizarNombre(d.Iqn)
+                .Replace('.', '_')
+                .Replace('-', '_');
 
-            string safe = d.SafeName;
+            string mpPersistente = Path.Combine(ConfigManager.MountBasePath, safe);
 
-            ShellHelper.EjecutarComoRoot($"sed -i '/{safe}/d' /etc/fstab");
-            ShellHelper.EjecutarComoRoot($"rm -f /etc/systemd/system/{safe}.mount");
-            ShellHelper.EjecutarComoRoot($"rm -f /etc/systemd/system/{safe}.automount");
+            // FSTAB
+            string mpEsc = mpPersistente.Replace("/", "\\/");
+            ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
+
+            // SYSTEMD
+            string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
+
+            if (File.Exists(servicePath))
+            {
+                ShellHelper.EjecutarComoRoot($"systemctl disable iscsi-{safe}.service");
+                ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
+            }
+
             ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
-            // ===============================================================
-            // 5) BORRAR NODO iSCSI
-            // ===============================================================
+            // 5) BORRAR NODO Y DISCOVERYDB
+            var (ipSolo2, _) = NormalizarPortal(d.Ip);
 
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op=delete"
+                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo2} --op=delete"
             );
 
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m discoverydb -t sendtargets -p {d.Ip} --op=delete"
+                $"iscsiadm -m discoverydb -t sendtargets -p {ipSolo2} --op=delete"
             );
 
-            // ===============================================================
-            // 6) LIMPIAR ESTADO DEL OBJETO
-            // ===============================================================
-
+            // 6) RESET COMPLETO DEL OBJETO
             d.Conectado = false;
             d.TieneFilesystem = false;
             d.DevicePath = null;
@@ -1202,122 +987,263 @@ public static async Task Desconectar_Borrar(IscsiDestino d)
         catch (Exception ex)
         {
             LogService.Error($"[ISCSI] #{id} ERROR Desconectar_Borrar: {ex.Message}");
+            throw;
         }
     }
-}
 
-
-// ======================================================================
-//  INICIALIZAR DESTINO — GPT + partición + formateo + montaje
+    // ======================================================================
+//  INITIALIZE TARGET — Root Directory Creation & English UI Messages
 // ======================================================================
 
 public static async Task InicializarDestino(IscsiDestino d, string label, string fsType)
 {
     long id = NextTraceId();
-    TraceIn(id, "InicializarDestino", d.Iqn);
+    TraceIn(id, "InicializarDestino", d.Iqn ?? "UNKNOWN_IQN");
 
-    using (LoadingService.Show($"Initializing disk ({fsType})..."))
+    try
     {
-        try
+        if (d == null)
+            throw new ArgumentNullException(nameof(d));
+
+        if (!d.Conectado)
+            await Conectar(d);
+
+        await Task.Run(async () =>
         {
-            if (!d.Conectado)
-                await Conectar(d);
+            // 1. Resolve active block device (prevents null references)
+            string? device = ObtenerDispositivoDesdeSesion(d.Iqn);
 
-            if (string.IsNullOrWhiteSpace(d.DevicePath))
-                throw new Exception("DevicePath no detectado antes de inicializar.");
-
-            string device = d.DevicePath;
-
-            var task = Task.Run(async () =>
+            if (string.IsNullOrEmpty(device))
             {
-                var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
-                if (mpCheck.ExitCode == 0)
+                // Force a session rescan so udev registers the /dev/sdX node
+                var (ipSolo, _) = NormalizarPortal(d.Ip ?? "");
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T \"{d.Iqn}\" -p \"{ipSolo}\" --rescan");
+                ShellHelper.EjecutarComoRoot("udevadm settle");
+                await Task.Delay(1000);
+
+                device = ObtenerDispositivoDesdeSesion(d.Iqn);
+            }
+
+            if (string.IsNullOrEmpty(device))
+            {
+                throw new Exception($"Could not find an active block device (/dev/sdX) assigned to IQN {d.Iqn}. Please verify that the LUN is properly exposed by the server.");
+            }
+
+            LogService.Debug($"[ISCSI] Target block device resolved: {device}");
+            d.DevicePath = device;
+
+            // Ensure a safe default MountPoint if null or empty
+            if (string.IsNullOrWhiteSpace(d.MountPoint))
+            {
+                string lunName = d.Iqn.Contains(':') ? d.Iqn.Substring(d.Iqn.LastIndexOf(':') + 1) : "iscsi_lun";
+                d.MountPoint = $"/mnt/{lunName}";
+            }
+
+            // 2. Safely unmount existing paths
+            ShellHelper.EjecutarComoRoot($"umount -f \"{device}\"* 2>/dev/null");
+            if (!string.IsNullOrWhiteSpace(d.MountPoint))
+            {
+                ShellHelper.EjecutarComoRoot($"umount -f \"{d.MountPoint}\" 2>/dev/null");
+            }
+            await Task.Delay(300);
+
+            // 3. Wipe old signatures and format as raw block device (Superfloppy mode)
+            ShellHelper.EjecutarComoRoot($"wipefs -a -f {device}");
+            ShellHelper.EjecutarComoRoot($"dd if=/dev/zero of={device} bs=1M count=10 status=none 2>/dev/null");
+            ShellHelper.EjecutarComoRoot("udevadm settle");
+            await Task.Delay(500);
+
+            // 4. Format filesystem
+            string safeLabel = (label ?? "iSCSI_Disk").Replace("\"", "\\\"").Replace("$", "\\$");
+
+            string mkfs = fsType.ToLowerInvariant() switch
+            {
+                "ext4"  => $"mkfs.ext4 -F -b 4096 -L \"{safeLabel}\" {device}",
+                "xfs"   => $"mkfs.xfs -f -L \"{safeLabel}\" {device}",
+                "btrfs" => $"mkfs.btrfs -f -L \"{safeLabel}\" {device}",
+                "ntfs"  => $"mkfs.ntfs -F -L \"{safeLabel}\" {device}",
+                "exfat" => $"mkfs.exfat -n \"{safeLabel}\" {device}",
+                _       => $"mkfs.ext4 -F -b 4096 -L \"{safeLabel}\" {device}"
+            };
+
+            var resMkfs = ShellHelper.EjecutarComoRoot(mkfs);
+            if (resMkfs.ExitCode != 0)
+            {
+                throw new Exception($"Failed to format partition ({fsType}): {resMkfs.Stderr.Trim()}");
+            }
+
+            d.PartitionPath = device;
+            d.TieneFilesystem = true;
+            d.FsType = fsType;
+
+            ShellHelper.EjecutarComoRoot("udevadm settle");
+
+            // 5. Create mount directory as root to prevent 'Access Denied' in /mnt/
+            if (!string.IsNullOrWhiteSpace(d.MountPoint))
+            {
+                var mkdirRes = ShellHelper.EjecutarComoRoot($"mkdir -p \"{d.MountPoint}\"");
+                if (mkdirRes.ExitCode != 0)
                 {
-                    ShellHelper.EjecutarComoRoot($"umount -l \"{d.MountPoint}\"");
-                    await Task.Delay(300);
+                    throw new Exception($"Failed to create mount directory {d.MountPoint}: {mkdirRes.Stderr.Trim()}");
                 }
+            }
 
-                ShellHelper.EjecutarComoRoot($"sgdisk --zap-all {device}");
-                ShellHelper.EjecutarComoRoot($"parted -s {device} mklabel gpt");
-                ShellHelper.EjecutarComoRoot($"parted -s {device} mkpart primary 0% 100%");
-                await Task.Delay(1200);
+            string mountFs = fsType == "ntfs" ? "ntfs-3g" : fsType;
+            var resMount = ShellHelper.EjecutarComoRoot($"mount -t {mountFs} {device} \"{d.MountPoint}\"");
 
-                var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME {device}");
-                var lines = lsblk.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (resMount.ExitCode != 0)
+            {
+                throw new Exception($"Failed to mount device {device} on {d.MountPoint}: {resMount.Stderr.Trim()}");
+            }
+        });
 
-                if (lines.Length > 1)
-                {
-                    d.PartitionPath = "/dev/" + lines[1].Trim();
-                }
-                else
-                {
-                    throw new Exception("No se detectó partición después de crearla.");
-                }
-
-                string mkfs = fsType switch
-                {
-                    "ext4" => $"mkfs.ext4 -F -L \"{label}\" {d.PartitionPath}",
-                    "xfs" => $"mkfs.xfs -f -L \"{label}\" {d.PartitionPath}",
-                    "btrfs" => $"mkfs.btrfs -f -L \"{label}\" {d.PartitionPath}",
-                    "f2fs" => $"mkfs.f2fs -f {d.PartitionPath}",
-                    "ntfs" => $"mkfs.ntfs -F -L \"{label}\" {d.PartitionPath}",
-                    "exfat" => $"mkfs.exfat -n \"{label}\" {d.PartitionPath}",
-                    _ => $"mkfs.ext4 -F -L \"{label}\" {d.PartitionPath}"
-                };
-
-                ShellHelper.EjecutarComoRoot(mkfs);
-
-                d.TieneFilesystem = true;
-                d.FsType = fsType;
-
-                string mountFs = fsType == "ntfs" ? "ntfs-3g" : fsType;
-
-                ShellHelper.EjecutarComoRoot(
-                    $"mount -t {mountFs} {d.PartitionPath} \"{d.MountPoint}\""
-                );
-            });
-
-            await task;
-
-            NotificadorLinux.Enviar($"Target {d.Iqn} initialized and mounted");
-            TraceOut(id, "InicializarDestino");
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[ISCSI] #{id} ERROR InicializarDestino: {ex.Message}");
-        }
+        NotificadorLinux.Enviar($"Target {d.Iqn} initialized and mounted successfully.");
+        TraceOut(id, "InicializarDestino");
+    }
+    catch (Exception ex)
+    {
+        LogService.Error($"[ISCSI] #{id} ERROR Initializing target: {ex.Message}");
+        throw;
     }
 }
-
+    
+    
 // ======================================================================
-//  SOPORTA FILESYSTEM — requerido por InitializeDiskDialogService
+//  HELPER: Multi-layer SCSI node resolution
 // ======================================================================
 
-public static bool SoportaFs(string fs)
+private static string? ObtenerDispositivoDesdeSesion(string? iqn)
 {
-    if (string.IsNullOrWhiteSpace(fs))
-        return false;
+    if (string.IsNullOrWhiteSpace(iqn))
+        return null;
 
-    fs = fs.ToLowerInvariant();
-
-    string cmd = fs switch
+    try
     {
-        "ext2"  => "mkfs.ext2",
-        "ext3"  => "mkfs.ext3",
-        "ext4"  => "mkfs.ext4",
-        "xfs"   => "mkfs.xfs",
-        "btrfs" => "mkfs.btrfs",
-        "f2fs"  => "mkfs.f2fs",
-        "ntfs"  => "mkfs.ntfs",
-        "exfat" => "mkfs.exfat",
-        _ => ""
-    };
+        // Strategy A: Sysfs scanning (Most reliable on Linux Kernel)
+        if (Directory.Exists("/sys/class/iscsi_session"))
+        {
+            var sessions = Directory.GetDirectories("/sys/class/iscsi_session");
+            foreach (var sess in sessions)
+            {
+                string targetNameFile = Path.Combine(sess, "targetname");
+                if (File.Exists(targetNameFile))
+                {
+                    string targetName = File.ReadAllText(targetNameFile).Trim();
+                    if (targetName.Equals(iqn, StringComparison.OrdinalIgnoreCase))
+                    {
+                        string sid = Path.GetFileName(sess).Replace("session", "");
+                        var blockDirs = Directory.GetDirectories("/sys/block");
+                        foreach (var bdir in blockDirs)
+                        {
+                            string devName = Path.GetFileName(bdir);
+                            if (devName.StartsWith("sd"))
+                            {
+                                string deviceSymlink = Path.Combine(bdir, "device");
+                                if (Directory.Exists(deviceSymlink))
+                                {
+                                    var realPath = ShellHelper.EjecutarComoRoot($"realpath \"{deviceSymlink}\"").Stdout;
+                                    if (realPath.Contains($"session{sid}") || realPath.Contains($"target{sid}"))
+                                    {
+                                        return $"/dev/{devName}";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-    if (string.IsNullOrEmpty(cmd))
-        return false;
+        // Strategy B: Fallback to lsblk + udevadm
+        var res = ShellHelper.EjecutarComoRoot("lsblk -dno NAME,TRAN");
+        if (res.ExitCode == 0 && !string.IsNullOrWhiteSpace(res.Stdout))
+        {
+            var lines = res.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2 && parts[1].Equals("iscsi", StringComparison.OrdinalIgnoreCase))
+                {
+                    string devPath = "/dev/" + parts[0].Trim();
+                    var info = ShellHelper.EjecutarComoRoot($"udevadm info --query=property --name={devPath}");
+                    if (info.ExitCode == 0 && info.Stdout.Contains(iqn, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return devPath;
+                    }
+                }
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        LogService.Error($"[ISCSI] Error resolving SCSI node: {ex.Message}");
+    }
 
-    var check = ShellHelper.EjecutarComoRoot($"which {cmd}");
-    return check.ExitCode == 0;
+    return null;
 }
 
-} // ← cierre final de la clase IscsiHelper
+
+
+// Método auxiliar para obtener el dispositivo SCSI real escaneando udev
+private static string? ResolverDispositivoVivo(string iqn)
+{
+    try
+    {
+        if (Directory.Exists("/dev/disk/by-path"))
+        {
+            var files = Directory.GetFiles("/dev/disk/by-path");
+            foreach (var file in files)
+            {
+                if (file.Contains(iqn, StringComparison.OrdinalIgnoreCase) && !file.EndsWith("-part1"))
+                {
+                    var res = ShellHelper.EjecutarComoRoot($"realpath \"{file}\"");
+                    if (res.ExitCode == 0 && !string.IsNullOrWhiteSpace(res.Stdout))
+                    {
+                        string realDev = res.Stdout.Trim();
+                        // Validar que el dispositivo responda a blockdev (que no sea un nodo muerto)
+                        if (ShellHelper.EjecutarComoRoot($"blockdev --getsize64 {realDev}").ExitCode == 0)
+                        {
+                            return realDev;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    catch { }
+
+    return null;
+}
+
+    // ======================================================================
+    //  SOPORTA FILESYSTEM
+    // ======================================================================
+
+    public static bool SoportaFs(string fs)
+    {
+        if (string.IsNullOrWhiteSpace(fs))
+            return false;
+
+        fs = fs.ToLowerInvariant();
+
+        string cmd = fs switch
+        {
+            "ext2"  => "mkfs.ext2",
+            "ext3"  => "mkfs.ext3",
+            "ext4"  => "mkfs.ext4",
+            "xfs"   => "mkfs.xfs",
+            "btrfs" => "mkfs.btrfs",
+            "f2fs"  => "mkfs.f2fs",
+            "ntfs"  => "mkfs.ntfs",
+            "exfat" => "mkfs.exfat",
+            _       => ""
+        };
+
+        if (string.IsNullOrEmpty(cmd))
+            return false;
+
+        var check = ShellHelper.EjecutarComoRoot($"which {cmd}");
+        return check.ExitCode == 0;
+    }
+
+} // Cierre de clase IscsiHelper

@@ -1,20 +1,20 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.VisualTree;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
-
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using Avalonia;
-using Avalonia.Input;
-using Avalonia.Platform;
 using System.Linq;
 using System.Threading.Tasks;
-using Avalonia.Interactivity;
 
 namespace ISCSI_Util.Views;
 
@@ -22,7 +22,6 @@ public partial class TargetsView : UserControl
 {
     private readonly List<IscsiDestino> _targets = new();
     private IscsiDestino? _selected;
-
     private string _lastValidIp = "";
 
     public TargetsView()
@@ -33,10 +32,11 @@ public partial class TargetsView : UserControl
         BtnDeleteNode.Click += OnDeleteNode;
         BtnHeaderUnmount.Click += OnHeaderUnmount;
         BtnHeaderOpen.Click += OnHeaderOpen;
+        BtnTogglePersist.Click += OnTogglePersist;
     }
 
     // ============================================================
-    // VALIDACIÓN DE IP
+    // IP VALIDATION
     // ============================================================
 
     private void PortalBox_TextChanging(object? sender, TextChangingEventArgs e)
@@ -68,14 +68,11 @@ public partial class TargetsView : UserControl
         var parts = input.Split('.', StringSplitOptions.RemoveEmptyEntries);
         foreach (var p in parts)
         {
-            if (int.TryParse(p, out int val))
+            if (int.TryParse(p, out int val) && (val < 0 || val > 255))
             {
-                if (val < 0 || val > 255)
-                {
-                    tb.Text = _lastValidIp;
-                    tb.CaretIndex = tb.Text.Length;
-                    return;
-                }
+                tb.Text = _lastValidIp;
+                tb.CaretIndex = tb.Text.Length;
+                return;
             }
         }
 
@@ -98,10 +95,7 @@ public partial class TargetsView : UserControl
 
         foreach (var p in parts)
         {
-            if (!int.TryParse(p, out int val))
-                return false;
-
-            if (val < 0 || val > 255)
+            if (!int.TryParse(p, out int val) || val < 0 || val > 255)
                 return false;
         }
 
@@ -110,11 +104,7 @@ public partial class TargetsView : UserControl
 
     private string RemoveInvalidChars(string s)
     {
-        var result = new List<char>();
-        foreach (char c in s)
-            if (char.IsDigit(c) || c == '.')
-                result.Add(c);
-        return new string(result.ToArray());
+        return new string(s.Where(c => char.IsDigit(c) || c == '.').ToArray());
     }
 
     private string RemoveExtraDots(string s)
@@ -142,7 +132,7 @@ public partial class TargetsView : UserControl
     }
 
     // ============================================================
-    // DISCOVER
+    // DISCOVER TARGETS
     // ============================================================
 
     private async void DiscoverButton_Click(object? sender, RoutedEventArgs e)
@@ -151,53 +141,81 @@ public partial class TargetsView : UserControl
         if (!EsIpCompletaValida(portal))
             return;
 
+        List<IscsiDestino> discovered = new();
+
         using (LoadingService.Show("Discovering targets..."))
         {
             _targets.Clear();
-            _targets.AddRange(await IscsiHelper.Descubrir(portal));
+            discovered = await IscsiHelper.Descubrir(portal);
+
+            // Scan targets in background immediately to detect active mounts and filesystems
+            await Task.Run(async () =>
+            {
+                foreach (var d in discovered)
+                {
+                    await IscsiHelper.CompletarInformacionDestino(d, 0);
+                }
+            });
+
+            _targets.AddRange(discovered);
         }
-
-        foreach (var d in _targets)
-            d.InfoCompleta = false;
-
-        await RefreshTargetsList();
 
         if (_targets.Count > 0)
         {
             _selected = _targets[0];
-            await LoadTargetDetailsAsync(_selected);
         }
+        else
+        {
+            _selected = null;
+        }
+
+        await RefreshTargetsList();
     }
 
     // ============================================================
-    // REFRESH LIST
+    // REFRESH LIST & RE-SCAN TARGET STATES
     // ============================================================
 
     private async Task RefreshTargetsList()
     {
+        string? selectedIQN = _selected?.Iqn;
+
+        // 1. Background scanning to update target state (mounts, filesystems, persistence)
+        await Task.Run(async () =>
+        {
+            foreach (var destino in _targets)
+            {
+                // Force state resolution for all targets to detect mount status accurately
+                await IscsiHelper.CompletarInformacionDestino(destino, 0);
+
+                destino.Persistir = IscsiPersistenceManager.Detect(destino);
+                destino.InfoCompleta = true;
+                destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
+                destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
+            }
+        });
+
+        // 2. Render UI on main thread
         TargetsList.Children.Clear();
 
         foreach (var destino in _targets)
         {
-            if (destino.Conectado)
-            {
-                await Task.Run(async () =>
-                {
-                    await IscsiHelper.CompletarInformacionDestino(destino, 0);
-                    destino.Persistir = destino.Conectado &&
-                                        IscsiPersistenceManager.Detect(destino);
-                });
-            }
-            else
-            {
-                destino.Persistir = false;
-            }
-
-            destino.InfoCompleta = true;
-            destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
-            destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
-
             TargetsList.Children.Add(CreateTargetCard(destino));
+        }
+
+        if (selectedIQN != null)
+        {
+            _selected = _targets.FirstOrDefault(t => t.Iqn == selectedIQN);
+        }
+
+        if (_selected != null)
+        {
+            await LoadTargetDetailsAsync(_selected);
+        }
+        else
+        {
+            DetailsInfoPanel.Children.Clear();
+            HeaderRow.IsVisible = false;
         }
     }
 
@@ -217,7 +235,7 @@ public partial class TargetsView : UserControl
             BorderThickness = new Thickness(1.4)
         };
 
-        if (_selected == destino)
+        if (_selected?.Iqn == destino.Iqn)
             border.Classes.Add("selected");
 
         var grid = new Grid
@@ -245,8 +263,10 @@ public partial class TargetsView : UserControl
         var iqnText = new TextBlock
         {
             Cursor = new Cursor(StandardCursorType.Hand),
-            Text = destino.Iqn,
-            FontSize = 14,
+            Text = destino.Iqn.Contains(':') ? destino.Iqn.Substring(destino.Iqn.LastIndexOf(':') + 1) : destino.Iqn,
+            TextAlignment = TextAlignment.Left,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 18,
             FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
@@ -262,7 +282,7 @@ public partial class TargetsView : UserControl
             Spacing = 8
         };
 
-        // CHAP / MUTUAL / CONNECT / INIT
+        // CONNECTION AND AUTHENTICATION BUTTONS
         if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
         {
             var mutualBtn = new Button
@@ -275,10 +295,12 @@ public partial class TargetsView : UserControl
 
             mutualBtn.Click += async (_, _) =>
             {
-                var dlg = new MutualChapDialog(destino);
-                await dlg.ShowDialog((Window)VisualRoot);
-                await RefreshTargetsList();
-                await LoadTargetDetailsAsync(destino);
+                if (this.GetVisualRoot() is Window owner)
+                {
+                    var dlg = new MutualChapDialog(destino);
+                    await dlg.ShowDialog(owner);
+                    await RefreshTargetsList();
+                }
             };
 
             btnRow.Children.Add(mutualBtn);
@@ -295,15 +317,17 @@ public partial class TargetsView : UserControl
 
             chapBtn.Click += async (_, _) =>
             {
-                var dlg = new ChapDialog(destino);
-                await dlg.ShowDialog((Window)VisualRoot);
-                await RefreshTargetsList();
-                await LoadTargetDetailsAsync(destino);
+                if (this.GetVisualRoot() is Window owner)
+                {
+                    var dlg = new ChapDialog(destino);
+                    await dlg.ShowDialog(owner);
+                    await RefreshTargetsList();
+                }
             };
 
             btnRow.Children.Add(chapBtn);
         }
-        else if (!destino.RequiresChap && !destino.RequiresMutualChap)
+        else
         {
             var connectBtn = new Button
             {
@@ -326,38 +350,46 @@ public partial class TargetsView : UserControl
                         await IscsiHelper.Desconectar(destino);
                 }
 
-                destino.Persistir = destino.Conectado &&
-                                    IscsiPersistenceManager.Detect(destino);
-
                 await RefreshTargetsList();
-                await LoadTargetDetailsAsync(destino);
             };
 
             btnRow.Children.Add(connectBtn);
         }
 
-        // INIT
-        if (destino.InfoCompleta &&
-            destino.Conectado &&
-            !destino.TieneFilesystem &&
-            string.IsNullOrWhiteSpace(destino.MountPoint) &&
-            destino.PartitionPath == null)
+        // INIT BUTTON FOR UNFORMATTED DISKS (Only visible if connected and no filesystem detected)
+        if (destino.Conectado && !destino.TieneFilesystem)
         {
             var initBtn = new Button
             {
-                Content = "Init",
-                Classes = { "SteamButton" },
-                Width = 60,
+                Content = "INIT",
+                Width = 90,
                 Height = 28,
-                Background = new SolidColorBrush(Colors.DarkOrange)
+                Background = Brushes.Orange,
+                Foreground = Brushes.White,
+                FontWeight = FontWeight.Bold,
+                Classes = { "SteamButton" }
             };
 
             initBtn.Click += async (_, _) =>
             {
-                var dlg = new InitializeDiskDialog(destino);
-                await dlg.ShowDialog((Window)VisualRoot);
-                await RefreshTargetsList();
-                await LoadTargetDetailsAsync(destino);
+                if (this.GetVisualRoot() is Window owner)
+                {
+                    var dlg = new InitializeDiskDialog(destino);
+                    bool? success = await dlg.ShowDialog<bool>(owner);
+
+                    if (success == true)
+                    {
+                        using (LoadingService.Show("Updating target info..."))
+                        {
+                            await Task.Run(async () =>
+                            {
+                                await IscsiHelper.CompletarInformacionDestino(destino, 0);
+                            });
+                        }
+                    }
+
+                    await RefreshTargetsList();
+                }
             };
 
             btnRow.Children.Add(initBtn);
@@ -367,9 +399,12 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(btnRow, 1);
         Grid.SetRow(btnRow, 1);
 
+        // TARGET SELECTION EVENT
         border.PointerPressed += async (_, _) =>
         {
-            _selected = destino;
+            _selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+            if (_selected == null)
+                return;
 
             foreach (var child in TargetsList.Children)
             {
@@ -383,15 +418,12 @@ public partial class TargetsView : UserControl
             {
                 await Task.Run(async () =>
                 {
-                    await IscsiHelper.CompletarInformacionDestino(destino, 0);
-                    destino.Persistir = destino.Conectado &&
-                                        IscsiPersistenceManager.Detect(destino);
+                    await IscsiHelper.CompletarInformacionDestino(_selected, 0);
                 });
             }
 
-            destino.InfoCompleta = true;
-
-            await LoadTargetDetailsAsync(destino);
+            _selected.InfoCompleta = true;
+            await LoadTargetDetailsAsync(_selected);
         };
 
         border.Child = grid;
@@ -399,61 +431,53 @@ public partial class TargetsView : UserControl
     }
 
     // ============================================================
-    // DETAILS PANEL
+    // TARGET DETAILS PANEL
     // ============================================================
 
     private async Task LoadTargetDetailsAsync(IscsiDestino destino)
     {
-        _selected = destino;
+        _selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+        if (_selected == null)
+            return;
+
+        destino = _selected;
 
         DetailsInfoPanel.Children.Clear();
         HeaderRow.IsVisible = true;
         BtnDeleteNode.IsVisible = true;
 
-        BtnHeaderUnmount.IsVisible = false;
-        BtnHeaderOpen.IsVisible = false;
-
-        // Persistencia solo si está conectado
-        ChkPersistent.IsEnabled = destino.Conectado;
-        ChkPersistent.IsChecked = destino.Conectado && destino.Persistir;
-
-        // Evitar acumulación de handlers
-        ChkPersistent.Checked -= OnPersistentChecked;
-        ChkPersistent.Unchecked -= OnPersistentUnchecked;
-
-        ChkPersistent.Checked += OnPersistentChecked;
-        ChkPersistent.Unchecked += OnPersistentUnchecked;
+        bool persistente = IscsiPersistenceManager.Detect(destino);
+        BtnTogglePersist.IsEnabled = destino.Conectado;
+        BtnTogglePersist.Content = persistente ? "Remove Persist" : "Persist";
 
         var infoGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("80, *"),
             RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto"),
-            RowSpacing = 1
+            RowSpacing = 4
         };
 
         void AddRow(string label, string value, int row, IBrush? color = null)
         {
-            infoGrid.Children.Add(new TextBlock
+            var lbl = new TextBlock
             {
                 Text = label,
-                TextWrapping = TextWrapping.Wrap,
-                TextAlignment = TextAlignment.Center,
                 Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
                 FontWeight = FontWeight.SemiBold
-            });
-            Grid.SetRow(infoGrid.Children[^1], row);
+            };
+            Grid.SetColumn(lbl, 0);
+            Grid.SetRow(lbl, row);
+            infoGrid.Children.Add(lbl);
 
-            infoGrid.Children.Add(new TextBlock
+            var val = new TextBlock
             {
                 Text = value,
                 TextWrapping = TextWrapping.Wrap,
-                TextTrimming = TextTrimming.None,
-                MaxWidth = 300,
                 Foreground = color ?? (IBrush)Application.Current!.FindResource("SteamText")!
-            });
-
-            Grid.SetColumn(infoGrid.Children[^1], 1);
-            Grid.SetRow(infoGrid.Children[^1], row);
+            };
+            Grid.SetColumn(val, 1);
+            Grid.SetRow(val, row);
+            infoGrid.Children.Add(val);
         }
 
         AddRow("IQN:", destino.Iqn, 0);
@@ -465,45 +489,42 @@ public partial class TargetsView : UserControl
                 ? (IBrush)Application.Current!.FindResource("SteamGreen")!
                 : Brushes.OrangeRed
         );
-        AddRow("Filesystem:", destino.TieneFilesystem ? "Yes" : "No", 3);
+        AddRow("Filesystem:", destino.TieneFilesystem ? $"Yes ({destino.FsType})" : "No", 3);
 
         DetailsInfoPanel.Children.Add(infoGrid);
-
         DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
 
         BtnHeaderUnmount.IsVisible = destino.Conectado;
+        BtnHeaderOpen.IsVisible = destino.Conectado &&
+                                  !string.IsNullOrWhiteSpace(destino.MountPoint) &&
+                                  Directory.Exists(destino.MountPoint);
 
-        BtnHeaderOpen.IsVisible =
-            destino.Conectado &&
-            !string.IsNullOrWhiteSpace(destino.MountPoint) &&
-            Directory.Exists(destino.MountPoint);
+        await Task.CompletedTask;
     }
 
     // ============================================================
-    // HANDLERS DE PERSISTENCIA
+    // PERSISTENCE & HEADER EVENTS
     // ============================================================
 
-    private async void OnPersistentChecked(object? sender, RoutedEventArgs e)
+    private async void OnTogglePersist(object? sender, RoutedEventArgs e)
     {
-        if (_selected == null || !_selected.Conectado)
+        if (_selected == null)
             return;
 
-        _selected.Persistir = true;
-        await IscsiPersistenceManager.ApplyAsync(_selected);
+        bool persistente = IscsiPersistenceManager.Detect(_selected);
+
+        using (LoadingService.Show(persistente ? "Removing persistence..." : "Applying persistence..."))
+        {
+            await IscsiHelper.CompletarInformacionDestino(_selected, 0);
+
+            if (!persistente)
+                await IscsiPersistenceManager.ApplyAsync(_selected);
+            else
+                await IscsiPersistenceManager.RemoveAsync(_selected);
+        }
+
+        await RefreshTargetsList();
     }
-
-    private async void OnPersistentUnchecked(object? sender, RoutedEventArgs e)
-    {
-        if (_selected == null || !_selected.Conectado)
-            return;
-
-        _selected.Persistir = false;
-        await IscsiPersistenceManager.RemoveAsync(_selected);
-    }
-
-    // ============================================================
-    // EVENTOS DEL HEADER
-    // ============================================================
 
     private async void OnHeaderUnmount(object? sender, RoutedEventArgs e)
     {
@@ -513,48 +534,48 @@ public partial class TargetsView : UserControl
         using (LoadingService.Show("Unmounting..."))
             await IscsiHelper.Desconectar(_selected);
 
-        await LoadTargetDetailsAsync(_selected);
+        await RefreshTargetsList();
     }
 
     private void OnHeaderOpen(object? sender, RoutedEventArgs e)
     {
-        if (_selected == null)
+        if (_selected == null || string.IsNullOrEmpty(_selected.MountPoint) || !Directory.Exists(_selected.MountPoint))
             return;
 
-        if (!string.IsNullOrEmpty(_selected.MountPoint) &&
-            Directory.Exists(_selected.MountPoint))
+        try
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = _selected.MountPoint,
-                UseShellExecute = true
+                FileName = "xdg-open",
+                Arguments = $"\"{_selected.MountPoint}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
             });
         }
+        catch (Exception ex)
+        {
+            LogService.Error($"[TARGETS] Error opening directory: {ex.Message}");
+        }
     }
-
-    // ============================================================
-    // DELETE NODE
-    // ============================================================
 
     private async void OnDeleteNode(object? sender, RoutedEventArgs e)
     {
         if (_selected == null)
             return;
 
-        await IscsiHelper.Desconectar_Borrar(_selected);
+        using (LoadingService.Show("Deleting target node..."))
+        {
+            await IscsiHelper.Desconectar_Borrar(_selected);
+        }
 
         _targets.Remove(_selected);
+        _selected = null;
+
         await RefreshTargetsList();
-
-        DetailsInfoPanel.Children.Clear();
-        DetailsIcon.Source = null;
-
-        BtnHeaderUnmount.IsVisible = false;
-        BtnHeaderOpen.IsVisible = false;
     }
 
     // ============================================================
-    // ICONOS
+    // ASSETS / ICONS
     // ============================================================
 
     private string GetIconForChap(IscsiDestino d)
@@ -573,7 +594,7 @@ public partial class TargetsView : UserControl
                    : "avares://ISCSI-Util/Assets/Icons/no-chap.jpeg";
     }
 
-    private Bitmap LoadIcon(string uri)
+    private Bitmap? LoadIcon(string uri)
     {
         try
         {

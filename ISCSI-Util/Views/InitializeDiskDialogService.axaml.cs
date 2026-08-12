@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -14,15 +15,15 @@ public partial class InitializeDiskDialog : Window
 
     public InitializeDiskDialog(IscsiDestino destino)
     {
-        LogService.Debug($"[INIT_DISK] Inicializando diálogo para {destino.Iqn} ({destino.Ip})");
+        LogService.Debug($"[INIT_DISK] Initializing dialog for {destino.Iqn} ({destino.Ip})");
 
         InitializeComponent();
         _destino = destino;
 
         CancelBtn.Click += (_, _) =>
         {
-            LogService.Debug("[INIT_DISK] Cancelado por el usuario.");
-            Close();
+            LogService.Debug("[INIT_DISK] Cancelled by user.");
+            Close(false); // Retorna false si el usuario cancela
         };
 
         ApplyBtn.Click += ApplyChanges;
@@ -37,56 +38,55 @@ public partial class InitializeDiskDialog : Window
 
         if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(fs))
         {
-            LogService.Debug("[INIT_DISK] Campos incompletos, operación cancelada.");
+            LogService.Debug("[INIT_DISK] Incomplete fields, operation cancelled.");
             return;
         }
 
-        // Validar soporte del FS
         if (!IscsiHelper.SoportaFs(fs))
         {
-            LogService.Error($"[INIT_DISK] Filesystem '{fs}' no soportado.");
+            LogService.Error($"[INIT_DISK] Filesystem '{fs}' not supported.");
             await MessageBox("Filesystem not supported on this system.");
             return;
         }
 
-        LogService.Write($"[INIT_DISK] Inicializando disco {_destino.Iqn} con FS={fs}, Label={label}");
+        // Lock controls to prevent double submission
+        ApplyBtn.IsEnabled = false;
+        CancelBtn.IsEnabled = false;
 
-        using (LoadingService.Show($"Initializing disk ({fs})..."))
+        LogService.Write($"[INIT_DISK] Initializing disk {_destino.Iqn} with FS={fs}, Label={label}");
+
+        try
         {
-            try
+            using (LoadingService.Show($"Initializing disk ({fs})..."))
             {
-                // ------------------------------------------------------
-                // 1) Inicializar disco (formateo + partición + montaje)
-                // ------------------------------------------------------
+                // 1) Formatear y montar el destino (ya maneja la asignación de dispositivo y montaje)
                 await IscsiHelper.InicializarDestino(_destino, label, fs);
-                LogService.Debug("[INIT_DISK] Inicialización completada.");
+                LogService.Debug("[INIT_DISK] Initialization & mount completed.");
 
-                // ------------------------------------------------------
-                // 2) Refrescar estado REAL del destino
-                // ------------------------------------------------------
+                // 2) Actualizar la información completa en el modelo
                 await IscsiHelper.CompletarInformacionDestino(_destino, 0);
-                LogService.Debug("[INIT_DISK] Información del destino actualizada tras inicialización.");
+                LogService.Debug("[INIT_DISK] Target info refreshed after initialization.");
 
-                // ------------------------------------------------------
-                // 3) Detectar persistencia
-                // ------------------------------------------------------
+                // 3) Detectar persistencia y CHAP
                 _destino.Persistir = IscsiHelper.DetectarPersistencia(_destino);
-                LogService.Debug($"[INIT_DISK] Persistencia detectada: {_destino.Persistir}");
-
-                // ------------------------------------------------------
-                // 4) Detectar CHAP
-                // ------------------------------------------------------
                 IscsiHelper.DetectarChap(_destino);
-                LogService.Debug("[INIT_DISK] CHAP actualizado tras inicialización.");
             }
-            catch (System.Exception ex)
-            {
-                LogService.Error($"[INIT_DISK] ERROR durante inicialización: {ex.Message}");
-            }
-        }
 
-        LogService.Debug("[INIT_DISK] Cerrando diálogo.");
-        Close();
+            LogService.Debug("[INIT_DISK] Closing dialog with success result.");
+            
+            // RETORNAR true PARA INDICA EXITO A TARGETSVIEW
+            Close(true);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[INIT_DISK] ERROR during initialization: {ex.Message}");
+            await MessageBox($"Failed to initialize disk:\n{ex.Message}");
+        }
+        finally
+        {
+            ApplyBtn.IsEnabled = true;
+            CancelBtn.IsEnabled = true;
+        }
     }
 
     private async Task MessageBox(string msg)
@@ -95,9 +95,9 @@ public partial class InitializeDiskDialog : Window
 
         var dlg = new Window
         {
-            Width = 300,
-            Height = 150,
-            Title = "Info",
+            Width = 320,
+            Height = 160,
+            Title = "Information",
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
@@ -109,6 +109,7 @@ public partial class InitializeDiskDialog : Window
         panel.Children.Add(new TextBlock
         {
             Text = msg,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 20)
         });
 
@@ -122,7 +123,6 @@ public partial class InitializeDiskDialog : Window
         okBtn.Click += (_, _) => dlg.Close();
 
         panel.Children.Add(okBtn);
-
         dlg.Content = panel;
 
         await dlg.ShowDialog(this);

@@ -145,7 +145,8 @@
                             Foreground="White"/>
                 </Grid>
 
-                <!-- HEADER + CHECKBOX -->
+                <!-- HEADER + PERSISTENCIA -->
+                <!-- HEADER + PERSISTENCIA -->
                 <Grid ColumnDefinitions="*,Auto"
                       Margin="0,0,0,0"
                       x:Name="HeaderRow"
@@ -157,31 +158,32 @@
                                Foreground="{DynamicResource SteamBlue}"
                                VerticalAlignment="Center"/>
 
-                    <CheckBox x:Name="ChkPersistent"
-                              Grid.Column="1"
-                              Content="Persistent mount"
-                              Foreground="{DynamicResource SteamText}"
-                              VerticalAlignment="Center"
-                              HorizontalAlignment="Center"/>
+                    <!-- Botón de acción (muestra estado y ejecuta cambio) -->
+                    <Button x:Name="BtnTogglePersist"
+                            Grid.Column="1"
+                            Content="Persist"
+                            Classes="SteamButton"
+                            Width="120"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"/>
                 </Grid>
+
 
                 <Rectangle Height="1"
                            Fill="#40FFFFFF"
                            Margin="0,1,0,1"/>
 
-                <!-- CONTENIDO DETALLES (compactado) -->
+                <!-- CONTENIDO DETALLES -->
                 <Grid ColumnDefinitions="*,180"
                       ColumnSpacing="6"
                       Margin="0,0,0,0"
                       VerticalAlignment="Top">
 
-                    <!-- PANEL IZQUIERDO (INFO) -->
                     <StackPanel x:Name="DetailsInfoPanel"
                                 Spacing="4"
                                 Margin="0,4,4,0"
                                 VerticalAlignment="Top" />
 
-                    <!-- ICONO A LA DERECHA -->
                     <Border Grid.Column="1"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top"

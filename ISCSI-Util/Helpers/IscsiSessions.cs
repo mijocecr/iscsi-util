@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
@@ -10,329 +9,290 @@ namespace ISCSI_Util.Helpers;
 
 public static class IscsiSessions
 {
-    private static long _opId = 0;
-    private static long NextId() => ++_opId;
-
     // ============================================================
-    //   HELPERS DE RED
+    // OBTENER SESIONES REALES
     // ============================================================
 
-    private static string GetLocalIPv4()
+    
+public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
+{
+    var sesiones = new List<SessionInfo>();
+
+    var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/")
+                            .Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+    // ============================================================
+    // FILTRO CORREGIDO: solo discos, NO particiones
+    // ============================================================
+    var iscsiLinks = byPath
+        .Where(p => p.Contains("iscsi") && !p.Contains("part"))
+        .ToList();
+
+    if (iscsiLinks.Count == 0)
+        return sesiones;
+
+    foreach (var link in iscsiLinks)
     {
-        try
+        string portal = ExtraerPortal(link);
+        string iqn = ExtraerIqn(link);
+        int lun = ExtraerLunId(link);
+
+        var info = new SessionInfo
         {
-            return System.Net.NetworkInformation.NetworkInterface
-                .GetAllNetworkInterfaces()
-                .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-                .Where(a => a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                .Select(a => a.Address.ToString())
-                .FirstOrDefault() ?? "0.0.0.0";
-        }
-        catch (Exception ex)
+            Iqn = iqn,
+            Portal = portal,
+            LunId = lun,
+            Connected = true,
+            Device = "/dev/disk/by-path/" + link.Trim(),
+            ConnectedSince = DateTime.Now
+        };
+
+        // ============================================================
+        // 1) Detect real partition (if any)
+        // ============================================================
+
+        var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {info.Device}").Stdout;
+        var lsblkLines = lsblkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var l in lsblkLines)
         {
-            LogService.Error($"GetLocalIPv4 error: {ex.Message}");
-            return "0.0.0.0";
-        }
-    }
-
-    private static bool MismaSubred(string ip1, string ip2)
-    {
-        try
-        {
-            var a = ip1.Split('.');
-            var b = ip2.Split('.');
-            return a.Length == 4 && b.Length == 4 &&
-                   a[0] == b[0] && a[1] == b[1] && a[2] == b[2];
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"MismaSubred error: {ex.Message}");
-            return false;
-        }
-    }
-
-    // ============================================================
-    //   1) SESIONES ACTIVAS
-    // ============================================================
-    private static List<IscsiDestino> ObtenerSesionesActivas()
-    {
-        var list = new List<IscsiDestino>();
-
-        try
-        {
-            long id = NextId();
-            var sw = Stopwatch.StartNew();
-
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → ObtenerSesionesActivas()");
-
-            var result = ShellHelper.EjecutarComoRoot("iscsiadm -m session");
-
-            if (result.ExitCode != 0)
-                LogService.Debug($"[SESSIONS_HELPER] #{id} iscsiadm exit={result.ExitCode}");
-
-            if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
+            var p = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length == 2 && p[1] == "part")
             {
-                foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                info.Device = "/dev/" + p[0];
+                break;
+            }
+        }
+
+        // ============================================================
+        // 2) Filesystem
+        // ============================================================
+
+        var blkidRaw = ShellHelper.EjecutarComoRoot($"blkid -p {info.Device}").Stdout;
+        info.Filesystem = ExtraerFsType(blkidRaw);
+
+        // ============================================================
+        // 3) Mount runtime
+        // ============================================================
+
+        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout;
+        var mounts = mountsRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var m in mounts)
+        {
+            if (m.StartsWith(info.Device + " "))
+            {
+                info.MountPoint = m.Split(' ')[2];
+                break;
+            }
+        }
+
+        // ============================================================
+        // 4) Vendor / Model / Size (iSCSI has no vendor/model)
+        // ============================================================
+
+        var blkRaw = ShellHelper.EjecutarComoRoot($"lsblk -o SIZE {info.Device}").Stdout;
+        var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        string size = "-";
+
+        if (blkLines.Length >= 2)
+            size = blkLines[1].Trim();
+
+        info.Vendor = "-";
+        info.Model  = "-";
+        info.SizeGb = ExtraerSizeGb(size);
+
+        // ============================================================
+        // 5) Auth
+        // ============================================================
+
+        info.Auth = ExtraerAuthDesdeNode(iqn, portal);
+
+        sesiones.Add(info);
+    }
+
+    return sesiones;
+}
+
+
+
+
+
+    // ============================================================
+    // HELPERS
+    
+    private static string ExtraerNombreDestino(string link)
+    {
+        // Ejemplo:
+        // ip-192.168.1.50:3260-iscsi-iqn.2013-03.com.wdc.mycloudex2ultra.mjcc-lun-0
+
+        int start = link.IndexOf("iscsi-iqn.");
+        if (start < 0) return "";
+
+        string sub = link.Substring(start + "iscsi-".Length);
+
+        int lunIndex = sub.IndexOf("-lun");
+        if (lunIndex > 0)
+            sub = sub.Substring(0, lunIndex);
+
+        return sub.Trim();
+    }
+
+    
+    
+    private static string ExtraerPortal(string link)
+    {
+        var parts = link.Split('-');
+        foreach (var p in parts)
+        {
+            if (p.Contains(":3260"))
+                return p.Replace("ip", "").Replace("-", "").Trim();
+        }
+        return "";
+    }
+
+
+    private static string ExtraerIqn(string link)
+    {
+        // Buscar "iscsi-" y tomar lo que viene después hasta "-lun"
+        int start = link.IndexOf("iscsi-");
+        if (start < 0) return "";
+
+        string sub = link.Substring(start + "iscsi-".Length);
+
+        int lunIndex = sub.IndexOf("-lun");
+        if (lunIndex > 0)
+            sub = sub.Substring(0, lunIndex);
+
+        return sub.Trim();
+    }
+
+
+    private static int ExtraerLunId(string link)
+    {
+        // ...-lun-0
+        try
+        {
+            var parts = link.Split('-');
+            foreach (var p in parts)
+            {
+                if (p.StartsWith("lun"))
                 {
-                    if (!line.Contains("iqn.")) continue;
-
-                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 4)
-                    {
-                        LogService.Debug($"[SESSIONS_HELPER] #{id} línea ignorada: {line}");
-                        continue;
-                    }
-
-                    string portal = parts[2].Split(',')[0];
-                    string iqn = parts[3];
-
-                    list.Add(new IscsiDestino
-                    {
-                        Ip = portal,
-                        Iqn = iqn,
-                        Conectado = true
-                    });
+                    var num = p.Replace("lun", "").Replace("-", "");
+                    if (int.TryParse(num, out int lun))
+                        return lun;
                 }
             }
-
-            sw.Stop();
-            LogService.Debug($"[SESSIONS_HELPER] #{id} ← SesionesActivas={list.Count} en {sw.ElapsedMilliseconds} ms");
         }
-        catch (Exception ex)
-        {
-            LogService.Error($"[SESSIONS_HELPER] ObtenerSesionesActivas: {ex.Message}");
-        }
-
-        return list;
+        catch { }
+        return 0;
     }
 
+    
+    
     // ============================================================
-    //   2) NODOS CONFIGURADOS
-    // ============================================================
-    private static List<IscsiDestino> ObtenerNodos()
+    
+    public static string ExtraerAuthDesdeNode(string iqn, string portal)
     {
-        var list = new List<IscsiDestino>();
+        // Obtener la configuración del nodo
+        var raw = ShellHelper.EjecutarComoRoot(
+            $"iscsiadm -m node -T {iqn} -p {portal} --op show"
+        ).Stdout;
+
+        if (string.IsNullOrWhiteSpace(raw))
+            return "None";
+
+        // Detectar método de autenticación
+        if (raw.Contains("node.session.auth.authmethod = CHAP"))
+        {
+            // Mutual CHAP si reverse credentials existen
+            bool hasReverse = raw.Contains("node.session.auth.username_in") ||
+                              raw.Contains("node.session.auth.password_in");
+
+            return hasReverse ? "Mutual CHAP" : "CHAP";
+        }
+
+        return "None";
+    }
+
+
+    
+
+    private static string ExtraerFsType(string blkidOut)
+    {
+        if (string.IsNullOrWhiteSpace(blkidOut))
+            return "";
+
+        foreach (var part in blkidOut.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.StartsWith("TYPE=", StringComparison.OrdinalIgnoreCase))
+            {
+                return part.Replace("TYPE=", "")
+                           .Trim()
+                           .Trim('"');
+            }
+        }
+
+        return "";
+    }
+
+    private static int ExtraerSizeGb(string sizeRaw)
+    {
+        if (string.IsNullOrWhiteSpace(sizeRaw))
+            return 0;
+
+        sizeRaw = sizeRaw.Trim().ToUpper();
 
         try
         {
-            long id = NextId();
-            var sw = Stopwatch.StartNew();
-
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → ObtenerNodos()");
-
-            var result = ShellHelper.EjecutarComoRoot("iscsiadm -m node");
-
-            if (result.ExitCode != 0)
-                LogService.Debug($"[SESSIONS_HELPER] #{id} iscsiadm exit={result.ExitCode}");
-
-            if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.Stdout))
+            if (sizeRaw.EndsWith("G"))
             {
-                foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (!line.Contains("iqn.")) continue;
-
-                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 2)
-                    {
-                        LogService.Debug($"[SESSIONS_HELPER] #{id} línea ignorada: {line}");
-                        continue;
-                    }
-
-                    string portal = parts[0].Split(',')[0];
-                    string iqn = parts[1];
-
-                    list.Add(new IscsiDestino
-                    {
-                        Ip = portal,
-                        Iqn = iqn,
-                        Conectado = false
-                    });
-                }
+                var num = sizeRaw.Replace("G", "");
+                if (double.TryParse(num, out double g))
+                    return (int)Math.Round(g);
             }
 
-            sw.Stop();
-            LogService.Debug($"[SESSIONS_HELPER] #{id} ← Nodos={list.Count} en {sw.ElapsedMilliseconds} ms");
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[SESSIONS_HELPER] ObtenerNodos: {ex.Message}");
-        }
-
-        return list;
-    }
-
-    // ============================================================
-    //   3) DISCOVERYDB
-    // ============================================================
-    private static List<IscsiDestino> ObtenerDiscoveryDb()
-    {
-        var list = new List<IscsiDestino>();
-
-        try
-        {
-            long id = NextId();
-            var sw = Stopwatch.StartNew();
-
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → ObtenerDiscoveryDb()");
-
-            var result = ShellHelper.EjecutarComoRoot("iscsiadm -m discoverydb -t sendtargets -o show");
-
-            if (result.ExitCode != 0)
-                LogService.Debug($"[SESSIONS_HELPER] #{id} iscsiadm exit={result.ExitCode}");
-
-            if (!string.IsNullOrWhiteSpace(result.Stdout))
+            if (sizeRaw.EndsWith("M"))
             {
-                foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (!line.Contains("iqn.")) continue;
-
-                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length < 2)
-                    {
-                        LogService.Debug($"[SESSIONS_HELPER] #{id} línea ignorada: {line}");
-                        continue;
-                    }
-
-                    string portal = parts[0].Split(',')[0];
-                    string iqn = parts[1];
-
-                    list.Add(new IscsiDestino
-                    {
-                        Ip = portal,
-                        Iqn = iqn,
-                        Conectado = false
-                    });
-                }
+                var num = sizeRaw.Replace("M", "");
+                if (double.TryParse(num, out double m))
+                    return (int)Math.Round(m / 1024.0);
             }
 
-            sw.Stop();
-            LogService.Debug($"[SESSIONS_HELPER] #{id} ← DiscoveryDB={list.Count} en {sw.ElapsedMilliseconds} ms");
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[SESSIONS_HELPER] ObtenerDiscoveryDb: {ex.Message}");
-        }
-
-        return list;
-    }
-
-    // ============================================================
-    //   4) FUSIÓN INTELIGENTE
-    // ============================================================
-    private static List<IscsiDestino> Fusionar(
-        List<IscsiDestino> sesiones,
-        List<IscsiDestino> nodos,
-        List<IscsiDestino> discoverydb)
-    {
-        try
-        {
-            LogService.Debug("[SESSIONS_HELPER] Fusionando listas...");
-
-            var todos = new List<IscsiDestino>();
-            todos.AddRange(sesiones);
-            todos.AddRange(nodos);
-            todos.AddRange(discoverydb);
-
-            var grupos = todos.GroupBy(x => $"{x.Iqn}|{x.Ip}");
-
-            var final = new List<IscsiDestino>();
-
-            foreach (var g in grupos)
+            if (sizeRaw.EndsWith("T"))
             {
-                var lista = g.ToList();
-
-                var activo = lista.FirstOrDefault(x => x.Conectado);
-                if (activo != null)
-                {
-                    final.Add(activo);
-                    continue;
-                }
-
-                var nodo = lista.FirstOrDefault(x => !x.Conectado);
-                if (nodo != null)
-                {
-                    final.Add(nodo);
-                    continue;
-                }
-
-                final.Add(lista.First());
+                var num = sizeRaw.Replace("T", "");
+                if (double.TryParse(num, out double t))
+                    return (int)Math.Round(t * 1024.0);
             }
-
-            LogService.Debug($"[SESSIONS_HELPER] Fusionados={final.Count}");
-
-            return final
-                .OrderByDescending(x => x.Conectado)
-                .ThenBy(x => x.Iqn)
-                .ToList();
         }
-        catch (Exception ex)
-        {
-            LogService.Error($"[SESSIONS_HELPER] Fusionar error: {ex.Message}");
-            return new List<IscsiDestino>();
-        }
+        catch { }
+
+        return 0;
     }
 
-    // ============================================================
-    //   5) COMPLETAR INFO SOLO PARA CONECTADOS
-    // ============================================================
-    private static async Task CompletarInfo(List<IscsiDestino> destinos)
+    private static string ExtraerAuth(string nodeShowOut)
     {
-        long id = NextId();
+        if (string.IsNullOrWhiteSpace(nodeShowOut))
+            return "None";
 
-        try
+        bool chap = false;
+        bool mutual = false;
+
+        foreach (var line in nodeShowOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            LogService.Debug($"[SESSIONS_HELPER] #{id} → CompletarInfo()");
+            var l = line.Trim();
 
-            var conectados = destinos.Where(x => x.Conectado).ToList();
+            if (l.Contains("authmethod") && l.Contains("CHAP"))
+                chap = true;
 
-            foreach (var d in conectados)
-            {
-                try
-                {
-                    LogService.Debug($"[SESSIONS_HELPER] #{id} completando info para {d.Iqn}");
-                    await IscsiHelper.CompletarInformacionDestino(d, id);
-                }
-                catch (Exception ex)
-                {
-                    LogService.Error($"[SESSIONS_HELPER] CompletarInfo error en {d.Iqn}: {ex.Message}");
-                }
-            }
-
-            LogService.Debug($"[SESSIONS_HELPER] #{id} ← CompletarInfo OK");
+            if (l.Contains("username_in") || l.Contains("password_in"))
+                mutual = true;
         }
-        catch (Exception ex)
-        {
-            LogService.Error($"[SESSIONS_HELPER] CompletarInfo general: {ex.Message}");
-        }
-    }
 
-    // ============================================================
-    //   6) VISTA GLOBAL FINAL
-    // ============================================================
-    public static async Task<List<IscsiDestino>> ObtenerVistaGlobal()
-    {
-        long id = NextId();
-
-        LogService.Write($"[SESSIONS_HELPER] #{id} ObtenerVistaGlobal()");
-
-        try
-        {
-            var sesiones = ObtenerSesionesActivas();
-            var nodos = ObtenerNodos();
-            var discoverydb = ObtenerDiscoveryDb();
-
-            var fusion = Fusionar(sesiones, nodos, discoverydb);
-
-            await CompletarInfo(fusion);
-
-            LogService.Write($"[SESSIONS_HELPER] #{id} VistaGlobal={fusion.Count}");
-
-            return fusion;
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[SESSIONS_HELPER] ObtenerVistaGlobal error: {ex.Message}");
-            return new List<IscsiDestino>();
-        }
+        if (mutual) return "Mutual CHAP";
+        if (chap) return "CHAP";
+        return "None";
     }
 }
