@@ -283,7 +283,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Disconnecting target..."))
         {
-            await IscsiHelper.Desconectar(d);
+            await IscsiHelper.Desconectar_Borrar(d);
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)

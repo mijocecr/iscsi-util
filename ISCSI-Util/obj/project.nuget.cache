@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "dYfgNHEcaK0=",
+  "dgSpecHash": "I32uEvE11X8=",
   "success": true,
-  "projectFilePath": "/mnt/HDD-Extra/01_Proyectos/ISCSI-UTIL/ISCSI-Util/ISCSI-Util.csproj",
+  "projectFilePath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
   "expectedPackageFiles": [
     "/home/miguel/.nuget/packages/avalonia/11.3.9/avalonia.11.3.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/avalonia.angle.windows.natives/2.1.25547.20250602/avalonia.angle.windows.natives.2.1.25547.20250602.nupkg.sha512",
@@ -26,7 +26,6 @@
     "/home/miguel/.nuget/packages/harfbuzzsharp.nativeassets.webassembly/8.3.1.1/harfbuzzsharp.nativeassets.webassembly.8.3.1.1.nupkg.sha512",
     "/home/miguel/.nuget/packages/harfbuzzsharp.nativeassets.win32/8.3.1.1/harfbuzzsharp.nativeassets.win32.8.3.1.1.nupkg.sha512",
     "/home/miguel/.nuget/packages/microcom.runtime/0.11.0/microcom.runtime.0.11.0.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.net.illink.tasks/9.0.17/microsoft.net.illink.tasks.9.0.17.nupkg.sha512",
     "/home/miguel/.nuget/packages/skiasharp/2.88.9/skiasharp.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.linux/2.88.9/skiasharp.nativeassets.linux.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.macos/2.88.9/skiasharp.nativeassets.macos.2.88.9.nupkg.sha512",
@@ -34,12 +33,8 @@
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.win32/2.88.9/skiasharp.nativeassets.win32.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/system.io.pipelines/8.0.0/system.io.pipelines.8.0.0.nupkg.sha512",
     "/home/miguel/.nuget/packages/tmds.dbus.protocol/0.21.2/tmds.dbus.protocol.0.21.2.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.netcore.app.ref/9.0.17/microsoft.netcore.app.ref.9.0.17.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.netcore.app.runtime.linux-x64/9.0.17/microsoft.netcore.app.runtime.linux-x64.9.0.17.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.17/microsoft.aspnetcore.app.ref.9.0.17.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.runtime.linux-x64/9.0.17/microsoft.aspnetcore.app.runtime.linux-x64.9.0.17.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.netcore.app.crossgen2.linux-x64/9.0.17/microsoft.netcore.app.crossgen2.linux-x64.9.0.17.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.netcore.app.host.linux-x64/9.0.17/microsoft.netcore.app.host.linux-x64.9.0.17.nupkg.sha512"
+    "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.18/microsoft.aspnetcore.app.ref.9.0.18.nupkg.sha512",
+    "/home/miguel/.nuget/packages/microsoft.netcore.app.host.linux-x64/9.0.18/microsoft.netcore.app.host.linux-x64.9.0.18.nupkg.sha512"
   ],
   "logs": []
 }

@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
@@ -15,6 +17,36 @@ public static class IscsiPersistenceManager_CLI
             .Replace('-', '_');
     }
 
+    private static string ObtenerMountPointTarget(IscsiDestino d)
+    {
+        // 1. Si el modelo ya tiene asignado el punto de montaje, usarlo
+        if (!string.IsNullOrWhiteSpace(d.MountPoint))
+            return d.MountPoint;
+
+        // 2. Si la partición ya está montada en el sistema, consultar su punto de montaje real
+        if (!string.IsNullOrWhiteSpace(d.PartitionPath))
+        {
+            string mountReal = ShellHelper.EjecutarComoRoot($"findmnt -n -o TARGET \"{d.PartitionPath}\"").Stdout.Trim();
+            if (!string.IsNullOrWhiteSpace(mountReal))
+            {
+                d.MountPoint = mountReal;
+                return mountReal;
+            }
+        }
+
+        // 3. Generar la ruta usando el mismo Hash SHA1 que IscsiHelper para evitar discrepancias
+        string safe = Safe(d.Iqn);
+        string hash = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(d.Iqn))).Substring(0, 8);
+
+        string baseMount = ConfigManager.MountBasePath ?? "/mnt/iscsi";
+        if (!baseMount.StartsWith('/'))
+            baseMount = "/" + baseMount;
+
+        string nuevaRuta = Path.Combine(baseMount, $"{safe}_{hash}");
+        d.MountPoint = nuevaRuta; // Asignar al modelo
+        return nuevaRuta;
+    }
+
     // ============================================================
     // DETECT
     // ============================================================
@@ -24,7 +56,7 @@ public static class IscsiPersistenceManager_CLI
             return false;
 
         string safe = Safe(d.Iqn);
-        string mp = Path.Combine(ConfigManager.MountBasePath, safe);
+        string mp = ObtenerMountPointTarget(d);
 
         if (File.Exists("/etc/fstab"))
         {
@@ -46,7 +78,7 @@ public static class IscsiPersistenceManager_CLI
             return;
 
         string safe = Safe(d.Iqn);
-        string mp = Path.Combine(ConfigManager.MountBasePath, safe);
+        string mp = ObtenerMountPointTarget(d);
 
         if (!Directory.Exists(mp))
         {
@@ -66,6 +98,7 @@ public static class IscsiPersistenceManager_CLI
         ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
         ShellHelper.EjecutarComoRoot($"bash -c \"echo '{entry}' >> /etc/fstab\"");
 
+        string portalValido = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
         string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
         // ⭐ LOGIN AUTOMÁTICO + MOUNT PERSISTENTE
@@ -77,7 +110,7 @@ Requires=network-online.target iscsid.service iscsi.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/usr/bin/iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --login
+ExecStartPre=/usr/bin/iscsiadm -m node -T {d.Iqn} -p {portalValido} --login
 ExecStart=/usr/bin/mount {mp}
 RemainAfterExit=yes
 
@@ -100,14 +133,13 @@ WantedBy=multi-user.target
     // ============================================================
     // REMOVE
     // ============================================================
-   
     public static async Task RemoveAsync(IscsiDestino d)
     {
         if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
             return;
 
         string safe = Safe(d.Iqn);
-        string mp = Path.Combine(ConfigManager.MountBasePath, safe);
+        string mp = ObtenerMountPointTarget(d);
 
         // 1) Eliminar entrada fstab
         ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
@@ -123,26 +155,33 @@ WantedBy=multi-user.target
 
         ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
-        // ⭐ 3) LOGOUT COMPLETO
+        string portalValido = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
+
+        // 3) LOGOUT COMPLETO
         ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --logout"
+            $"iscsiadm -m node -T {d.Iqn} -p {portalValido} --logout"
         );
 
-        // ⭐ 4) ELIMINAR NODO
+        // 4) ELIMINAR NODO
         ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn} -p {d.PortalReal} --op delete"
+            $"iscsiadm -m node -T {d.Iqn} -p {portalValido} --op delete"
         );
 
-        // ⭐ 5) ELIMINAR REGISTRO DE DISCOVERY
+        // 5) ELIMINAR REGISTRO DE DISCOVERY
         ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m discovery -t sendtargets -p {d.PortalReal} --op delete"
+            $"iscsiadm -m discoverydb -t sendtargets -p {portalValido} --op delete"
         );
+
+        // 6) LIMPIAR DIRECTORIO DE MONTAJE SI QUEDÓ VACÍO
+        if (Directory.Exists(mp))
+        {
+            ShellHelper.EjecutarComoRoot($"rmdir \"{mp}\" 2>/dev/null");
+        }
 
         d.Persistir = false;
 
         await Task.CompletedTask;
     }
-
 
     private static string ExtraerUUID(string blkidOut)
     {

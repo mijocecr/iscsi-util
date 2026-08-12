@@ -347,7 +347,7 @@ public partial class TargetsView : UserControl
                 else
                 {
                     using (LoadingService.Show("Disconnecting..."))
-                        await IscsiHelper.Desconectar(destino);
+                        await IscsiHelper.Desconectar_Borrar(destino);
                 }
 
                 await RefreshTargetsList();
@@ -532,7 +532,7 @@ public partial class TargetsView : UserControl
             return;
 
         using (LoadingService.Show("Unmounting..."))
-            await IscsiHelper.Desconectar(_selected);
+            await IscsiHelper.Desconectar_Borrar(_selected);
 
         await RefreshTargetsList();
     }
