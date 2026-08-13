@@ -482,231 +482,269 @@ public static class IscsiHelper
     //  CONECTAR — Login iSCSI + detección + montaje
     // ======================================================================
 
-    public static async Task Conectar(IscsiDestino d)
+    // ============================================================
+// LIMPIAR AUTO-MOUNTS (CachyOS, GVFS, Udisks2)
+// ============================================================
+private static void ForceUnmountAutoMounts(string partition)
+{
+    if (string.IsNullOrWhiteSpace(partition))
+        return;
+
+    var mounts = ShellHelper.EjecutarComoRoot(
+        $"findmnt -rn -o TARGET {partition}"
+    ).Stdout?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+
+    foreach (var mp in mounts)
     {
-        if (d == null) return;
+        // Ignorar nuestro mountpoint real
+        if (mp.StartsWith("/mnt/iscsi"))
+            continue;
 
-        var id = NextTraceId();
-        TraceIn(id, "Conectar", d.Iqn);
-
-        LogService.Debug($"[ISCSI] #{id} >>> INICIO Conectar() para IQN={d.Iqn}, IP={d.Ip}");
-
-        try
-        {
-            // 1) Crear mountpoint único por IQN
-            var basePath = ConfigManager.MountBasePath;
-
-            var safeIqn = d.Iqn
-                .Replace(":", "_")
-                .Replace("/", "_")
-                .Replace(".", "_")
-                .Replace("-", "_");
-
-            var hash = Convert.ToHexString(
-                SHA1.HashData(
-                    Encoding.UTF8.GetBytes(d.Iqn)
-                )
-            ).Substring(0, 8);
-
-            d.MountPoint = Path.Combine(basePath, $"{safeIqn}_{hash}");
-
-            if (!Directory.Exists(d.MountPoint))
-            {
-                Directory.CreateDirectory(d.MountPoint);
-                ShellHelper.EjecutarComoRoot(
-                    $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
-                );
-            }
-
-            // 2) Comprobar si ya está conectado
-            var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout ?? "";
-            var yaConectado = sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase);
-
-            var (ipSolo, port) = NormalizarPortal(d.Ip);
-
-            // 3) LOGIN iSCSI
-            if (!yaConectado)
-            {
-                var checkNode = ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo}"
-                );
-
-                var nodoExiste = !checkNode.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
-
-                if (!nodoExiste)
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=new"
-                    );
-
-                // CHAP
-                if (d.UsaChap || d.UsaMutualChap)
-                {
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.authmethod --value=CHAP"
-                    );
-
-                    if (d.UsaChap)
-                    {
-                        var user = string.IsNullOrWhiteSpace(d.UsuarioChap) ? d.LocalUser : d.UsuarioChap;
-                        var pass = string.IsNullOrWhiteSpace(d.PasswordChap) ? d.LocalPass : d.PasswordChap;
-
-                        ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username --value=\"{user}\""
-                        );
-
-                        ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password --value=\"{pass}\""
-                        );
-                    }
-
-                    if (d.UsaMutualChap)
-                    {
-                        var userIn = string.IsNullOrWhiteSpace(d.UsuarioMutualChap)
-                            ? d.LocalUserIn
-                            : d.UsuarioMutualChap;
-                        var passIn = string.IsNullOrWhiteSpace(d.PasswordMutualChap)
-                            ? d.LocalPassIn
-                            : d.PasswordMutualChap;
-
-                        ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
-                        );
-
-                        ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
-                        );
-                    }
-                }
-
-                var loginResult = ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --login"
-                );
-
-                if (loginResult.ExitCode != 0 &&
-                    !loginResult.Stderr.Contains("already present", StringComparison.OrdinalIgnoreCase))
-                    throw new Exception($"Login iSCSI falló: {loginResult.Stderr}");
-
-                await Task.Delay(300);
-            }
-
-            // 4) Detectar symlink correcto
-            d.DevicePath = null;
-
-            for (var i = 0; i < 10; i++)
-            {
-                var byPathOut = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "";
-                var byPath = byPathOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-                var match = byPath.FirstOrDefault(l =>
-                    l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
-                    l.Contains("lun", StringComparison.OrdinalIgnoreCase)
-                );
-
-                if (match != null)
-                {
-                    d.DevicePath = "/dev/disk/by-path/" + match.Trim();
-                    break;
-                }
-
-                await Task.Delay(200);
-            }
-
-            if (string.IsNullOrWhiteSpace(d.DevicePath))
-                throw new Exception("No se encontró symlink del dispositivo iSCSI.");
-
-            // 5) Detectar partición correcta
-            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
-            var lines = (lsblk.Stdout ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            string? partition = null;
-
-            foreach (var line in lines)
-            {
-                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length == 2 && parts[1] == "part")
-                {
-                    partition = "/dev/" + parts[0];
-                    break;
-                }
-            }
-
-            d.PartitionPath = partition ?? d.DevicePath;
-
-            // 6) Detectar filesystem
-            var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
-
-            if (string.IsNullOrWhiteSpace(blkid.Stdout))
-            {
-                d.TieneFilesystem = false;
-                d.FsType = "";
-                d.Conectado = true;
-
-                TraceOut(id, "Conectar", "RAW_NO_FS");
-                return;
-            }
-
-            d.TieneFilesystem = true;
-            d.FsType = DetectarFsType(blkid.Stdout);
-
-          // 7) Montar y asignar permisos de usuario para KDE
-            if (!d.TieneFilesystem)
-            {
-                d.Conectado = true;
-                TraceOut(id, "Conectar", "RAW_NO_MOUNT");
-                return;
-            }
-
-            var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
-
-            if (mpCheck.ExitCode != 0)
-            {
-                // A) Obtener el usuario real de la sesión de KDE (evita usar 'root' si la app corre con sudo)
-                string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER");
-                if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
-                {
-                    usuarioReal = ShellHelper.EjecutarComoRoot("logname").Stdout?.Trim() ?? "1000";
-                }
-
-                // Obtener UID y GID del usuario
-                string uid = ShellHelper.EjecutarComoRoot($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
-                string gid = ShellHelper.EjecutarComoRoot($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
-
-                string fsLower = (d.FsType ?? "").ToLowerInvariant();
-
-                // B) Montar según el tipo de Filesystem
-                if (fsLower == "ntfs" || fsLower == "exfat" || fsLower == "vfat")
-                {
-                    // En NTFS/exFAT asignamos el usuario mediante opciones de montaje (-o)
-                    string driver = fsLower == "ntfs" ? "ntfs-3g" : fsLower;
-                    ShellHelper.EjecutarComoRoot(
-                        $"mount -t {driver} -o uid={uid},gid={gid},umask=000 {d.PartitionPath} \"{d.MountPoint}\""
-                    );
-                }
-                else
-                {
-                    // En ext4 / xfs / btrfs montamos de forma estándar
-                    ShellHelper.EjecutarComoRoot(
-                        $"mount -t {d.FsType} {d.PartitionPath} \"{d.MountPoint}\""
-                    );
-
-                    // IMPRESCINDIBLE PARA KDE/ext4: Cambiar la propiedad de la raíz del montaje al usuario
-                    ShellHelper.EjecutarComoRoot($"chown -R {uid}:{gid} \"{d.MountPoint}\"");
-                    ShellHelper.EjecutarComoRoot($"chmod 777 \"{d.MountPoint}\"");
-                }
-            }
-
-            d.Conectado = true;
-            NotificadorLinux.Enviar($"Target {d.Iqn} mounted in {d.MountPoint}");
-
-            TraceOut(id, "Conectar");
-        }
-        catch (Exception ex)
-        {
-            LogService.Error($"[ISCSI] #{id} ERROR Conectar: {ex.Message}");
-            NotificadorLinux.Enviar($"[ERROR] Failed to connect target {d.Iqn}", 6000, "critical");
-            throw;
-        }
+        ShellHelper.EjecutarComoRoot($"umount -l --force \"{mp}\"");
     }
+}
+
+
+// ============================================================
+// MÉTODO CONECTAR (TU VERSIÓN, PERO FUNCIONAL)
+// ============================================================
+public static async Task Conectar(IscsiDestino d)
+{
+    if (d == null) return;
+
+    var id = NextTraceId();
+    TraceIn(id, "Conectar", d.Iqn);
+
+    LogService.Debug($"[ISCSI] #{id} >>> INICIO Conectar() para IQN={d.Iqn}, IP={d.Ip}");
+
+    try
+    {
+        // ============================================================
+        // 1) Crear mountpoint único por IQN
+        // ============================================================
+        var basePath = ConfigManager.MountBasePath;
+
+        var safeIqn = d.Iqn
+            .Replace(":", "_")
+            .Replace("/", "_")
+            .Replace(".", "_")
+            .Replace("-", "_");
+
+        var hash = Convert.ToHexString(
+            SHA1.HashData(Encoding.UTF8.GetBytes(d.Iqn))
+        ).Substring(0, 8);
+
+        d.MountPoint = Path.Combine(basePath, $"{safeIqn}_{hash}");
+
+        if (!Directory.Exists(d.MountPoint))
+        {
+            Directory.CreateDirectory(d.MountPoint);
+            ShellHelper.EjecutarComoRoot(
+                $"chmod {ConfigManager.DefaultPermissions} \"{d.MountPoint}\""
+            );
+        }
+
+        // ============================================================
+        // 2) Comprobar si ya está conectado
+        // ============================================================
+        var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout ?? "";
+        var yaConectado = sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase);
+
+        var (ipSolo, port) = NormalizarPortal(d.Ip);
+
+        // ============================================================
+        // 3) LOGIN iSCSI
+        // ============================================================
+        if (!yaConectado)
+        {
+            var checkNode = ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo}"
+            );
+
+            var nodoExiste = !checkNode.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
+
+            if (!nodoExiste)
+                ShellHelper.EjecutarComoRoot(
+                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=new"
+                );
+
+            // CHAP
+            if (d.UsaChap || d.UsaMutualChap)
+            {
+                ShellHelper.EjecutarComoRoot(
+                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.authmethod --value=CHAP"
+                );
+
+                if (d.UsaChap)
+                {
+                    var user = string.IsNullOrWhiteSpace(d.UsuarioChap) ? d.LocalUser : d.UsuarioChap;
+                    var pass = string.IsNullOrWhiteSpace(d.PasswordChap) ? d.LocalPass : d.PasswordChap;
+
+                    ShellHelper.EjecutarComoRoot(
+                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username --value=\"{user}\""
+                    );
+
+                    ShellHelper.EjecutarComoRoot(
+                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password --value=\"{pass}\""
+                    );
+                }
+
+                if (d.UsaMutualChap)
+                {
+                    var userIn = string.IsNullOrWhiteSpace(d.UsuarioMutualChap)
+                        ? d.LocalUserIn
+                        : d.UsuarioMutualChap;
+                    var passIn = string.IsNullOrWhiteSpace(d.PasswordMutualChap)
+                        ? d.LocalPassIn
+                        : d.PasswordMutualChap;
+
+                    ShellHelper.EjecutarComoRoot(
+                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+                    );
+
+                    ShellHelper.EjecutarComoRoot(
+                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+                    );
+                }
+            }
+
+            var loginResult = ShellHelper.EjecutarComoRoot(
+                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --login"
+            );
+
+            if (loginResult.ExitCode != 0 &&
+                !loginResult.Stderr.Contains("already present", StringComparison.OrdinalIgnoreCase))
+                throw new Exception($"Login iSCSI falló: {loginResult.Stderr}");
+
+            await Task.Delay(300);
+        }
+
+        // ============================================================
+        // 4) Detectar symlink correcto
+        // ============================================================
+        d.DevicePath = null;
+
+        for (var i = 0; i < 10; i++)
+        {
+            var byPathOut = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "";
+            var byPath = byPathOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            var match = byPath.FirstOrDefault(l =>
+                l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
+                l.Contains("lun", StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (match != null)
+            {
+                d.DevicePath = "/dev/disk/by-path/" + match.Trim();
+                break;
+            }
+
+            await Task.Delay(200);
+        }
+
+        if (string.IsNullOrWhiteSpace(d.DevicePath))
+            throw new Exception("No se encontró symlink del dispositivo iSCSI.");
+
+        // ============================================================
+        // 5) Detectar partición correcta
+        // ============================================================
+        var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
+        var lines = (lsblk.Stdout ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        string? partition = null;
+
+        foreach (var line in lines)
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2 && parts[1] == "part")
+            {
+                partition = "/dev/" + parts[0];
+                break;
+            }
+        }
+
+        d.PartitionPath = partition ?? d.DevicePath;
+
+        // ============================================================
+        // 6) LIMPIAR AUTO-MOUNTS DE CACHYOS
+        // ============================================================
+        ForceUnmountAutoMounts(d.PartitionPath);
+
+        // ============================================================
+        // 7) Detectar filesystem
+        // ============================================================
+        var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
+
+        if (string.IsNullOrWhiteSpace(blkid.Stdout))
+        {
+            d.TieneFilesystem = false;
+            d.FsType = "";
+            d.Conectado = true;
+
+            TraceOut(id, "Conectar", "RAW_NO_FS");
+            return;
+        }
+
+        d.TieneFilesystem = true;
+        d.FsType = DetectarFsType(blkid.Stdout);
+
+        // ============================================================
+        // 8) Montar con permisos eficientes (sin chown -R)
+        // ============================================================
+        var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+
+        if (mpCheck.ExitCode != 0)
+        {
+            // A) Obtener usuario real
+            string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER");
+            if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
+            {
+                usuarioReal = ShellHelper.EjecutarComoRoot("logname").Stdout?.Trim() ?? "1000";
+            }
+
+            string uid = ShellHelper.EjecutarComoRoot($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
+            string gid = ShellHelper.EjecutarComoRoot($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
+
+            string fsLower = (d.FsType ?? "").ToLowerInvariant();
+
+            if (fsLower == "ntfs" || fsLower == "exfat" || fsLower == "vfat")
+            {
+                string driver = fsLower == "ntfs" ? "ntfs-3g" : fsLower;
+                ShellHelper.EjecutarComoRoot(
+                    $"mount -t {driver} -o uid={uid},gid={gid},umask=000 {d.PartitionPath} \"{d.MountPoint}\""
+                );
+            }
+            else
+            {
+                // EXT4/XFS/BTRFS → montar normal
+                ShellHelper.EjecutarComoRoot(
+                    $"mount -t {d.FsType} {d.PartitionPath} \"{d.MountPoint}\""
+                );
+
+                // ACL instantáneo
+                ShellHelper.EjecutarComoRoot($"setfacl -m u:{uid}:rwx \"{d.MountPoint}\"");
+            }
+        }
+
+        d.Conectado = true;
+        NotificadorLinux.Enviar($"Target {d.Iqn} mounted in {d.MountPoint}");
+
+        TraceOut(id, "Conectar");
+    }
+    catch (Exception ex)
+    {
+        LogService.Error($"[ISCSI] #{id} ERROR Conectar: {ex.Message}");
+        NotificadorLinux.Enviar($"[ERROR] Failed to connect target {d.Iqn}", 6000, "critical");
+        throw;
+    }
+}
+
+
+    
+
+    
+
 
     // ======================================================================
     //  OBTENER PORTAL REAL

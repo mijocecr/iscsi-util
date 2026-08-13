@@ -25,7 +25,7 @@ public static class IscsiPersistenceManager
             .Replace('.', '_')
             .Replace('-', '_');
     }
-
+/*
     private static string ObtenerMountPointTarget(IscsiDestino d)
     {
         // 1. Si el modelo ya tiene asignado el punto de montaje, usarlo
@@ -55,7 +55,52 @@ public static class IscsiPersistenceManager
         d.MountPoint = nuevaRuta; // Asignar al modelo
         return nuevaRuta;
     }
+*/
+    
+    private static string ObtenerMountPointTarget(IscsiDestino d)
+    {
+        // 1. Si ya tiene mountpoint asignado, usarlo
+        if (!string.IsNullOrWhiteSpace(d.MountPoint))
+            return d.MountPoint;
 
+        // 2. Detectar si la partición está montada
+        if (!string.IsNullOrWhiteSpace(d.PartitionPath))
+        {
+            string mountReal = ShellHelper.EjecutarComoRoot(
+                $"findmnt -n -o TARGET \"{d.PartitionPath}\""
+            ).Stdout.Trim();
+
+            // ❗ IGNORAR auto-mounts de CachyOS
+            if (!string.IsNullOrWhiteSpace(mountReal))
+            {
+                if (!mountReal.StartsWith("/run/media") &&
+                    !mountReal.StartsWith("/media") &&
+                    !mountReal.Contains("gvfs"))
+                {
+                    // Es un mountpoint válido (persistente o manual)
+                    d.MountPoint = mountReal;
+                    return mountReal;
+                }
+            }
+        }
+
+        // 3. Generar mountpoint estable en /mnt/iscsi
+        string safe = Safe(d.Iqn);
+        string hash = Convert.ToHexString(
+            SHA1.HashData(Encoding.UTF8.GetBytes(d.Iqn))
+        ).Substring(0, 8);
+
+        string baseMount = ConfigManager.MountBasePath ?? "/mnt/iscsi";
+        if (!baseMount.StartsWith('/'))
+            baseMount = "/" + baseMount;
+
+        string nuevaRuta = Path.Combine(baseMount, $"{safe}_{hash}");
+        d.MountPoint = nuevaRuta;
+        return nuevaRuta;
+    }
+
+    
+    
     // ============================================================
     // DETECTAR PERSISTENCIA
     // ============================================================
