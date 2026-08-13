@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "I32uEvE11X8=",
+  "dgSpecHash": "ivzydivnImc=",
   "success": true,
-  "projectFilePath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
+  "projectFilePath": "/mnt/HDD-Extra/01_Proyectos/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
   "expectedPackageFiles": [
     "/home/miguel/.nuget/packages/avalonia/11.3.9/avalonia.11.3.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/avalonia.angle.windows.natives/2.1.25547.20250602/avalonia.angle.windows.natives.2.1.25547.20250602.nupkg.sha512",
@@ -33,6 +33,7 @@
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.win32/2.88.9/skiasharp.nativeassets.win32.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/system.io.pipelines/8.0.0/system.io.pipelines.8.0.0.nupkg.sha512",
     "/home/miguel/.nuget/packages/tmds.dbus.protocol/0.21.2/tmds.dbus.protocol.0.21.2.nupkg.sha512",
+    "/home/miguel/.nuget/packages/microsoft.netcore.app.ref/9.0.18/microsoft.netcore.app.ref.9.0.18.nupkg.sha512",
     "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.ref/9.0.18/microsoft.aspnetcore.app.ref.9.0.18.nupkg.sha512",
     "/home/miguel/.nuget/packages/microsoft.netcore.app.host.linux-x64/9.0.18/microsoft.netcore.app.host.linux-x64.9.0.18.nupkg.sha512"
   ],

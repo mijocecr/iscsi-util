@@ -1470,11 +1470,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
+      "projectUniqueName": "/mnt/HDD-Extra/01_Proyectos/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
       "projectName": "ISCSI-Util",
-      "projectPath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
+      "projectPath": "/mnt/HDD-Extra/01_Proyectos/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
       "packagesPath": "/home/miguel/.nuget/packages/",
-      "outputPath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/obj/",
+      "outputPath": "/mnt/HDD-Extra/01_Proyectos/iscsi-util/ISCSI-Util/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/home/miguel/.nuget/NuGet/NuGet.Config"
@@ -1487,7 +1487,6 @@
       },
       "frameworks": {
         "net9.0": {
-          "framework": "net9.0",
           "targetAlias": "net9.0",
           "projectReferences": {}
         }
@@ -1506,7 +1505,6 @@
     },
     "frameworks": {
       "net9.0": {
-        "framework": "net9.0",
         "targetAlias": "net9.0",
         "dependencies": {
           "Avalonia": {
@@ -1552,6 +1550,10 @@
           },
           {
             "name": "Microsoft.NETCore.App.Host.linux-x64",
+            "version": "[9.0.18, 9.0.18]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
             "version": "[9.0.18, 9.0.18]"
           }
         ],
