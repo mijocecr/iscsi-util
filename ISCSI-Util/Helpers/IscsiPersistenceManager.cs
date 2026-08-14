@@ -25,37 +25,7 @@ public static class IscsiPersistenceManager
             .Replace('.', '_')
             .Replace('-', '_');
     }
-/*
-    private static string ObtenerMountPointTarget(IscsiDestino d)
-    {
-        // 1. Si el modelo ya tiene asignado el punto de montaje, usarlo
-        if (!string.IsNullOrWhiteSpace(d.MountPoint))
-            return d.MountPoint;
 
-        // 2. Si la partición ya está montada en el sistema, consultar su punto de montaje real
-        if (!string.IsNullOrWhiteSpace(d.PartitionPath))
-        {
-            string mountReal = ShellHelper.EjecutarComoRoot($"findmnt -n -o TARGET \"{d.PartitionPath}\"").Stdout.Trim();
-            if (!string.IsNullOrWhiteSpace(mountReal))
-            {
-                d.MountPoint = mountReal;
-                return mountReal;
-            }
-        }
-
-        // 3. Generar la ruta usando el mismo Hash SHA1 que IscsiHelper para evitar discrepancias
-        string safe = Safe(d.Iqn);
-        string hash = Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(d.Iqn))).Substring(0, 8);
-        
-        string baseMount = ConfigManager.MountBasePath ?? "/mnt/iscsi";
-        if (!baseMount.StartsWith('/'))
-            baseMount = "/" + baseMount;
-
-        string nuevaRuta = Path.Combine(baseMount, $"{safe}_{hash}");
-        d.MountPoint = nuevaRuta; // Asignar al modelo
-        return nuevaRuta;
-    }
-*/
     
     private static string ObtenerMountPointTarget(IscsiDestino d)
     {
