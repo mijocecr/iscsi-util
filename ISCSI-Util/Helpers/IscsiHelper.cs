@@ -119,6 +119,7 @@ public static class IscsiHelper
     public static void DetectarChap(IscsiDestino d)
     {
         if (d == null) return;
+        d.SizeGb = 0;
 
         var id = NextTraceId();
         LogService.Debug($"[ISCSI] #{id} DetectarChap → {d.Iqn} ({d.Ip})");
@@ -336,6 +337,7 @@ public static class IscsiHelper
                 d.MountPoint = null;
                 d.TieneFilesystem = false;
                 d.FsType = "";
+                d.SizeGb = 0;
                 return;
             }
 
@@ -358,10 +360,16 @@ public static class IscsiHelper
                 d.MountPoint = null;
                 d.TieneFilesystem = false;
                 d.FsType = "";
+                d.SizeGb = 0;
                 return;
             }
 
             d.DevicePath = "/dev/disk/by-path/" + match.Trim();
+
+            var sizeOutput = ShellHelper.EjecutarComoRoot($"lsblk -b -dn -o SIZE {d.DevicePath}");
+            d.SizeGb = long.TryParse(sizeOutput.Stdout?.Trim(), out var sizeBytes)
+                ? (int)Math.Round(sizeBytes / 1_000_000_000d)
+                : 0;
 
             // 3) Detectar si existe una partición o si es un dispositivo formateado en raw (Superfloppy)
             var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");

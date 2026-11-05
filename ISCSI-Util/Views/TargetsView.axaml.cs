@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ISCSI_Util.Views;
@@ -21,6 +22,7 @@ namespace ISCSI_Util.Views;
 public partial class TargetsView : UserControl
 {
     private readonly List<IscsiDestino> _targets = new();
+    private readonly SemaphoreSlim _systemOperationLock = new(1, 1);
     private IscsiDestino? _selected;
     private string _lastValidIp = "";
 
@@ -146,14 +148,14 @@ public partial class TargetsView : UserControl
         using (LoadingService.Show("Discovering targets..."))
         {
             _targets.Clear();
-            discovered = await IscsiHelper.Descubrir(portal);
+            discovered = await RunSystemOperationAsync(() => IscsiHelper.Descubrir(portal));
 
             // Scan targets safely
             foreach (var d in discovered)
             {
                 try
                 {
-                    await IscsiHelper.CompletarInformacionDestino(d, 0);
+                    await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(d, 0));
                 }
                 catch (Exception ex)
                 {
@@ -181,25 +183,17 @@ public partial class TargetsView : UserControl
         {
             try
             {
-                await IscsiHelper.CompletarInformacionDestino(destino, 0);
+                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(destino, 0));
             }
             catch (Exception ex)
             {
                 LogService.Error($"[REFRESH] Error scanning target: {ex.Message}");
             }
 
-            destino.Persistir = IscsiPersistenceManager.Detect(destino);
-            destino.InfoCompleta = true;
-            destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
-            destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
+            await UpdateTargetStateAsync(destino);
         }
 
-        TargetsList.Children.Clear();
-
-        foreach (var destino in _targets)
-        {
-            TargetsList.Children.Add(CreateTargetCard(destino));
-        }
+        RebuildTargetsList();
 
         _selected = _targets.FirstOrDefault(t => t.Iqn == selectedIQN);
 
@@ -209,6 +203,64 @@ public partial class TargetsView : UserControl
         {
             DetailsInfoPanel.Children.Clear();
             HeaderRow.IsVisible = false;
+            HeaderActionsRow.IsVisible = false;
+        }
+    }
+
+    private async Task UpdateTargetStateAsync(IscsiDestino destino)
+    {
+        destino.Persistir = await RunSystemOperationAsync(() => IscsiPersistenceManager.Detect(destino));
+        destino.InfoCompleta = true;
+        destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
+        destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
+    }
+
+    private async Task RunSystemOperationAsync(Func<Task> operation)
+    {
+        await _systemOperationLock.WaitAsync();
+        try
+        {
+            await Task.Run(operation);
+        }
+        finally
+        {
+            _systemOperationLock.Release();
+        }
+    }
+
+    private async Task<T> RunSystemOperationAsync<T>(Func<Task<T>> operation)
+    {
+        await _systemOperationLock.WaitAsync();
+        try
+        {
+            return await Task.Run(operation);
+        }
+        finally
+        {
+            _systemOperationLock.Release();
+        }
+    }
+
+    private async Task<T> RunSystemOperationAsync<T>(Func<T> operation)
+    {
+        await _systemOperationLock.WaitAsync();
+        try
+        {
+            return await Task.Run(operation);
+        }
+        finally
+        {
+            _systemOperationLock.Release();
+        }
+    }
+
+    private void RebuildTargetsList()
+    {
+        TargetsList.Children.Clear();
+
+        foreach (var destino in _targets)
+        {
+            TargetsList.Children.Add(CreateTargetCard(destino));
         }
     }
 
@@ -221,11 +273,12 @@ public partial class TargetsView : UserControl
     var border = new Border
     {
         Classes = { "SteamCard" },
-        Padding = new Thickness(12, 10),
-        CornerRadius = new CornerRadius(8),
-        Margin = new Thickness(0, 0, 0, 8),
+        Padding = new Thickness(10),
+        CornerRadius = new CornerRadius(10),
+        Margin = new Thickness(0, 0, 0, 7),
         BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
-        BorderThickness = new Thickness(1.4)
+        BorderThickness = new Thickness(1.5),
+        Cursor = new Cursor(StandardCursorType.Hand)
     };
 
     if (_selected?.Iqn == destino.Iqn)
@@ -233,46 +286,80 @@ public partial class TargetsView : UserControl
 
     var grid = new Grid
     {
-        ColumnDefinitions = new ColumnDefinitions("60, *"),
+        ColumnDefinitions = new ColumnDefinitions("78, *"),
         RowDefinitions = new RowDefinitions("Auto,Auto"),
-        RowSpacing = 6
+        RowSpacing = 5
     };
 
     var icon = new Image
     {
-        Source = LoadIcon("avares://ISCSI-Util/Assets/Icons/target.jpeg"),
+        Source = LoadIcon("avares://ISCSI-Util/Assets/Icons/target-ok.png"),
         Stretch = Stretch.Uniform,
-        MaxWidth = 90,
-        MaxHeight = 90,
+        Width = 54,
+        Height = 54,
         HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-        Margin = new Thickness(0, 4, 10, 0)
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
     };
 
-    grid.Children.Add(icon);
-    Grid.SetColumn(icon, 0);
-    Grid.SetRowSpan(icon, 2);
+    var iconFrame = new Border
+    {
+        Width = 62,
+        Height = 62,
+        Padding = new Thickness(3),
+        CornerRadius = new CornerRadius(9),
+        BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorder")!,
+        BorderThickness = new Thickness(1.5),
+        Background = (IBrush)Application.Current!.FindResource("SteamCard")!,
+        Child = icon,
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+    };
+
+    grid.Children.Add(iconFrame);
+    Grid.SetColumn(iconFrame, 0);
+    Grid.SetRowSpan(iconFrame, 2);
+
+    var titleRow = new Grid
+    {
+        ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+        ColumnSpacing = 8,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+    };
 
     var iqnText = new TextBlock
     {
-        Cursor = new Cursor(StandardCursorType.Hand),
-        Text = destino.Iqn.Contains(':') ? destino.Iqn[(destino.Iqn.LastIndexOf(':') + 1)..] : destino.Iqn,
+        Text = GetTargetDisplayName(destino),
         TextAlignment = TextAlignment.Left,
-        TextWrapping = TextWrapping.Wrap,
-        FontSize = 18,
+        TextWrapping = TextWrapping.NoWrap,
+        FontSize = 16,
         FontWeight = FontWeight.SemiBold,
         TextTrimming = TextTrimming.CharacterEllipsis,
         Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
     };
 
-    grid.Children.Add(iqnText);
-    Grid.SetColumn(iqnText, 1);
-    Grid.SetRow(iqnText, 0);
+    titleRow.Children.Add(iqnText);
+
+    var connectionIndicator = new Border
+    {
+        Width = 10,
+        Height = 10,
+        CornerRadius = new CornerRadius(5),
+        Background = destino.Conectado ? Brushes.LimeGreen : Brushes.Gray,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        Margin = new Thickness(0, 0, 8, 0)
+    };
+    titleRow.Children.Add(connectionIndicator);
+    Grid.SetColumn(connectionIndicator, 1);
+
+    grid.Children.Add(titleRow);
+    Grid.SetColumn(titleRow, 1);
+    Grid.SetRow(titleRow, 0);
 
     var btnRow = new StackPanel
     {
         Orientation = Avalonia.Layout.Orientation.Horizontal,
-        Spacing = 8
+        Spacing = 6,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
     };
 
     // CONNECTION AND AUTHENTICATION BUTTONS
@@ -342,13 +429,13 @@ public partial class TargetsView : UserControl
                 if (!current.Conectado)
                 {
                     using (LoadingService.Show("Connecting..."))
-                        await IscsiHelper.Conectar(current);
+                        await RunSystemOperationAsync(() => IscsiHelper.Conectar(current));
                 }
                 else
                 {
                     using (LoadingService.Show("Disconnecting..."))
                     {
-                        await IscsiHelper.Desconectar_Borrar(current);
+                        await RunSystemOperationAsync(() => IscsiHelper.Desconectar_Borrar(current));
                         // reutilizamos el rediscover que ya tienes
                         await AutoRediscoverAfterPersistenceRemoval();
                     }
@@ -366,7 +453,7 @@ public partial class TargetsView : UserControl
     }
 
     // INIT BUTTON FOR UNFORMATTED DISKS
-    if (destino.Conectado && !destino.TieneFilesystem)
+    if (CanInitializeTarget(destino))
     {
         var initBtn = new Button
         {
@@ -383,7 +470,35 @@ public partial class TargetsView : UserControl
         {
             if (this.GetVisualRoot() is Window owner)
             {
-                var dlg = new InitializeDiskDialog(destino);
+                var current = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+                if (current == null)
+                {
+                    await RefreshTargetsList();
+                    return;
+                }
+
+                try
+                {
+                    using (LoadingService.Show("Verifying target..."))
+                    {
+                        await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
+                        await UpdateTargetStateAsync(current);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error($"[INIT] Unable to verify target: {ex.Message}");
+                    await RefreshTargetsList();
+                    return;
+                }
+
+                if (!CanInitializeTarget(current))
+                {
+                    await RefreshTargetsList();
+                    return;
+                }
+
+                var dlg = new InitializeDiskDialog(current);
                 bool? success = await dlg.ShowDialog<bool>(owner);
 
                 if (success == true)
@@ -392,9 +507,7 @@ public partial class TargetsView : UserControl
                     {
                         try
                         {
-                            // también aquí conviene usar la instancia actual
-                            var current = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn) ?? destino;
-                            await IscsiHelper.CompletarInformacionDestino(current, 0);
+                            await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
                         }
                         catch (Exception ex)
                         {
@@ -419,9 +532,11 @@ public partial class TargetsView : UserControl
     {
         e.Handled = true;
 
-        _selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
-        if (_selected == null)
+        var selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+        if (selected == null)
             return;
+
+        _selected = selected;
 
         foreach (var child in TargetsList.Children)
         {
@@ -435,7 +550,8 @@ public partial class TargetsView : UserControl
         {
             try
             {
-                await IscsiHelper.CompletarInformacionDestino(_selected, 0);
+                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
+                await UpdateTargetStateAsync(selected);
             }
             catch (Exception ex)
             {
@@ -443,8 +559,9 @@ public partial class TargetsView : UserControl
             }
         }
 
-        _selected.InfoCompleta = true;
-        await LoadTargetDetailsAsync(_selected);
+        RebuildTargetsList();
+        if (_targets.Any(t => t.Iqn == selected.Iqn))
+            await LoadTargetDetailsAsync(selected);
     };
 
     border.Child = grid;
@@ -466,16 +583,18 @@ public partial class TargetsView : UserControl
 
         DetailsInfoPanel.Children.Clear();
         HeaderRow.IsVisible = true;
+        HeaderActionsRow.IsVisible = true;
         BtnDeleteNode.IsVisible = true;
+        TargetDetailsTitle.Text = GetTargetDisplayName(destino);
 
-        bool persistente = IscsiPersistenceManager.Detect(destino);
+        bool persistente = destino.Persistir;
         BtnTogglePersist.IsEnabled = destino.Conectado;
         BtnTogglePersist.Content = persistente ? "No Autostart" : "Autostart";
 
         var infoGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("80, *"),
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto"),
             RowSpacing = 4
         };
 
@@ -512,6 +631,7 @@ public partial class TargetsView : UserControl
                 : Brushes.OrangeRed
         );
         AddRow("Filesystem:", destino.TieneFilesystem ? $"Yes ({destino.FsType})" : "No", 3);
+        AddRow("Capacity:", destino.SizeGb > 0 ? $"{destino.SizeGb} GB" : "-", 4);
 
         DetailsInfoPanel.Children.Add(infoGrid);
         DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
@@ -524,16 +644,27 @@ public partial class TargetsView : UserControl
         await Task.CompletedTask;
     }
 
+    private static bool CanInitializeTarget(IscsiDestino destino) =>
+        destino.Conectado &&
+        !destino.TieneFilesystem &&
+        !string.IsNullOrWhiteSpace(destino.DevicePath);
+
+    private static string GetTargetDisplayName(IscsiDestino destino) =>
+        destino.Iqn.Contains(':')
+            ? destino.Iqn[(destino.Iqn.LastIndexOf(':') + 1)..]
+            : destino.Iqn;
+
     // ============================================================
     // PERSISTENCE & HEADER EVENTS
     // ============================================================
 
     private async void OnTogglePersist(object? sender, RoutedEventArgs e)
     {
-        if (_selected == null)
+        var selected = _selected;
+        if (selected == null)
             return;
 
-        bool persistente = IscsiPersistenceManager.Detect(_selected);
+        bool persistente = await RunSystemOperationAsync(() => IscsiPersistenceManager.Detect(selected));
 
         using (LoadingService.Show(persistente ? "Removing persistence..." : "Applying persistence..."))
         {
@@ -541,15 +672,15 @@ public partial class TargetsView : UserControl
 
             try
             {
-                await IscsiHelper.CompletarInformacionDestino(_selected, 0);
+                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
 
                 if (!persistente)
                 {
-                    await IscsiPersistenceManager.ApplyAsync(_selected);
+                    await RunSystemOperationAsync(() => IscsiPersistenceManager.ApplyAsync(selected));
                 }
                 else
                 {
-                    await IscsiPersistenceManager.RemoveAsync(_selected);
+                    await RunSystemOperationAsync(() => IscsiPersistenceManager.RemoveAsync(selected));
 
                     // NUEVO: refrescar automáticamente como si pulsara Discover
                     await AutoRediscoverAfterPersistenceRemoval();
@@ -573,13 +704,13 @@ public partial class TargetsView : UserControl
 
         try
         {
-            var discovered = await IscsiHelper.Descubrir(portal);
+            var discovered = await RunSystemOperationAsync(() => IscsiHelper.Descubrir(portal));
 
             foreach (var d in discovered)
             {
                 try
                 {
-                    await IscsiHelper.CompletarInformacionDestino(d, 0);
+                    await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(d, 0));
                 }
                 catch (Exception ex)
                 {
@@ -601,14 +732,15 @@ public partial class TargetsView : UserControl
     
     private async void OnHeaderUnmount(object? sender, RoutedEventArgs e)
     {
-        if (_selected == null)
+        var selected = _selected;
+        if (selected == null)
             return;
 
         using (LoadingService.Show("Unmounting..."))
         {
             try
             {
-                await IscsiHelper.Desconectar_Borrar(_selected);
+                await RunSystemOperationAsync(() => IscsiHelper.Desconectar_Borrar(selected));
 
                 // reutilizamos el mismo rediscover que tras remover persistencia
                 await AutoRediscoverAfterPersistenceRemoval();
@@ -651,14 +783,15 @@ public partial class TargetsView : UserControl
 
     private async void OnDeleteNode(object? sender, RoutedEventArgs e)
     {
-        if (_selected == null)
+        var selected = _selected;
+        if (selected == null)
             return;
 
         using (LoadingService.Show("Deleting target node..."))
         {
             try
             {
-                await IscsiHelper.Desconectar_Borrar(_selected);
+                await RunSystemOperationAsync(() => IscsiHelper.Desconectar_Borrar(selected));
             }
             catch (Exception ex)
             {
@@ -666,8 +799,9 @@ public partial class TargetsView : UserControl
             }
         }
 
-        _targets.Remove(_selected);
-        _selected = null;
+        _targets.Remove(selected);
+        if (_selected?.Iqn == selected.Iqn)
+            _selected = null;
 
         await RefreshTargetsList();
     }
@@ -678,20 +812,16 @@ public partial class TargetsView : UserControl
 
     private string GetIconForChap(IscsiDestino d)
     {
-        bool hdd = !d.TieneFilesystem;
+        if (d.Conectado && !d.TieneFilesystem && !string.IsNullOrWhiteSpace(d.DevicePath))
+            return "avares://ISCSI-Util/Assets/Icons/no-fs.jpeg";
 
         if (d.UsaMutualChap)
-            return hdd ? "avares://ISCSI-Util/Assets/Icons/chap-mutual-hdd.jpeg"
-                       : "avares://ISCSI-Util/Assets/Icons/chap-mutual.jpeg";
+            return "avares://ISCSI-Util/Assets/Icons/chap-mutual.png";
 
         if (d.UsaChap)
-            return hdd
-                ? "avares://ISCSI-Util/Assets/Icons/chap-hdd.jpeg"
-                : "avares://ISCSI-Util/Assets/Icons/chap.jpeg";
+            return "avares://ISCSI-Util/Assets/Icons/chap.png";
 
-        return hdd
-            ? "avares://ISCSI-Util/Assets/Icons/no-chap-hdd.jpeg"
-            : "avares://ISCSI-Util/Assets/Icons/no-chap.jpeg";
+        return "avares://ISCSI-Util/Assets/Icons/no-chap.png";
     }
 
     private Bitmap? LoadIcon(string uri)

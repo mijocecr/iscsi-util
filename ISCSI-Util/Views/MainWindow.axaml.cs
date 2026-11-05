@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -95,21 +97,10 @@ public partial class MainWindow : Window
         }
 
         // ------------------------------------------------------------
-        // 2) ARRANCAR ISCSID SOLO SI ES NECESARIO
+        // 2) ARRANCAR LOS SERVICIOS iSCSI DISPONIBLES
         // ------------------------------------------------------------
-        StatusBarText.Text = "Checking iSCSI service...";
-        LogService.Debug("[MAIN] Checking iscsid service status...");
-
-        var statusCheck = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
-
-        if (!statusCheck.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
-        {
-            StatusBarText.Text = "Starting iSCSI service...";
-            LogService.Write("[MAIN] iscsid not active. Starting service...");
-            ShellHelper.EjecutarComoRoot("systemctl start iscsid");
-        }
-
-        await WaitForDaemonReady();
+        StatusBarText.Text = "Starting iSCSI services...";
+        bool iscsiReady = await StartIscsiServicesAsync();
 
         // ------------------------------------------------------------
         // 3) CARGAR SESSIONS
@@ -127,33 +118,87 @@ public partial class MainWindow : Window
             await status.RefreshStatus();
         }
 
-        StatusBarText.Text = "Ready.";
-        LogService.Write("[MAIN] Initialization completed. System ready.");
+        StatusBarText.Text = iscsiReady ? "Ready." : "Ready (iSCSI service unavailable).";
+        LogService.Write(iscsiReady
+            ? "[MAIN] Initialization completed. System ready."
+            : "[MAIN] Initialization completed with iSCSI services unavailable.");
     }
 
     // ============================================================
-    // ESPERAR A QUE ISCSID ESTÉ LISTO
+    // INICIAR SERVICIOS iSCSI
     // ============================================================
-    private async Task WaitForDaemonReady()
+    private async Task<bool> StartIscsiServicesAsync()
     {
-        LogService.Debug("[MAIN] Waiting for iscsid to become active...");
+        const string daemonUnit = "iscsid.service";
+        LogService.Debug("[MAIN] Discovering installed iSCSI systemd units...");
 
-        for (int i = 0; i < 40; i++)
+        var unitsResult = await Task.Run(() =>
+            ShellHelper.EjecutarComoRoot("systemctl list-unit-files --type=service --no-legend --no-pager"));
+
+        if (unitsResult.ExitCode != 0)
         {
-            var result = ShellHelper.EjecutarComoRoot(
-                "systemctl show -p ActiveState iscsid"
-            );
-
-            if (result.Stdout.Contains("active", StringComparison.OrdinalIgnoreCase))
-            {
-                LogService.Debug("[MAIN] iscsid is active.");
-                return;
-            }
-
-            await Task.Delay(120);
+            LogService.Error($"[MAIN] Unable to list systemd service units: {unitsResult.Stderr}");
+            return false;
         }
 
-        LogService.Error("[MAIN] iscsid did not reach active state within timeout.");
+        var installedUnits = new HashSet<string>(
+            unitsResult.Stdout
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                .Where(parts => parts.Length > 0)
+                .Select(parts => parts[0]),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (!installedUnits.Contains(daemonUnit))
+        {
+            LogService.Error($"[MAIN] Required systemd unit '{daemonUnit}' is not installed.");
+            return false;
+        }
+
+        var daemonStatus = await Task.Run(() =>
+            ShellHelper.EjecutarComoRoot($"systemctl is-active --quiet {daemonUnit}"));
+
+        if (daemonStatus.ExitCode != 0)
+        {
+            StatusBarText.Text = "Starting iSCSI daemon...";
+            LogService.Write($"[MAIN] Starting required service '{daemonUnit}'...");
+
+            var startResult = await Task.Run(() =>
+                ShellHelper.EjecutarComoRoot($"systemctl start {daemonUnit}"));
+
+            if (startResult.ExitCode != 0)
+            {
+                LogService.Error($"[MAIN] Failed to start '{daemonUnit}': {startResult.Stderr}");
+                return false;
+            }
+        }
+
+        var sessionUnit = new[] { "iscsi.service", "open-iscsi.service" }
+            .FirstOrDefault(installedUnits.Contains);
+
+        if (sessionUnit != null)
+        {
+            StatusBarText.Text = "Starting iSCSI session service...";
+            LogService.Write($"[MAIN] Starting available session service '{sessionUnit}'...");
+
+            var sessionResult = await Task.Run(() =>
+                ShellHelper.EjecutarComoRoot($"systemctl start {sessionUnit}"));
+
+            if (sessionResult.ExitCode != 0)
+                LogService.Error($"[MAIN] Could not start optional service '{sessionUnit}': {sessionResult.Stderr}");
+        }
+
+        var verifyResult = await Task.Run(() =>
+            ShellHelper.EjecutarComoRoot($"systemctl is-active --quiet {daemonUnit}"));
+
+        if (verifyResult.ExitCode != 0)
+        {
+            LogService.Error($"[MAIN] Service '{daemonUnit}' did not become active: {verifyResult.Stderr}");
+            return false;
+        }
+
+        LogService.Write("[MAIN] Required iSCSI daemon is active.");
+        return true;
     }
 
     // ============================================================
