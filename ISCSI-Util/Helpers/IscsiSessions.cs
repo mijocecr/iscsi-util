@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
@@ -12,6 +13,72 @@ namespace ISCSI_Util.Helpers;
 
 public static class IscsiSessions
 {
+    // Ruta del archivo JSON para persistir la fecha de primera conexión
+    private static readonly string HistoryFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), 
+        "ISCSI_Util", 
+        "session_history.json"
+    );
+
+    private class SessionHistoryRecord
+    {
+        public string Iqn { get; set; } = string.Empty;
+        public string Portal { get; set; } = string.Empty;
+        public int LunId { get; set; }
+        public DateTime FirstConnected { get; set; }
+    }
+
+    private static Dictionary<string, DateTime> CargarHistorialConexiones()
+    {
+        var diccionario = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            if (File.Exists(HistoryFilePath))
+            {
+                var json = File.ReadAllText(HistoryFilePath);
+                var registros = JsonSerializer.Deserialize<List<SessionHistoryRecord>>(json);
+                if (registros != null)
+                {
+                    foreach (var reg in registros)
+                    {
+                        var clave = $"{reg.Iqn}|{reg.Portal}|{reg.LunId}";
+                        diccionario[clave] = reg.FirstConnected;
+                    }
+                }
+            }
+        }
+        catch { }
+        return diccionario;
+    }
+
+    private static void GuardarHistorialConexiones(Dictionary<string, DateTime> historial)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(HistoryFilePath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            var lista = historial.Select(kvp =>
+            {
+                var partes = kvp.Key.Split('|');
+                return new SessionHistoryRecord
+                {
+                    Iqn = partes[0],
+                    Portal = partes.Length > 1 ? partes[1] : string.Empty,
+                    LunId = partes.Length > 2 && int.TryParse(partes[2], out int lun) ? lun : 0,
+                    FirstConnected = kvp.Value
+                };
+            }).ToList();
+
+            var json = JsonSerializer.Serialize(lista, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(HistoryFilePath, json);
+        }
+        catch { }
+    }
+
     // ============================================================
     // OBTENER SESIONES REALES
     // ============================================================
@@ -19,6 +86,8 @@ public static class IscsiSessions
     public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
     {
         var sesiones = new List<SessionInfo>();
+        var historial = CargarHistorialConexiones();
+        bool historialModificado = false;
 
         var byPath = (ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -39,6 +108,21 @@ public static class IscsiSessions
 
             var mountPointCalculado = CalcularMountPoint(iqn);
 
+            // Gestionar la fecha de primera conexión de forma persistente
+            var claveHistorial = $"{iqn}|{portal}|{lun}";
+            DateTime connectedSince;
+
+            if (historial.TryGetValue(claveHistorial, out var fechaExistente) && fechaExistente != default)
+            {
+                connectedSince = fechaExistente;
+            }
+            else
+            {
+                connectedSince = DateTime.Now;
+                historial[claveHistorial] = connectedSince;
+                historialModificado = true;
+            }
+
             var info = new SessionInfo
             {
                 Iqn = iqn,
@@ -46,7 +130,7 @@ public static class IscsiSessions
                 LunId = lun,
                 Connected = true,
                 Device = "/dev/disk/by-path/" + link.Trim(),
-                ConnectedSince = DateTime.Now,
+                ConnectedSince = connectedSince,
                 MountPoint = mountPointCalculado
             };
 
@@ -77,12 +161,7 @@ public static class IscsiSessions
             // ============================================================
             // 3) Mount runtime (Verificación real contra el OS)
             // ============================================================
-            // Verificamos si este punto de montaje exacto está presente en las rutas activas de Linux
             bool realmenteMontado = mounts.Any(m => m.Contains($"on {mountPointCalculado} ", StringComparison.OrdinalIgnoreCase));
-
-            // Si el sistema operativo dice que NO está montado, podemos asegurarnos de que la UI 
-            // sepa que la ruta existe teóricamente pero no está activa en runtime si lo requieres, 
-            // o dejar que el chequeo de la UI valide la existencia activa en el comando mount.
 
             // ============================================================
             // 4) Vendor / Model / Size
@@ -107,6 +186,11 @@ public static class IscsiSessions
             info.Auth = ExtraerAuthDesdeNode(iqn, portal);
 
             sesiones.Add(info);
+        }
+
+        if (historialModificado)
+        {
+            GuardarHistorialConexiones(historial);
         }
 
         var configuredNodes = ShellHelper.EjecutarComoRoot("iscsiadm -m node").Stdout ?? "";

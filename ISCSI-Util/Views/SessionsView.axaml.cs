@@ -270,7 +270,7 @@ public partial class SessionsView : UserControl
     
     private void PintarDetalles(SessionInfo session)
     {
-        // Asegurarnos de que la tarjeta sea visible al pintar detalles
+        // Asegurarnos de que la tarjeta seja visible al pintar detalles
         DetailsCard.IsVisible = true;
 
         SessionTitle.Text = session.Iqn;
@@ -302,9 +302,13 @@ public partial class SessionsView : UserControl
         AddWideDetail("MOUNT POINT", EmptyAsDash(session.MountPoint), isCopyable: true); // Permitir copiar el mount point
         AddWideDetail("FILESYSTEM", EmptyAsDash(session.Filesystem));
         AddWideDetail("AUTHENTICATION", EmptyAsDash(session.Auth));
-        AddWideDetail("SIZE", session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-");
-        AddWideDetail("LUN", session.LunId.ToString());
-        AddWideDetail("CONNECTED SINCE", session.Connected && session.ConnectedSince != default
+        
+        // Bloque combinado LUN y SIZE
+        var lunAndSizeText = $"LUN {session.LunId}  ·  {(session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-")}";
+        AddWideDetail("LUN & SIZE", lunAndSizeText);
+
+        // Métrica modificada para mostrar la primera vez que se conectó en lugar de "CONNECTED SINCE"
+        AddWideDetail("FIRST CONNECTED", session.ConnectedSince != default
             ? session.ConnectedSince.ToString("yyyy-MM-dd HH:mm:ss")
             : "-");
         
@@ -410,7 +414,7 @@ public partial class SessionsView : UserControl
         DetailsPanel.Children.Add(border);
     }
     
-    
+  
     private IBrush GetThemeBrush(string key, string fallbackHex)
     {
         if (TryGetResource(key, ActualThemeVariant, out var res) && res is IBrush brush)
