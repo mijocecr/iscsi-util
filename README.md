@@ -1,6 +1,7 @@
 ---
 
-<img width="630" height="738" alt="image" src="https://github.com/user-attachments/assets/09f18338-393e-4af2-bad9-107256a91f7c" />
+<img width="630" height="738" alt="image" src="https://github.com/user-attachments/assets/9502dffa-7000-4754-ab12-6a9211ff7c23" />
+
 
 
 https://wiki.archlinux.org/title/Iscsi-util-bin
