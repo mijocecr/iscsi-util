@@ -669,9 +669,17 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                     $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=new"
                 );
 
-            // CHAP
-            if (!reutilizarAutenticacionGuardada && (d.UsaChap || d.UsaMutualChap))
+            // ============================================================
+            // CAMBIO CLAVE / SOPORTE CHAP:
+            // Se eliminó la restricción exclusiva de '!reutilizarAutenticacionGuardada'.
+            // Ahora, si el destino requiere CHAP o Mutual CHAP (y tenemos credenciales),
+            // actualizamos siempre la base de datos del nodo en open-iscsi antes del login.
+            // Esto asegura que al conectar desde la pestaña de sesiones (donde el nodo ya existe),
+            // las credenciales se inyecten correctamente y no falle por autenticación.
+            // ============================================================
+            if (d.UsaChap || d.UsaMutualChap)
             {
+                // Forzar el método de autenticación a CHAP en el registro del nodo
                 ShellHelper.EjecutarComoRoot(
                     $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.authmethod --value=CHAP"
                 );
@@ -681,13 +689,16 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                     var user = string.IsNullOrWhiteSpace(d.UsuarioChap) ? d.LocalUser : d.UsuarioChap;
                     var pass = string.IsNullOrWhiteSpace(d.PasswordChap) ? d.LocalPass : d.PasswordChap;
 
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username --value=\"{user}\""
-                    );
+                    if (!string.IsNullOrWhiteSpace(user) && !string.IsNullOrWhiteSpace(pass))
+                    {
+                        ShellHelper.EjecutarComoRoot(
+                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username --value=\"{user}\""
+                        );
 
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password --value=\"{pass}\""
-                    );
+                        ShellHelper.EjecutarComoRoot(
+                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password --value=\"{pass}\""
+                        );
+                    }
                 }
 
                 if (d.UsaMutualChap)
@@ -699,14 +710,24 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                         ? d.LocalPassIn
                         : d.PasswordMutualChap;
 
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
-                    );
+                    if (!string.IsNullOrWhiteSpace(userIn) && !string.IsNullOrWhiteSpace(passIn))
+                    {
+                        ShellHelper.EjecutarComoRoot(
+                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+                        );
 
-                    ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
-                    );
+                        ShellHelper.EjecutarComoRoot(
+                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+                        );
+                    }
                 }
+            }
+            else if (!reutilizarAutenticacionGuardada)
+            {
+                // Si no utiliza CHAP, restablecemos el método a None por seguridad
+                ShellHelper.EjecutarComoRoot(
+                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.authmethod --value=None"
+                );
             }
 
             var loginResult = ShellHelper.EjecutarComoRoot(
@@ -848,8 +869,6 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         throw;
     }
 }
-
-
     
 
     
