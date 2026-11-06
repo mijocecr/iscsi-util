@@ -127,9 +127,10 @@ public static class IscsiHelper
         try
         {
             var (ipSolo, port) = NormalizarPortal(d.Ip);
+            var portalIscsi = port == 3260 ? ipSolo : $"{ipSolo}:{port}";
 
             var check = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo}"
+                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi}"
             );
 
             var nodoExiste = !check.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
@@ -138,14 +139,14 @@ public static class IscsiHelper
             {
                 LogService.Debug($"[ISCSI] #{id} Nodo no existe. Creándolo temporalmente...");
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=new"
+                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=new"
                 );
             }
 
             LogService.Debug($"[ISCSI] #{id} Leyendo configuración CHAP real...");
 
             var show = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} -o show"
+                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} -o show"
             );
 
             var config = show.Stdout ?? "";
@@ -180,7 +181,7 @@ public static class IscsiHelper
             {
                 LogService.Debug($"[ISCSI] #{id} Eliminando nodo temporal...");
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=delete"
+                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=delete"
                 );
             }
 
@@ -446,29 +447,101 @@ public static class IscsiHelper
 
     public static async Task ConectarSesion(SessionInfo s)
     {
-        if (s == null)
+        if (s == null || string.IsNullOrWhiteSpace(s.Iqn) || string.IsNullOrWhiteSpace(s.Portal))
             return;
 
-        var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --login";
-        var res = ShellHelper.EjecutarComoRoot(cmd);
-
-        if (res.ExitCode == 0)
+        var target = new IscsiDestino
         {
-            s.Connected = true;
-            s.ConnectedSince = DateTime.Now;
-        }
-        else
+            Iqn = s.Iqn,
+            Ip = s.Portal,
+            PortalReal = s.Portal
+        };
+
+        try
         {
-            LogService.Error($"[ISCSI] Error al conectar sesión {s.Iqn}: {res.Stderr}");
+            await Conectar(target, reutilizarAutenticacionGuardada: true);
+            ActualizarSesion(s, target);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[ISCSI] Error al conectar sesión {s.Iqn}: {ex.Message}");
+        }
+    }
+
+    public static async Task MontarSesion(SessionInfo s)
+    {
+        await ConectarSesion(s);
+    }
+
+    public static Task DesmontarSesion(SessionInfo s)
+    {
+        if (s == null || string.IsNullOrWhiteSpace(s.MountPoint))
+            return Task.CompletedTask;
+
+        var check = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{s.MountPoint}\"");
+        if (check.ExitCode == 32)
+        {
+            s.MountPoint = "";
+            return Task.CompletedTask;
+        }
+        if (check.ExitCode != 0)
+        {
+            LogService.Error($"[ISCSI] No se pudo comprobar el montaje {s.MountPoint}: {check.Stderr}");
+            NotificadorLinux.Enviar($"[ERROR] No se pudo comprobar el montaje {s.MountPoint}.", 6000, "critical");
+            return Task.CompletedTask;
         }
 
-        await Task.CompletedTask;
+        var result = ShellHelper.EjecutarComoRoot($"umount -- \"{s.MountPoint}\"");
+        if (result.ExitCode != 0)
+        {
+            LogService.Error($"[ISCSI] No se pudo desmontar {s.MountPoint}: {result.Stderr}");
+            NotificadorLinux.Enviar($"[ERROR] No se pudo desmontar {s.MountPoint}.", 6000, "critical");
+            return Task.CompletedTask;
+        }
+
+        s.MountPoint = "";
+        return Task.CompletedTask;
     }
 
     public static async Task DesconectarSesion(SessionInfo s)
     {
-        if (s == null)
+        if (s == null || string.IsNullOrWhiteSpace(s.Iqn) || string.IsNullOrWhiteSpace(s.Portal))
             return;
+
+        if (!string.IsNullOrWhiteSpace(s.MountPoint))
+        {
+            var mountPointCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{s.MountPoint}\"");
+            if (mountPointCheck.ExitCode == 0)
+            {
+                NotificadorLinux.Enviar("Desmonta el volumen antes de desconectar la sesión.", 5000, "warning");
+                return;
+            }
+            if (mountPointCheck.ExitCode != 32)
+            {
+                LogService.Error($"[ISCSI] No se pudo comprobar el montaje {s.MountPoint}: {mountPointCheck.Stderr}");
+                NotificadorLinux.Enviar("[ERROR] No se pudo comprobar el montaje del destino.", 6000, "critical");
+                return;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(s.Device))
+        {
+            var mountedDevice = ShellHelper.EjecutarComoRoot(
+                $"findmnt -rn -S \"{s.Device}\" -o TARGET");
+            if (mountedDevice.ExitCode > 1)
+            {
+                LogService.Error($"[ISCSI] No se pudo comprobar si {s.Device} está montado: {mountedDevice.Stderr}");
+                NotificadorLinux.Enviar("[ERROR] No se pudo comprobar si el destino está montado.", 6000, "critical");
+                return;
+            }
+
+            if (mountedDevice.ExitCode == 0 && !string.IsNullOrWhiteSpace(mountedDevice.Stdout))
+            {
+                LogService.Error($"[ISCSI] No se desconecta {s.Iqn}: el dispositivo sigue montado.");
+                NotificadorLinux.Enviar("Desmonta el volumen antes de desconectar la sesión.", 5000, "warning");
+                return;
+            }
+        }
 
         var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --logout";
         var res = ShellHelper.EjecutarComoRoot(cmd);
@@ -477,13 +550,27 @@ public static class IscsiHelper
         {
             s.Connected = false;
             s.MountPoint = "";
+            s.Device = "";
+            s.Filesystem = "";
         }
         else
         {
             LogService.Error($"[ISCSI] Error al desconectar sesión {s.Iqn}: {res.Stderr}");
+            NotificadorLinux.Enviar($"[ERROR] No se pudo desconectar {s.Iqn}.", 6000, "critical");
+            return;
         }
 
         await Task.CompletedTask;
+    }
+
+    private static void ActualizarSesion(SessionInfo session, IscsiDestino target)
+    {
+        session.Connected = target.Conectado;
+        session.Device = target.PartitionPath ?? target.DevicePath ?? "";
+        session.Filesystem = target.FsType ?? "";
+        session.MountPoint = target.TieneFilesystem ? target.MountPoint ?? "" : "";
+        if (target.Conectado && session.ConnectedSince == default)
+            session.ConnectedSince = DateTime.Now;
     }
 
     // ======================================================================
@@ -516,7 +603,12 @@ private static void ForceUnmountAutoMounts(string partition)
 // ============================================================
 // MÉTODO CONECTAR (TU VERSIÓN, PERO FUNCIONAL)
 // ============================================================
-public static async Task Conectar(IscsiDestino d)
+public static Task Conectar(IscsiDestino d)
+{
+    return Conectar(d, reutilizarAutenticacionGuardada: false);
+}
+
+private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionGuardada)
 {
     if (d == null) return;
 
@@ -559,6 +651,7 @@ public static async Task Conectar(IscsiDestino d)
         var yaConectado = sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase);
 
         var (ipSolo, port) = NormalizarPortal(d.Ip);
+        var portalIscsi = port == 3260 ? ipSolo : $"{ipSolo}:{port}";
 
         // ============================================================
         // 3) LOGIN iSCSI
@@ -566,21 +659,21 @@ public static async Task Conectar(IscsiDestino d)
         if (!yaConectado)
         {
             var checkNode = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo}"
+                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi}"
             );
 
             var nodoExiste = !checkNode.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
 
             if (!nodoExiste)
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=new"
+                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=new"
                 );
 
             // CHAP
-            if (d.UsaChap || d.UsaMutualChap)
+            if (!reutilizarAutenticacionGuardada && (d.UsaChap || d.UsaMutualChap))
             {
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.authmethod --value=CHAP"
+                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.authmethod --value=CHAP"
                 );
 
                 if (d.UsaChap)
@@ -589,11 +682,11 @@ public static async Task Conectar(IscsiDestino d)
                     var pass = string.IsNullOrWhiteSpace(d.PasswordChap) ? d.LocalPass : d.PasswordChap;
 
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username --value=\"{user}\""
+                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username --value=\"{user}\""
                     );
 
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password --value=\"{pass}\""
+                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password --value=\"{pass}\""
                     );
                 }
 
@@ -607,17 +700,17 @@ public static async Task Conectar(IscsiDestino d)
                         : d.PasswordMutualChap;
 
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
                     );
 
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+                        $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
                     );
                 }
             }
 
             var loginResult = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --login"
+                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --login"
             );
 
             if (loginResult.ExitCode != 0 &&
@@ -696,6 +789,14 @@ public static async Task Conectar(IscsiDestino d)
 
         d.TieneFilesystem = true;
         d.FsType = DetectarFsType(blkid.Stdout);
+
+        if (!EsFilesystemMontable(d.FsType))
+        {
+            d.TieneFilesystem = false;
+            d.Conectado = true;
+            TraceOut(id, "Conectar", $"NO_MOUNTABLE_FS:{d.FsType}");
+            return;
+        }
 
         // ============================================================
         // 8) Montar con permisos eficientes (sin chown -R)
@@ -1215,6 +1316,13 @@ public static async Task Conectar(IscsiDestino d)
 
         var check = ShellHelper.EjecutarComoRoot($"which {cmd}");
         return check.ExitCode == 0;
+    }
+
+    public static bool EsFilesystemMontable(string? fs)
+    {
+        return fs?.Trim().ToLowerInvariant() is
+            "ext2" or "ext3" or "ext4" or "xfs" or "btrfs" or "f2fs" or
+            "ntfs" or "vfat" or "exfat" or "iso9660";
     }
 
 

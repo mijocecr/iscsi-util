@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
@@ -13,149 +16,169 @@ public static class IscsiSessions
     // OBTENER SESIONES REALES
     // ============================================================
 
-    
-public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
-{
-    var sesiones = new List<SessionInfo>();
-
-    var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/")
-                            .Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-    // ============================================================
-    // FILTRO CORREGIDO: solo discos, NO particiones
-    // ============================================================
-    var iscsiLinks = byPath
-        .Where(p => p.Contains("iscsi") && !p.Contains("part"))
-        .ToList();
-
-    if (iscsiLinks.Count == 0)
-        return sesiones;
-
-    foreach (var link in iscsiLinks)
+    public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
     {
-        string portal = ExtraerPortal(link);
-        string iqn = ExtraerIqn(link);
-        int lun = ExtraerLunId(link);
+        var sesiones = new List<SessionInfo>();
 
-        var info = new SessionInfo
-        {
-            Iqn = iqn,
-            Portal = portal,
-            LunId = lun,
-            Connected = true,
-            Device = "/dev/disk/by-path/" + link.Trim(),
-            ConnectedSince = DateTime.Now
-        };
+        var byPath = (ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        // ============================================================
-        // 1) Detect real partition (if any)
-        // ============================================================
+        var iscsiLinks = byPath
+            .Where(p => p.Contains("iscsi") && !p.Contains("part"))
+            .ToList();
 
-        var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {info.Device}").Stdout;
-        var lsblkLines = lsblkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        foreach (var l in lsblkLines)
-        {
-            var p = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (p.Length == 2 && p[1] == "part")
-            {
-                info.Device = "/dev/" + p[0];
-                break;
-            }
-        }
-
-        // ============================================================
-        // 2) Filesystem
-        // ============================================================
-
-        var blkidRaw = ShellHelper.EjecutarComoRoot($"blkid -p {info.Device}").Stdout;
-        info.Filesystem = ExtraerFsType(blkidRaw);
-
-        // ============================================================
-        // 3) Mount runtime
-        // ============================================================
-
-        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout;
+        // Obtenemos los puntos de montaje activos del sistema operativo una sola vez por llamada
+        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
         var mounts = mountsRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var m in mounts)
+        foreach (var link in iscsiLinks)
         {
-            if (m.StartsWith(info.Device + " "))
+            string portal = ExtraerPortal(link);
+            string iqn = ExtraerIqn(link);
+            int lun = ExtraerLunId(link);
+
+            var mountPointCalculado = CalcularMountPoint(iqn);
+
+            var info = new SessionInfo
             {
-                info.MountPoint = m.Split(' ')[2];
-                break;
+                Iqn = iqn,
+                Portal = portal,
+                LunId = lun,
+                Connected = true,
+                Device = "/dev/disk/by-path/" + link.Trim(),
+                ConnectedSince = DateTime.Now,
+                MountPoint = mountPointCalculado
+            };
+
+            // ============================================================
+            // 1) Detect real partition (if any)
+            // ============================================================
+
+            var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {info.Device}").Stdout ?? "";
+            var lsblkLines = lsblkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var l in lsblkLines)
+            {
+                var p = l.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (p.Length == 2 && p[1] == "part")
+                {
+                    info.Device = "/dev/" + p[0];
+                    break;
+                }
             }
+
+            // ============================================================
+            // 2) Filesystem
+            // ============================================================
+
+            var blkidRaw = ShellHelper.EjecutarComoRoot($"blkid -p {info.Device}").Stdout ?? "";
+            info.Filesystem = ExtraerFsType(blkidRaw);
+
+            // ============================================================
+            // 3) Mount runtime (Verificación real contra el OS)
+            // ============================================================
+            // Verificamos si este punto de montaje exacto está presente en las rutas activas de Linux
+            bool realmenteMontado = mounts.Any(m => m.Contains($"on {mountPointCalculado} ", StringComparison.OrdinalIgnoreCase));
+
+            // Si el sistema operativo dice que NO está montado, podemos asegurarnos de que la UI 
+            // sepa que la ruta existe teóricamente pero no está activa en runtime si lo requieres, 
+            // o dejar que el chequeo de la UI valide la existencia activa en el comando mount.
+
+            // ============================================================
+            // 4) Vendor / Model / Size
+            // ============================================================
+
+            var blkRaw = ShellHelper.EjecutarComoRoot($"lsblk -o SIZE {info.Device}").Stdout ?? "";
+            var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            string size = "-";
+
+            if (blkLines.Length >= 2)
+                size = blkLines[1].Trim();
+
+            info.Vendor = "-";
+            info.Model  = "-";
+            info.SizeGb = ExtraerSizeGb(size);
+
+            // ============================================================
+            // 5) Auth
+            // ============================================================
+
+            info.Auth = ExtraerAuthDesdeNode(iqn, portal);
+
+            sesiones.Add(info);
         }
 
-        // ============================================================
-        // 4) Vendor / Model / Size (iSCSI has no vendor/model)
-        // ============================================================
+        var configuredNodes = ShellHelper.EjecutarComoRoot("iscsiadm -m node").Stdout ?? "";
+        foreach (var line in configuredNodes.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = line.IndexOf(' ');
+            if (separator <= 0 || separator == line.Length - 1)
+                continue;
 
-        var blkRaw = ShellHelper.EjecutarComoRoot($"lsblk -o SIZE {info.Device}").Stdout;
-        var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var portal = line[..separator].Trim();
+            var iqn = line[(separator + 1)..].Trim();
+            var comma = portal.LastIndexOf(',');
+            if (comma >= 0)
+                portal = portal[..comma];
 
-        string size = "-";
+            if (string.IsNullOrWhiteSpace(iqn) || string.IsNullOrWhiteSpace(portal) ||
+                sesiones.Any(x => x.Iqn.Equals(iqn, StringComparison.OrdinalIgnoreCase) &&
+                                  x.Portal.Equals(portal, StringComparison.OrdinalIgnoreCase)))
+                continue;
 
-        if (blkLines.Length >= 2)
-            size = blkLines[1].Trim();
+            sesiones.Add(new SessionInfo
+            {
+                Iqn = iqn,
+                Portal = portal,
+                Connected = false,
+                Auth = ExtraerAuthDesdeNode(iqn, portal),
+                MountPoint = CalcularMountPoint(iqn)
+            });
+        }
 
-        info.Vendor = "-";
-        info.Model  = "-";
-        info.SizeGb = ExtraerSizeGb(size);
-
-        // ============================================================
-        // 5) Auth
-        // ============================================================
-
-        info.Auth = ExtraerAuthDesdeNode(iqn, portal);
-
-        sesiones.Add(info);
+        return sesiones;
     }
-
-    return sesiones;
-}
-
-
-
-
 
     // ============================================================
-    // HELPERS
-    
-    private static string ExtraerNombreDestino(string link)
+    // MÉTODO AUXILIAR PARA CALCULAR EL MOUNTPOINT DE FORMA DETERMINISTA
+    // ============================================================
+    private static string CalcularMountPoint(string iqn)
     {
-        // Ejemplo:
-        // ip-192.168.1.50:3260-iscsi-iqn.2013-03.com.wdc.mycloudex2ultra.mjcc-lun-0
+        if (string.IsNullOrWhiteSpace(iqn))
+            return string.Empty;
 
-        int start = link.IndexOf("iscsi-iqn.");
-        if (start < 0) return "";
+        var basePath = ConfigManager.MountBasePath;
 
-        string sub = link.Substring(start + "iscsi-".Length);
+        var safeIqn = iqn
+            .Replace(":", "_")
+            .Replace("/", "_")
+            .Replace(".", "_")
+            .Replace("-", "_");
 
-        int lunIndex = sub.IndexOf("-lun");
-        if (lunIndex > 0)
-            sub = sub.Substring(0, lunIndex);
+        var hash = Convert.ToHexString(
+            SHA1.HashData(Encoding.UTF8.GetBytes(iqn))
+        ).Substring(0, 8);
 
-        return sub.Trim();
+        return Path.Combine(basePath, $"{safeIqn}_{hash}");
     }
 
-    
+    // ============================================================
+    // HELPERS EXISTENTES
+    // ============================================================
     
     private static string ExtraerPortal(string link)
     {
-        var parts = link.Split('-');
-        foreach (var p in parts)
-        {
-            if (p.Contains(":3260"))
-                return p.Replace("ip", "").Replace("-", "").Trim();
-        }
-        return "";
-    }
+        var ipMarker = link.IndexOf("ip-", StringComparison.OrdinalIgnoreCase);
+        var iscsiMarker = link.IndexOf("-iscsi-", StringComparison.OrdinalIgnoreCase);
+        if (ipMarker < 0 || iscsiMarker <= ipMarker + 3)
+            return "";
 
+        return link[(ipMarker + 3)..iscsiMarker].Trim();
+    }
 
     private static string ExtraerIqn(string link)
     {
-        // Buscar "iscsi-" y tomar lo que viene después hasta "-lun"
         int start = link.IndexOf("iscsi-");
         if (start < 0) return "";
 
@@ -168,10 +191,8 @@ public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
         return sub.Trim();
     }
 
-
     private static int ExtraerLunId(string link)
     {
-        // ...-lun-0
         try
         {
             var parts = link.Split('-');
@@ -189,13 +210,8 @@ public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
         return 0;
     }
 
-    
-    
-    // ============================================================
-    
     public static string ExtraerAuthDesdeNode(string iqn, string portal)
     {
-        // Obtener la configuración del nodo
         var raw = ShellHelper.EjecutarComoRoot(
             $"iscsiadm -m node -T {iqn} -p {portal} --op show"
         ).Stdout;
@@ -203,21 +219,8 @@ public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
         if (string.IsNullOrWhiteSpace(raw))
             return "None";
 
-        // Detectar método de autenticación
-        if (raw.Contains("node.session.auth.authmethod = CHAP"))
-        {
-            // Mutual CHAP si reverse credentials existen
-            bool hasReverse = raw.Contains("node.session.auth.username_in") ||
-                              raw.Contains("node.session.auth.password_in");
-
-            return hasReverse ? "Mutual CHAP" : "CHAP";
-        }
-
-        return "None";
+        return ExtraerAuth(raw);
     }
-
-
-    
 
     private static string ExtraerFsType(string blkidOut)
     {
@@ -277,22 +280,29 @@ public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
         if (string.IsNullOrWhiteSpace(nodeShowOut))
             return "None";
 
-        bool chap = false;
-        bool mutual = false;
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var line in nodeShowOut.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            var l = line.Trim();
+            var separator = line.IndexOf('=');
+            if (separator <= 0)
+                continue;
 
-            if (l.Contains("authmethod") && l.Contains("CHAP"))
-                chap = true;
-
-            if (l.Contains("username_in") || l.Contains("password_in"))
-                mutual = true;
+            values[line[..separator].Trim()] = line[(separator + 1)..].Trim().Trim('"');
         }
 
-        if (mutual) return "Mutual CHAP";
-        if (chap) return "CHAP";
-        return "None";
+        if (!values.TryGetValue("node.session.auth.authmethod", out var method) ||
+            !method.Equals("CHAP", StringComparison.OrdinalIgnoreCase))
+            return "None";
+
+        static bool Configured(Dictionary<string, string> config, string key) =>
+            config.TryGetValue(key, out var value) &&
+            !string.IsNullOrWhiteSpace(value) &&
+            !value.Equals("<empty>", StringComparison.OrdinalIgnoreCase);
+
+        return Configured(values, "node.session.auth.username_in") &&
+               Configured(values, "node.session.auth.password_in")
+            ? "Mutual CHAP"
+            : "CHAP";
     }
 }
