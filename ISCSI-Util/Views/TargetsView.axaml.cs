@@ -211,8 +211,12 @@ public partial class TargetsView : UserControl
     {
         destino.Persistir = await RunSystemOperationAsync(() => IscsiPersistenceManager.Detect(destino));
         destino.InfoCompleta = true;
-        destino.UsaChap = destino.RequiresChap || destino.HasLocalChapConfigured;
-        destino.UsaMutualChap = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
+
+        bool hasChap = destino.RequiresChap || destino.HasLocalChapConfigured || IscsiPersistenceManager.HasChapConfigured(destino);
+        bool hasMutual = destino.RequiresMutualChap || destino.HasLocalMutualConfigured || IscsiPersistenceManager.HasMutualChapConfigured(destino);
+
+        destino.UsaChap = hasChap;
+        destino.UsaMutualChap = hasMutual;
     }
 
     private async Task RunSystemOperationAsync(Func<Task> operation)
@@ -291,7 +295,6 @@ public partial class TargetsView : UserControl
             RowSpacing = 5
         };
 
-        // CORRECCIÓN: Se usa GetIconForChap(destino) para que el icono de la tarjeta cambie dinámicamente según el estado del target
         var icon = new Image
         {
             Source = LoadIcon(GetIconForChap(destino)),
@@ -310,7 +313,7 @@ public partial class TargetsView : UserControl
             CornerRadius = new CornerRadius(9),
             BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorder")!,
             BorderThickness = new Thickness(1.5),
-            Background = (IBrush)Application.Current!.FindResource("SteamCard")!,
+            Background = Brushes.White, // <--- Fondo blanco aplicado
             Child = icon,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
@@ -363,7 +366,6 @@ public partial class TargetsView : UserControl
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
         };
 
-        // BOTONES DE AUTENTICACIÓN CHAP (Si se requieren)
         if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
         {
             var mutualBtn = new Button
@@ -409,7 +411,6 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(chapBtn);
         }
 
-        // INIT BUTTON FOR UNFORMATTED DISKS
         if (CanInitializeTarget(destino))
         {
             var initBtn = new Button
@@ -484,7 +485,6 @@ public partial class TargetsView : UserControl
         Grid.SetColumn(btnRow, 1);
         Grid.SetRow(btnRow, 1);
 
-        // TARGET SELECTION EVENT
         border.PointerPressed += async (_, e) =>
         {
             e.Handled = true;
@@ -591,10 +591,8 @@ public partial class TargetsView : UserControl
 
         DetailsInfoPanel.Children.Add(infoGrid);
         
-        // CORRECCIÓN: Actualización correcta del icono en el panel de detalles según su estado
         DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
 
-        // Configuración inteligente del botón superior de cabecera (Connect / Mount / Unmount)
         var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
         bool mounted = destino.Conectado &&
                        !string.IsNullOrWhiteSpace(destino.MountPoint) &&
@@ -709,7 +707,7 @@ public partial class TargetsView : UserControl
         }
     }
 
-    // Botón inteligente unificado en la cabecera (Conectar, Montar o Desmontar según estado)
+    // Botón inteligente unificado en la cabecera (Conectar, Montar o Desmontar según estado) - Protegido contra fallos CHAP
     private async void OnPrimaryHeaderAction(object? sender, RoutedEventArgs e)
     {
         var selected = _selected;
@@ -721,26 +719,33 @@ public partial class TargetsView : UserControl
                       !string.IsNullOrWhiteSpace(selected.MountPoint) &&
                       mountsRaw.Contains($"on {selected.MountPoint} ", StringComparison.OrdinalIgnoreCase);
 
-        if (!selected.Conectado)
+        try
         {
-            using (LoadingService.Show("Connecting..."))
+            if (!selected.Conectado)
             {
-                await RunSystemOperationAsync(() => IscsiHelper.Conectar(selected));
+                using (LoadingService.Show("Connecting..."))
+                {
+                    await RunSystemOperationAsync(() => IscsiHelper.Conectar(selected));
+                }
+            }
+            else if (!mounted && IscsiHelper.EsFilesystemMontable(selected.FsType))
+            {
+                using (LoadingService.Show("Mounting..."))
+                {
+                    await RunSystemOperationAsync(() => IscsiHelper.MontarDestino(selected));
+                }
+            }
+            else if (mounted)
+            {
+                using (LoadingService.Show("Unmounting..."))
+                {
+                    await RunSystemOperationAsync(() => IscsiHelper.DesmontarDestino(selected));
+                }
             }
         }
-        else if (!mounted && IscsiHelper.EsFilesystemMontable(selected.FsType))
+        catch (Exception ex)
         {
-            using (LoadingService.Show("Mounting..."))
-            {
-                await RunSystemOperationAsync(() => IscsiHelper.MontarDestino(selected));
-            }
-        }
-        else if (mounted)
-        {
-            using (LoadingService.Show("Unmounting..."))
-            {
-                await RunSystemOperationAsync(() => IscsiHelper.DesmontarDestino(selected));
-            }
+            LogService.Error($"[PRIMARY ACTION] Error en la operación del target: {ex.Message}");
         }
 
         await RefreshTargetsList();
@@ -801,10 +806,13 @@ public partial class TargetsView : UserControl
         if (d.Conectado && !d.TieneFilesystem && !string.IsNullOrWhiteSpace(d.DevicePath))
             return "avares://ISCSI-Util/Assets/Icons/no-fs.jpeg";
 
-        if (d.UsaMutualChap)
+        bool usaMutualReal = d.UsaMutualChap || d.HasLocalMutualConfigured || IscsiPersistenceManager.HasMutualChapConfigured(d);
+        bool usaChapReal = d.UsaChap || d.HasLocalChapConfigured || IscsiPersistenceManager.HasChapConfigured(d);
+
+        if (usaMutualReal)
             return "avares://ISCSI-Util/Assets/Icons/chap-mutual.png";
 
-        if (d.UsaChap)
+        if (usaChapReal)
             return "avares://ISCSI-Util/Assets/Icons/chap.png";
 
         return "avares://ISCSI-Util/Assets/Icons/no-chap.png";

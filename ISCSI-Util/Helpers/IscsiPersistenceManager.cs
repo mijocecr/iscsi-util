@@ -26,7 +26,6 @@ public static class IscsiPersistenceManager
             .Replace('-', '_');
     }
 
-    
     private static string ObtenerMountPointTarget(IscsiDestino d)
     {
         // 1. Si ya tiene mountpoint asignado, usarlo
@@ -69,8 +68,83 @@ public static class IscsiPersistenceManager
         return nuevaRuta;
     }
 
+    // ============================================================
+    // VERIFICACIÓN DE CREDENCIALES CHAP EN DIRECTORIOS LOCALES
+    // ============================================================
     
-    
+    public static bool HasChapConfigured(IscsiDestino d)
+    {
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+            return false;
+
+        try
+        {
+            string nodesDir = "/etc/iscsi/nodes";
+            if (!Directory.Exists(nodesDir))
+                return false;
+
+            string iqnDir = Path.Combine(nodesDir, d.Iqn);
+            if (!Directory.Exists(iqnDir))
+                return false;
+
+            foreach (var portalDir in Directory.GetDirectories(iqnDir))
+            {
+                string confFile = Path.Combine(portalDir, "default");
+                if (File.Exists(confFile))
+                {
+                    string content = File.ReadAllText(confFile);
+                    if (content.Contains("node.session.auth.authmethod = CHAP", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[PERSIST] Error checking CHAP config: {ex.Message}");
+        }
+
+        return false;
+    }
+
+    public static bool HasMutualChapConfigured(IscsiDestino d)
+    {
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+            return false;
+
+        try
+        {
+            string nodesDir = "/etc/iscsi/nodes";
+            if (!Directory.Exists(nodesDir))
+                return false;
+
+            string iqnDir = Path.Combine(nodesDir, d.Iqn);
+            if (!Directory.Exists(iqnDir))
+                return false;
+
+            foreach (var portalDir in Directory.GetDirectories(iqnDir))
+            {
+                string confFile = Path.Combine(portalDir, "default");
+                if (File.Exists(confFile))
+                {
+                    string content = File.ReadAllText(confFile);
+                    if (content.Contains("node.session.auth.username_in", StringComparison.OrdinalIgnoreCase) ||
+                        content.Contains("node.session.auth.password_in", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[PERSIST] Error checking Mutual CHAP config: {ex.Message}");
+        }
+
+        return false;
+    }
+
     // ============================================================
     // DETECTAR PERSISTENCIA
     // ============================================================
@@ -150,7 +224,7 @@ public static class IscsiPersistenceManager
             string portalValido = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
             string servicePath = $"/etc/systemd/system/iscsi-{safe}.service";
 
-            // ⭐ LOGIN AUTOMÁTICO + MOUNT PERSISTENTE
+            //  LOGIN AUTOMÁTICO + MOUNT PERSISTENTE
             string unit = $@"
 [Unit]
 Description=iSCSI persistent mount for {d.Iqn}
