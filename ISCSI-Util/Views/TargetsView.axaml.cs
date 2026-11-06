@@ -32,7 +32,7 @@ public partial class TargetsView : UserControl
         DiscoverButton.IsEnabled = false;
 
         BtnDeleteNode.Click += OnDeleteNode;
-        BtnHeaderUnmount.Click += OnHeaderUnmount;
+        BtnHeaderUnmount.Click += OnPrimaryHeaderAction; // Botón inteligente unificado
         BtnHeaderOpen.Click += OnHeaderOpen;
         BtnTogglePersist.Click += OnTogglePersist;
     }
@@ -269,305 +269,261 @@ public partial class TargetsView : UserControl
     // ============================================================
 
     private Control CreateTargetCard(IscsiDestino destino)
-{
-    var border = new Border
     {
-        Classes = { "SteamCard" },
-        Padding = new Thickness(10),
-        CornerRadius = new CornerRadius(10),
-        Margin = new Thickness(0, 0, 0, 7),
-        BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
-        BorderThickness = new Thickness(1.5),
-        Cursor = new Cursor(StandardCursorType.Hand)
-    };
-
-    if (_selected?.Iqn == destino.Iqn)
-        border.Classes.Add("selected");
-
-    var grid = new Grid
-    {
-        ColumnDefinitions = new ColumnDefinitions("78, *"),
-        RowDefinitions = new RowDefinitions("Auto,Auto"),
-        RowSpacing = 5
-    };
-
-    var icon = new Image
-    {
-        Source = LoadIcon("avares://ISCSI-Util/Assets/Icons/target-ok.png"),
-        Stretch = Stretch.Uniform,
-        Width = 54,
-        Height = 54,
-        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-    };
-
-    var iconFrame = new Border
-    {
-        Width = 62,
-        Height = 62,
-        Padding = new Thickness(3),
-        CornerRadius = new CornerRadius(9),
-        BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorder")!,
-        BorderThickness = new Thickness(1.5),
-        Background = (IBrush)Application.Current!.FindResource("SteamCard")!,
-        Child = icon,
-        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-    };
-
-    grid.Children.Add(iconFrame);
-    Grid.SetColumn(iconFrame, 0);
-    Grid.SetRowSpan(iconFrame, 2);
-
-    var titleRow = new Grid
-    {
-        ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-        ColumnSpacing = 8,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-    };
-
-    var iqnText = new TextBlock
-    {
-        Text = GetTargetDisplayName(destino),
-        TextAlignment = TextAlignment.Left,
-        TextWrapping = TextWrapping.NoWrap,
-        FontSize = 16,
-        FontWeight = FontWeight.SemiBold,
-        TextTrimming = TextTrimming.CharacterEllipsis,
-        Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
-    };
-
-    titleRow.Children.Add(iqnText);
-
-    var connectionIndicator = new Border
-    {
-        Width = 10,
-        Height = 10,
-        CornerRadius = new CornerRadius(5),
-        Background = destino.Conectado ? Brushes.LimeGreen : Brushes.Gray,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-        Margin = new Thickness(0, 0, 8, 0)
-    };
-    titleRow.Children.Add(connectionIndicator);
-    Grid.SetColumn(connectionIndicator, 1);
-
-    grid.Children.Add(titleRow);
-    Grid.SetColumn(titleRow, 1);
-    Grid.SetRow(titleRow, 0);
-
-    var btnRow = new StackPanel
-    {
-        Orientation = Avalonia.Layout.Orientation.Horizontal,
-        Spacing = 6,
-        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-    };
-
-    // CONNECTION AND AUTHENTICATION BUTTONS
-    if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
-    {
-        var mutualBtn = new Button
+        var border = new Border
         {
-            Content = "Mutual",
-            Classes = { "SteamButton" },
-            Width = 90,
-            Height = 28
+            Classes = { "SteamCard" },
+            Padding = new Thickness(10),
+            CornerRadius = new CornerRadius(10),
+            Margin = new Thickness(0, 0, 0, 7),
+            BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
+            BorderThickness = new Thickness(1.5),
+            Cursor = new Cursor(StandardCursorType.Hand)
         };
 
-        mutualBtn.Click += async (_, _) =>
+        if (_selected?.Iqn == destino.Iqn)
+            border.Classes.Add("selected");
+
+        var grid = new Grid
         {
-            if (this.GetVisualRoot() is Window owner)
+            ColumnDefinitions = new ColumnDefinitions("78, *"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            RowSpacing = 5
+        };
+
+        // CORRECCIÓN: Se usa GetIconForChap(destino) para que el icono de la tarjeta cambie dinámicamente según el estado del target
+        var icon = new Image
+        {
+            Source = LoadIcon(GetIconForChap(destino)),
+            Stretch = Stretch.Uniform,
+            Width = 54,
+            Height = 54,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        var iconFrame = new Border
+        {
+            Width = 62,
+            Height = 62,
+            Padding = new Thickness(3),
+            CornerRadius = new CornerRadius(9),
+            BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorder")!,
+            BorderThickness = new Thickness(1.5),
+            Background = (IBrush)Application.Current!.FindResource("SteamCard")!,
+            Child = icon,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        grid.Children.Add(iconFrame);
+        Grid.SetColumn(iconFrame, 0);
+        Grid.SetRowSpan(iconFrame, 2);
+
+        var titleRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        var iqnText = new TextBlock
+        {
+            Text = GetTargetDisplayName(destino),
+            TextAlignment = TextAlignment.Left,
+            TextWrapping = TextWrapping.NoWrap,
+            FontSize = 16,
+            FontWeight = FontWeight.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
+        };
+
+        titleRow.Children.Add(iqnText);
+
+        var connectionIndicator = new Border
+        {
+            Width = 10,
+            Height = 10,
+            CornerRadius = new CornerRadius(5),
+            Background = destino.Conectado ? Brushes.LimeGreen : Brushes.Gray,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        titleRow.Children.Add(connectionIndicator);
+        Grid.SetColumn(connectionIndicator, 1);
+
+        grid.Children.Add(titleRow);
+        Grid.SetColumn(titleRow, 1);
+        Grid.SetRow(titleRow, 0);
+
+        var btnRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+        };
+
+        // BOTONES DE AUTENTICACIÓN CHAP (Si se requieren)
+        if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
+        {
+            var mutualBtn = new Button
             {
-                var dlg = new MutualChapDialog(destino);
-                await dlg.ShowDialog(owner);
-                await RefreshTargetsList();
-            }
-        };
+                Content = "Mutual",
+                Classes = { "SteamButton" },
+                Width = 90,
+                Height = 28
+            };
 
-        btnRow.Children.Add(mutualBtn);
-    }
-    else if (destino.RequiresChap && !destino.HasLocalChapConfigured)
-    {
-        var chapBtn = new Button
-        {
-            Content = "Configure CHAP",
-            Classes = { "SteamButton" },
-            Width = 130,
-            Height = 28
-        };
-
-        chapBtn.Click += async (_, _) =>
-        {
-            if (this.GetVisualRoot() is Window owner)
+            mutualBtn.Click += async (_, _) =>
             {
-                var dlg = new ChapDialog(destino);
-                await dlg.ShowDialog(owner);
-                await RefreshTargetsList();
-            }
-        };
-
-        btnRow.Children.Add(chapBtn);
-    }
-    else
-    {
-        var connectBtn = new Button
-        {
-            Classes = { "SteamButton" },
-            Content = destino.Conectado ? "Disconnect" : "Connect",
-            Width = 100,
-            Height = 28
-        };
-
-        connectBtn.Click += async (_, _) =>
-        {
-            try
-            {
-                // Siempre usar la instancia actual de la lista
-                var current = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
-                if (current == null)
-                    return;
-
-                if (!current.Conectado)
+                if (this.GetVisualRoot() is Window owner)
                 {
-                    using (LoadingService.Show("Connecting..."))
-                        await RunSystemOperationAsync(() => IscsiHelper.Conectar(current));
-                }
-                else
-                {
-                    using (LoadingService.Show("Disconnecting..."))
-                    {
-                        await RunSystemOperationAsync(() => IscsiHelper.Desconectar_Borrar(current));
-                        // reutilizamos el rediscover que ya tienes
-                        await AutoRediscoverAfterPersistenceRemoval();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LogService.Error($"[CONNECT] {ex.Message}");
-            }
-
-            await RefreshTargetsList();
-        };
-
-        btnRow.Children.Add(connectBtn);
-    }
-
-    // INIT BUTTON FOR UNFORMATTED DISKS
-    if (CanInitializeTarget(destino))
-    {
-        var initBtn = new Button
-        {
-            Content = "INIT",
-            Width = 90,
-            Height = 28,
-            Background = Brushes.Orange,
-            Foreground = Brushes.White,
-            FontWeight = FontWeight.Bold,
-            Classes = { "SteamButton" }
-        };
-
-        initBtn.Click += async (_, _) =>
-        {
-            if (this.GetVisualRoot() is Window owner)
-            {
-                var current = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
-                if (current == null)
-                {
+                    var dlg = new MutualChapDialog(destino);
+                    await dlg.ShowDialog(owner);
                     await RefreshTargetsList();
-                    return;
                 }
+            };
 
+            btnRow.Children.Add(mutualBtn);
+        }
+        else if (destino.RequiresChap && !destino.HasLocalChapConfigured)
+        {
+            var chapBtn = new Button
+            {
+                Content = "Configure CHAP",
+                Classes = { "SteamButton" },
+                Width = 130,
+                Height = 28
+            };
+
+            chapBtn.Click += async (_, _) =>
+            {
+                if (this.GetVisualRoot() is Window owner)
+                {
+                    var dlg = new ChapDialog(destino);
+                    await dlg.ShowDialog(owner);
+                    await RefreshTargetsList();
+                }
+            };
+
+            btnRow.Children.Add(chapBtn);
+        }
+
+        // INIT BUTTON FOR UNFORMATTED DISKS
+        if (CanInitializeTarget(destino))
+        {
+            var initBtn = new Button
+            {
+                Content = "INIT",
+                Width = 90,
+                Height = 28,
+                Background = Brushes.Orange,
+                Foreground = Brushes.White,
+                FontWeight = FontWeight.Bold,
+                Classes = { "SteamButton" }
+            };
+
+            initBtn.Click += async (_, _) =>
+            {
+                if (this.GetVisualRoot() is Window owner)
+                {
+                    var current = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+                    if (current == null)
+                    {
+                        await RefreshTargetsList();
+                        return;
+                    }
+
+                    try
+                    {
+                        using (LoadingService.Show("Verifying target..."))
+                        {
+                            await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
+                            await UpdateTargetStateAsync(current);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogService.Error($"[INIT] Unable to verify target: {ex.Message}");
+                        await RefreshTargetsList();
+                        return;
+                    }
+
+                    if (!CanInitializeTarget(current))
+                    {
+                        await RefreshTargetsList();
+                        return;
+                    }
+
+                    var dlg = new InitializeDiskDialog(current);
+                    bool? success = await dlg.ShowDialog<bool>(owner);
+
+                    if (success == true)
+                    {
+                        using (LoadingService.Show("Updating target info..."))
+                        {
+                            try
+                            {
+                                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
+                            }
+                            catch (Exception ex)
+                            {
+                                LogService.Error($"[INIT] {ex.Message}");
+                            }
+                        }
+                    }
+
+                    await RefreshTargetsList();
+                }
+            };
+
+            btnRow.Children.Add(initBtn);
+        }
+
+        grid.Children.Add(btnRow);
+        Grid.SetColumn(btnRow, 1);
+        Grid.SetRow(btnRow, 1);
+
+        // TARGET SELECTION EVENT
+        border.PointerPressed += async (_, e) =>
+        {
+            e.Handled = true;
+
+            var selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+            if (selected == null)
+                return;
+
+            _selected = selected;
+
+            foreach (var child in TargetsList.Children)
+            {
+                if (child is Border b)
+                    b.Classes.Remove("selected");
+            }
+
+            border.Classes.Add("selected");
+
+            using (LoadingService.Show("Reading target info..."))
+            {
                 try
                 {
-                    using (LoadingService.Show("Verifying target..."))
-                    {
-                        await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
-                        await UpdateTargetStateAsync(current);
-                    }
+                    await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
+                    await UpdateTargetStateAsync(selected);
                 }
                 catch (Exception ex)
                 {
-                    LogService.Error($"[INIT] Unable to verify target: {ex.Message}");
-                    await RefreshTargetsList();
-                    return;
+                    LogService.Error($"[SELECT] {ex.Message}");
                 }
-
-                if (!CanInitializeTarget(current))
-                {
-                    await RefreshTargetsList();
-                    return;
-                }
-
-                var dlg = new InitializeDiskDialog(current);
-                bool? success = await dlg.ShowDialog<bool>(owner);
-
-                if (success == true)
-                {
-                    using (LoadingService.Show("Updating target info..."))
-                    {
-                        try
-                        {
-                            await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
-                        }
-                        catch (Exception ex)
-                        {
-                            LogService.Error($"[INIT] {ex.Message}");
-                        }
-                    }
-                }
-
-                await RefreshTargetsList();
             }
+
+            RebuildTargetsList();
+            if (_targets.Any(t => t.Iqn == selected.Iqn))
+                await LoadTargetDetailsAsync(selected);
         };
 
-        btnRow.Children.Add(initBtn);
+        border.Child = grid;
+        return border;
     }
-
-    grid.Children.Add(btnRow);
-    Grid.SetColumn(btnRow, 1);
-    Grid.SetRow(btnRow, 1);
-
-    // TARGET SELECTION EVENT
-    border.PointerPressed += async (_, e) =>
-    {
-        e.Handled = true;
-
-        var selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
-        if (selected == null)
-            return;
-
-        _selected = selected;
-
-        foreach (var child in TargetsList.Children)
-        {
-            if (child is Border b)
-                b.Classes.Remove("selected");
-        }
-
-        border.Classes.Add("selected");
-
-        using (LoadingService.Show("Reading target info..."))
-        {
-            try
-            {
-                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
-                await UpdateTargetStateAsync(selected);
-            }
-            catch (Exception ex)
-            {
-                LogService.Error($"[SELECT] {ex.Message}");
-            }
-        }
-
-        RebuildTargetsList();
-        if (_targets.Any(t => t.Iqn == selected.Iqn))
-            await LoadTargetDetailsAsync(selected);
-    };
-
-    border.Child = grid;
-    return border;
-}
-
 
     // ============================================================
     // TARGET DETAILS PANEL
@@ -634,10 +590,37 @@ public partial class TargetsView : UserControl
         AddRow("Capacity:", destino.SizeGb > 0 ? $"{destino.SizeGb} GB" : "-", 4);
 
         DetailsInfoPanel.Children.Add(infoGrid);
+        
+        // CORRECCIÓN: Actualización correcta del icono en el panel de detalles según su estado
         DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
 
-        BtnHeaderUnmount.IsVisible = destino.Conectado;
-        BtnHeaderOpen.IsVisible = destino.Conectado &&
+        // Configuración inteligente del botón superior de cabecera (Connect / Mount / Unmount)
+        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
+        bool mounted = destino.Conectado &&
+                       !string.IsNullOrWhiteSpace(destino.MountPoint) &&
+                       mountsRaw.Contains($"on {destino.MountPoint} ", StringComparison.OrdinalIgnoreCase);
+
+        if (!destino.Conectado)
+        {
+            BtnHeaderUnmount.Content = "Connect";
+            BtnHeaderUnmount.IsVisible = true;
+        }
+        else if (!mounted && IscsiHelper.EsFilesystemMontable(destino.FsType))
+        {
+            BtnHeaderUnmount.Content = "Mount";
+            BtnHeaderUnmount.IsVisible = true;
+        }
+        else if (mounted)
+        {
+            BtnHeaderUnmount.Content = "Unmount";
+            BtnHeaderUnmount.IsVisible = true;
+        }
+        else
+        {
+            BtnHeaderUnmount.IsVisible = false;
+        }
+
+        BtnHeaderOpen.IsVisible = mounted &&
                                   !string.IsNullOrWhiteSpace(destino.MountPoint) &&
                                   Directory.Exists(destino.MountPoint);
 
@@ -681,8 +664,6 @@ public partial class TargetsView : UserControl
                 else
                 {
                     await RunSystemOperationAsync(() => IscsiPersistenceManager.RemoveAsync(selected));
-
-                    // NUEVO: refrescar automáticamente como si pulsara Discover
                     await AutoRediscoverAfterPersistenceRemoval();
                 }
             }
@@ -695,7 +676,6 @@ public partial class TargetsView : UserControl
         await RefreshTargetsList();
     }
 
-    
     private async Task AutoRediscoverAfterPersistenceRemoval()
     {
         string portal = PortalBox.Text?.Trim() ?? "";
@@ -729,36 +709,42 @@ public partial class TargetsView : UserControl
         }
     }
 
-    
-    private async void OnHeaderUnmount(object? sender, RoutedEventArgs e)
+    // Botón inteligente unificado en la cabecera (Conectar, Montar o Desmontar según estado)
+    private async void OnPrimaryHeaderAction(object? sender, RoutedEventArgs e)
     {
         var selected = _selected;
         if (selected == null)
             return;
 
-        using (LoadingService.Show("Unmounting..."))
-        {
-            try
-            {
-                await RunSystemOperationAsync(() => IscsiHelper.Desconectar_Borrar(selected));
+        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
+        var mounted = selected.Conectado &&
+                      !string.IsNullOrWhiteSpace(selected.MountPoint) &&
+                      mountsRaw.Contains($"on {selected.MountPoint} ", StringComparison.OrdinalIgnoreCase);
 
-                // reutilizamos el mismo rediscover que tras remover persistencia
-                await AutoRediscoverAfterPersistenceRemoval();
-            }
-            catch (Exception ex)
+        if (!selected.Conectado)
+        {
+            using (LoadingService.Show("Connecting..."))
             {
-                LogService.Error($"[UNMOUNT] {ex.Message}");
+                await RunSystemOperationAsync(() => IscsiHelper.Conectar(selected));
+            }
+        }
+        else if (!mounted && IscsiHelper.EsFilesystemMontable(selected.FsType))
+        {
+            using (LoadingService.Show("Mounting..."))
+            {
+                await RunSystemOperationAsync(() => IscsiHelper.MontarDestino(selected));
+            }
+        }
+        else if (mounted)
+        {
+            using (LoadingService.Show("Unmounting..."))
+            {
+                await RunSystemOperationAsync(() => IscsiHelper.DesmontarDestino(selected));
             }
         }
 
         await RefreshTargetsList();
     }
-
-    
-
-
-
-    
 
     private void OnHeaderOpen(object? sender, RoutedEventArgs e)
     {

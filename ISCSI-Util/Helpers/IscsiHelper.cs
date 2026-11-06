@@ -502,6 +502,61 @@ public static class IscsiHelper
         s.MountPoint = "";
         return Task.CompletedTask;
     }
+    
+    
+    public static Task DesmontarDestino(IscsiDestino destino)
+    {
+        if (destino == null || string.IsNullOrWhiteSpace(destino.MountPoint))
+            return Task.CompletedTask;
+
+        var check = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{destino.MountPoint}\"");
+        if (check.ExitCode == 32)
+        {
+            destino.MountPoint = "";
+            return Task.CompletedTask;
+        }
+        if (check.ExitCode != 0)
+        {
+            LogService.Error($"[ISCSI] No se pudo comprobar el montaje {destino.MountPoint}: {check.Stderr}");
+            NotificadorLinux.Enviar($"[ERROR] No se pudo comprobar el montaje {destino.MountPoint}.", 6000, "critical");
+            return Task.CompletedTask;
+        }
+
+        var result = ShellHelper.EjecutarComoRoot($"umount -- \"{destino.MountPoint}\"");
+        if (result.ExitCode != 0)
+        {
+            LogService.Error($"[ISCSI] No se pudo desmontar {destino.MountPoint}: {result.Stderr}");
+            NotificadorLinux.Enviar($"[ERROR] No se pudo desmontar {destino.MountPoint}.", 6000, "critical");
+            return Task.CompletedTask;
+        }
+
+        destino.MountPoint = "";
+        return Task.CompletedTask;
+    }
+    
+    
+    public static Task MontarDestino(IscsiDestino destino)
+    {
+        if (destino == null || string.IsNullOrWhiteSpace(destino.DevicePath) || string.IsNullOrWhiteSpace(destino.MountPoint))
+            return Task.CompletedTask;
+
+        // Asegurarse de que el directorio de montaje existe
+        if (!Directory.Exists(destino.MountPoint))
+        {
+            Directory.CreateDirectory(destino.MountPoint);
+        }
+
+        // Ejecutar el comando mount utilizando el dispositivo y el punto de montaje calculados
+        var result = ShellHelper.EjecutarComoRoot($"mount \"{destino.DevicePath}\" \"{destino.MountPoint}\"");
+        if (result.ExitCode != 0)
+        {
+            LogService.Error($"[ISCSI] No se pudo montar {destino.DevicePath} en {destino.MountPoint}: {result.Stderr}");
+            NotificadorLinux.Enviar($"[ERROR] No se pudo montar el volumen.", 6000, "critical");
+        }
+
+        return Task.CompletedTask;
+    }
+    
 
     public static async Task DesconectarSesion(SessionInfo s)
     {
