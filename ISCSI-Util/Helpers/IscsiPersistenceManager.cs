@@ -145,19 +145,11 @@ public static class IscsiPersistenceManager
 
         string mp = ObtenerMountPointTarget(d);
 
-        try
+        if (FstabHelper.HasMountPoint(mp))
         {
-            if (File.Exists("/etc/fstab"))
-            {
-                string fstab = File.ReadAllText("/etc/fstab");
-                if (fstab.Contains(mp, StringComparison.OrdinalIgnoreCase))
-                {
-                    TraceOut(id, "Detect", "FSTAB");
-                    return true;
-                }
-            }
+            TraceOut(id, "Detect", "FSTAB");
+            return true;
         }
-        catch { }
 
         string service = IscsiNaming.ServicePath(d.Iqn, d.LunId);
         if (File.Exists(service))
@@ -202,10 +194,10 @@ public static class IscsiPersistenceManager
                 throw new Exception("No UUID detected.");
 
             string fs = d.FsType == "ntfs" ? "ntfs-3g" : d.FsType;
-            string entry = $"UUID={uuid} {mp} {fs} defaults,_netdev 0 0";
+            string entry = $"UUID={uuid} {mp} {fs} {FstabHelper.NetworkOptions} 0 0";
 
-            ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
-            ShellHelper.EjecutarComoRoot($"bash -c \"echo '{entry}' >> /etc/fstab\"");
+            FstabHelper.RemoveMountPoint(mp);
+            FstabHelper.AddEntry(entry);
 
             string portalValido = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
             string servicePath = IscsiNaming.ServicePath(d.Iqn, d.LunId);
@@ -213,23 +205,37 @@ public static class IscsiPersistenceManager
             //  LOGIN AUTOMÁTICO + MOUNT PERSISTENTE
             string unit = $@"
 [Unit]
-Description=iSCSI persistent mount for {d.Iqn}
-After=network-online.target iscsid.service iscsi.service
-Requires=network-online.target iscsid.service iscsi.service
+Description=iSCSI persistent mount for {d.Iqn} (LUN {d.LunId})
+After=network-online.target iscsid.service
+Wants=network-online.target
+Requires=iscsid.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/usr/bin/iscsiadm -m node -T {d.Iqn} -p {portalValido} --login
-ExecStart=/usr/bin/mount {mp}
+ExecStartPre=/usr/bin/mkdir -p ""{mp}""
+ExecStartPre=-/usr/bin/iscsiadm -m node -T {d.Iqn} -p {portalValido} --login
+ExecStart=/usr/bin/mount ""{mp}""
+TimeoutStartSec=30
 RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
 ";
 
-            File.WriteAllText("/tmp/tmp_unit.service", unit);
-            ShellHelper.EjecutarComoRoot($"mv /tmp/tmp_unit.service {servicePath}");
-            ShellHelper.EjecutarComoRoot($"chmod 644 {servicePath}");
+            var tempUnit = Path.Combine(
+                Path.GetTempPath(),
+                $"iscsi-unit-{Guid.NewGuid():N}.service"
+            );
+
+            try
+            {
+                File.WriteAllText(tempUnit, unit);
+                ShellHelper.EjecutarComoRoot($"install -m 644 \"{tempUnit}\" \"{servicePath}\"");
+            }
+            finally
+            {
+                try { File.Delete(tempUnit); } catch { }
+            }
 
             ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
             ShellHelper.EjecutarComoRoot($"systemctl enable {serviceName}.service");
@@ -264,7 +270,7 @@ WantedBy=multi-user.target
             string mp = ObtenerMountPointTarget(d);
 
             // 1) Eliminar entrada fstab
-            ShellHelper.EjecutarComoRoot($"sed -i '\\#{mp.Replace("/", "\\/")}#d' /etc/fstab");
+            FstabHelper.RemoveMountPoint(mp);
 
             // 2) Eliminar servicio systemd
             string servicePath = IscsiNaming.ServicePath(d.Iqn, d.LunId);

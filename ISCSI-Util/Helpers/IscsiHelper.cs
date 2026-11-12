@@ -976,10 +976,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             ShellHelper.EjecutarComoRoot($"rm -f {scriptPath}");
 
             if (!string.IsNullOrWhiteSpace(d.MountPoint))
-            {
-                var mpEsc = d.MountPoint.Replace("/", "\\/");
-                ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
-            }
+                FstabHelper.RemoveMountPoint(d.MountPoint);
 
             ShellHelper.EjecutarComoRoot(
                 $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op update --name node.startup --value manual"
@@ -1004,20 +1001,8 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         if (d == null || string.IsNullOrWhiteSpace(d.MountPoint))
             return false;
 
-        try
-        {
-            if (File.Exists("/etc/fstab"))
-            {
-                var fstab = File.ReadAllText("/etc/fstab");
-                var pattern = $" {d.MountPoint} ";
-
-                if (fstab.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-        }
-        catch
-        {
-        }
+        if (FstabHelper.HasMountPoint(d.MountPoint))
+            return true;
 
         try
         {
@@ -1129,8 +1114,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                 if (Directory.Exists(mountPoint))
                     ShellHelper.EjecutarComoRoot($"rmdir \"{mountPoint}\"");
 
-                var mpEsc = mountPoint.Replace("/", "\\/");
-                ShellHelper.EjecutarComoRoot($"sed -i '\\#{mpEsc}#d' /etc/fstab");
+                FstabHelper.RemoveMountPoint(mountPoint);
             }
 
             // 4) LOGOUT DEL TARGET
