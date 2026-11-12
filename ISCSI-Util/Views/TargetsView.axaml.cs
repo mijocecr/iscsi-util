@@ -21,6 +21,9 @@ namespace ISCSI_Util.Views;
 
 public partial class TargetsView : UserControl
 {
+    private const string TargetCardIconUri =
+        "avares://ISCSI-Util/Assets/Icons/target-green.jpeg";
+
     private readonly List<IscsiDestino> _targets = new();
     private readonly SemaphoreSlim _systemOperationLock = new(1, 1);
     private IscsiDestino? _selected;
@@ -297,7 +300,9 @@ public partial class TargetsView : UserControl
 
         var icon = new Image
         {
-            Source = LoadIcon(GetIconForChap(destino)),
+            // Las tarjetas de target usan siempre el icono genérico verde.
+            // El panel de detalles conserva el icono según CHAP/filesystem.
+            Source = LoadIcon(TargetCardIconUri),
             Stretch = Stretch.Uniform,
             Width = 54,
             Height = 54,
