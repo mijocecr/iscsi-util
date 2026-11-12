@@ -331,6 +331,7 @@ public partial class TargetsView : UserControl
         else
         {
             DetailsInfoPanel.Children.Clear();
+            DetailsCard.IsVisible = false;
             HeaderRow.IsVisible = false;
             HeaderActionsRow.IsVisible = false;
             LunSelectorRow.IsVisible = false;
@@ -613,6 +614,7 @@ public partial class TargetsView : UserControl
 
         destino = _selected;
 
+        DetailsCard.IsVisible = true;
         HeaderRow.IsVisible = true;
         HeaderActionsRow.IsVisible = true;
         BtnDeleteNode.IsVisible = true;
@@ -624,6 +626,7 @@ public partial class TargetsView : UserControl
         if (lun == null)
         {
             DetailsInfoPanel.Children.Clear();
+            DetailsCard.IsVisible = false;
             LunSelectorRow.IsVisible = false;
             return;
         }
@@ -663,7 +666,9 @@ public partial class TargetsView : UserControl
         }
         else
         {
-            if (lun.SizeGb > 0)
+            if (lun.SizeBytes > 0)
+                parts.Add(IscsiRescan.FormatBytes(lun.SizeBytes));
+            else if (lun.SizeGb > 0)
                 parts.Add($"{lun.SizeGb} GB");
 
             parts.Add(lun.TieneFilesystem ? lun.FsType : "unformatted");
@@ -738,7 +743,9 @@ public partial class TargetsView : UserControl
                 : Brushes.OrangeRed
         );
         AddRow("Filesystem:", lun.TieneFilesystem ? $"Yes ({lun.FsType})" : "No", 4);
-        AddRow("Capacity:", lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-", 5);
+        AddRow("Capacity:", lun.SizeBytes > 0
+            ? IscsiRescan.FormatBytes(lun.SizeBytes)
+            : lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-", 5);
         AddRow("Mount:", string.IsNullOrWhiteSpace(lun.MountPoint) ? "-" : lun.MountPoint, 6);
 
         DetailsInfoPanel.Children.Add(infoGrid);

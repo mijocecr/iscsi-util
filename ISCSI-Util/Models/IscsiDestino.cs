@@ -38,6 +38,8 @@ public class IscsiDestino
     public string Vendor { get; set; } = "";
     public string Model { get; set; } = "";
     public int SizeGb { get; set; } = 0;
+    /// <summary>Tamaño exacto del LUN (dispositivo completo, no la partición).</summary>
+    public long SizeBytes { get; set; } = 0;
     public int LunId { get; set; } = 0;
 
     // ============================================================

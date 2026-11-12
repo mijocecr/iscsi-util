@@ -106,7 +106,6 @@ public static class IscsiHelper
     public static void DetectarChap(IscsiDestino d)
     {
         if (d == null) return;
-        d.SizeGb = 0;
 
         var id = NextTraceId();
         LogService.Debug($"[ISCSI] #{id} DetectarChap → {d.Iqn} ({d.Ip})");
@@ -326,6 +325,7 @@ public static class IscsiHelper
                 d.TieneFilesystem = false;
                 d.FsType = "";
                 d.SizeGb = 0;
+                d.SizeBytes = 0;
                 return;
             }
 
@@ -345,15 +345,32 @@ public static class IscsiHelper
                 d.TieneFilesystem = false;
                 d.FsType = "";
                 d.SizeGb = 0;
+                d.SizeBytes = 0;
                 return;
             }
 
             d.LunId = match.LunId;
             d.DevicePath = "/dev/disk/by-path/" + match.Link;
 
-            var sizeOutput = ShellHelper.EjecutarComoRoot($"lsblk -b -dn -o SIZE {d.DevicePath}");
-            d.SizeGb = long.TryParse(sizeOutput.Stdout?.Trim(), out var sizeBytes)
-                ? (int)Math.Round(sizeBytes / 1_000_000_000d)
+            // El tamaño debe ser el del LUN completo, no el de su partición.
+            var sizeOutput = ShellHelper.EjecutarComoRoot(
+                $"blockdev --getsize64 \"{d.DevicePath}\" 2>/dev/null"
+            );
+
+            if (sizeOutput.ExitCode != 0 ||
+                !long.TryParse(sizeOutput.Stdout?.Trim(), out var sizeBytes) ||
+                sizeBytes <= 0)
+            {
+                sizeOutput = ShellHelper.EjecutarComoRoot(
+                    $"lsblk -b -dn -o SIZE \"{d.DevicePath}\""
+                );
+
+                long.TryParse(sizeOutput.Stdout?.Trim(), out sizeBytes);
+            }
+
+            d.SizeBytes = sizeBytes > 0 ? sizeBytes : 0;
+            d.SizeGb = d.SizeBytes > 0
+                ? (int)Math.Round(d.SizeBytes / 1_000_000_000d)
                 : 0;
 
             // 3) Detectar si existe una partición o si es un dispositivo formateado en raw (Superfloppy)

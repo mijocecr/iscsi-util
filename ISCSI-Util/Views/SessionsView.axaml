@@ -163,20 +163,45 @@
                                            Foreground="{DynamicResource SteamGreen}" />
 
                                 <!-- Botones de acción inferiores -->
-                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left" Margin="0,10,0,0">
-                                    
-                                    <!-- Botón Principal Inteligente (Connect / Mount) -->
-                                    <Button x:Name="BtnAction" Content="Connect" 
-                                            Background="{DynamicResource SteamAccent}"
-                                            Foreground="{DynamicResource SteamText}"
-                                            BorderBrush="{DynamicResource SteamAccent}"
+                                <StackPanel Orientation="Vertical"
+                                            Spacing="8"
                                             HorizontalAlignment="Left"
-                                            BorderThickness="1.2"
-                                            CornerRadius="8"
-                                            Padding="14,6"
-                                            FontWeight="Bold"
-                                            Click="OnPrimaryAction" />
+                                            Margin="0,10,0,0">
 
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+
+                                        <!-- Botón Principal Inteligente (Connect / Mount) -->
+                                        <Button x:Name="BtnAction" Content="Connect"
+                                                Background="{DynamicResource SteamAccent}"
+                                                Foreground="{DynamicResource SteamText}"
+                                                BorderBrush="{DynamicResource SteamAccent}"
+                                                HorizontalAlignment="Left"
+                                                BorderThickness="1.2"
+                                                CornerRadius="8"
+                                                Padding="14,6"
+                                                FontWeight="Bold"
+                                                Click="OnPrimaryAction" />
+
+                                        <Button x:Name="BtnUnmount" Content="Unmount"
+                                                Background="{DynamicResource SteamCard}"
+                                                Foreground="{DynamicResource SteamText}"
+                                                BorderBrush="{DynamicResource SteamBorder}"
+                                                BorderThickness="1.2"
+                                                CornerRadius="8"
+                                                Padding="12,6"
+                                                IsVisible="False" Click="OnUnmount" />
+
+                                        <Button x:Name="BtnDisconnect" Content="Disconnect"
+                                                Background="{DynamicResource SteamPanel}"
+                                                Foreground="#FF8A80"
+                                                BorderBrush="#E53935"
+                                                BorderThickness="1.2"
+                                                CornerRadius="8"
+                                                Padding="12,6"
+                                                IsVisible="False" Click="OnDisconnect" />
+                                    </StackPanel>
+
+                                    <!-- Rescan ocupa el ancho de los dos botones superiores -->
                                     <Button x:Name="BtnRescan" Content="Rescan"
                                             ToolTip.Tip="Rescan this target to detect new LUNs or size changes without unmounting. Mounted ext2/3/4, XFS and Btrfs volumes are expanded online."
                                             Background="{DynamicResource SteamCard}"
@@ -185,25 +210,9 @@
                                             BorderThickness="1.2"
                                             CornerRadius="8"
                                             Padding="12,6"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
                                             IsVisible="False" Click="OnRescan" />
-                                    
-                                    <Button x:Name="BtnUnmount" Content="Unmount" 
-                                            Background="{DynamicResource SteamCard}"
-                                            Foreground="{DynamicResource SteamText}"
-                                            BorderBrush="{DynamicResource SteamBorder}"
-                                            BorderThickness="1.2"
-                                            CornerRadius="8"
-                                            Padding="12,6"
-                                            IsVisible="False" Click="OnUnmount" />
-                                    
-                                    <Button x:Name="BtnDisconnect" Content="Disconnect" 
-                                            Background="{DynamicResource SteamPanel}"
-                                            Foreground="#FF8A80"
-                                            BorderBrush="#E53935"
-                                            BorderThickness="1.2"
-                                            CornerRadius="8"
-                                            Padding="12,6"
-                                            IsVisible="False" Click="OnDisconnect" />
                                 </StackPanel>
 
                             </StackPanel>

@@ -100,10 +100,12 @@
 
         <!-- DETAILS PANEL -->
         <Border Grid.Row="2"
+                x:Name="DetailsCard"
                 Classes="SteamCard"
                 Margin="0,5,0,0"
                 MaxHeight="300"
-                CornerRadius="10">
+                CornerRadius="10"
+                IsVisible="False">
 
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -166,14 +168,14 @@
                             Grid.Column="0"
                             Content="Unmount"
                             Classes="SteamButton"
-                            Width="140"
+                            Width="104"
                             IsVisible="False"/>
 
                     <Button x:Name="BtnHeaderOpen"
                             Grid.Column="1"
                             Content="Open"
                             Classes="SteamButton"
-                            Width="140"
+                            Width="104"
                             IsVisible="False"/>
 
                     <Button x:Name="BtnInitializeLun"
@@ -181,14 +183,14 @@
                             Content="Initialize LUN"
                             ToolTip.Tip="Format and mount the selected LUN. This destroys existing data on it."
                             Classes="SteamButton"
-                            Width="140"
+                            Width="104"
                             IsVisible="False"/>
 
                     <Button x:Name="BtnTogglePersist"
                             Grid.Column="4"
                             Content="Persist"
                             Classes="SteamButton"
-                            Width="140"
+                            Width="104"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"/>
                 </Grid>

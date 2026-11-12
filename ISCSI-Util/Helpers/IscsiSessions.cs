@@ -126,6 +126,11 @@ public static class IscsiSessions
                 MountPoint = mountPointCalculado
             };
 
+            // Guardar el dispositivo del LUN completo antes de sustituirlo por
+            // su partición: el tamaño mostrado debe ser el del LUN, no el de
+            // la partición montada.
+            var lunDevice = info.Device;
+
             // ============================================================
             // 1) Detect real partition (if any)
             // ============================================================
@@ -162,7 +167,7 @@ public static class IscsiSessions
             // ============================================================
 
             var sizeBytesResult = ShellHelper.EjecutarComoRoot(
-                $"blockdev --getsize64 \"{info.Device}\" 2>/dev/null"
+                $"blockdev --getsize64 \"{lunDevice}\" 2>/dev/null"
             );
 
             if (sizeBytesResult.ExitCode == 0 &&
@@ -174,16 +179,23 @@ public static class IscsiSessions
             }
             else
             {
-                var blkRaw = ShellHelper.EjecutarComoRoot($"lsblk -o SIZE {info.Device}").Stdout ?? "";
+                var blkRaw = ShellHelper.EjecutarComoRoot(
+                    $"lsblk -b -dn -o SIZE \"{lunDevice}\""
+                ).Stdout ?? "";
                 var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-                string size = "-";
+                string size = blkLines.FirstOrDefault()?.Trim() ?? "-";
 
-                if (blkLines.Length >= 2)
-                    size = blkLines[1].Trim();
-
-                info.SizeGb = ExtraerSizeGb(size);
-                info.SizeBytes = info.SizeGb * 1024L * 1024L * 1024L;
+                if (long.TryParse(size, out var fallbackBytes) && fallbackBytes > 0)
+                {
+                    info.SizeBytes = fallbackBytes;
+                    info.SizeGb = (int)Math.Round(fallbackBytes / 1024.0 / 1024.0 / 1024.0);
+                }
+                else
+                {
+                    info.SizeGb = ExtraerSizeGb(size);
+                    info.SizeBytes = info.SizeGb * 1024L * 1024L * 1024L;
+                }
             }
 
             info.Vendor = "-";
