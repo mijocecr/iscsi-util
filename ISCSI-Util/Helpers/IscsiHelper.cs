@@ -374,10 +374,11 @@ public static class IscsiHelper
             }
 
             if (targetPath == null)
-            {
-                d.PartitionPath = null;
                 targetPath = d.DevicePath;
-            }
+
+            // El dispositivo efectivo puede ser una partición o el propio LUN
+            // (superfloppy). Guardarlo siempre permite montar y persistir ambos.
+            d.PartitionPath = targetPath;
 
             // 4) Detectar Filesystem
             var blkid = ShellHelper.EjecutarComoRoot($"blkid -p {targetPath}");
@@ -386,26 +387,10 @@ public static class IscsiHelper
             d.TieneFilesystem = !string.IsNullOrWhiteSpace(d.FsType) &&
                                 !d.FsType.Equals("raw", StringComparison.OrdinalIgnoreCase);
 
-            // 5) Detectar punto de montaje en runtime
-            d.MountPoint = null;
-
-            var mounts = (ShellHelper.EjecutarComoRoot("mount").Stdout ?? "")
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var m in mounts)
-            {
-                if (d.PartitionPath != null && m.StartsWith(d.PartitionPath + " "))
-                {
-                    d.MountPoint = m.Split(' ')[2];
-                    break;
-                }
-
-                if (d.DevicePath != null && m.StartsWith(d.DevicePath + " "))
-                {
-                    d.MountPoint = m.Split(' ')[2];
-                    break;
-                }
-            }
+            // 5) Detectar punto de montaje en runtime.
+            // findmnt resuelve el dispositivo real y evita depender del texto de
+            // `mount`, que muestra /dev/sdX aunque se montara por by-path.
+            d.MountPoint = ObtenerPuntoMontajeReal(targetPath);
 
             // 6) Detectar persistencia
             d.Persistir = DetectarPersistencia(d);
@@ -427,6 +412,44 @@ public static class IscsiHelper
         }
 
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Devuelve el punto de montaje real de un dispositivo. Resuelve primero
+    /// enlaces by-path para que findmnt compare contra el /dev/sdX del kernel.
+    /// </summary>
+    public static string? ObtenerPuntoMontajeReal(string? device)
+    {
+        if (string.IsNullOrWhiteSpace(device))
+            return null;
+
+        var real = ShellHelper.EjecutarComoRoot($"readlink -f \"{device}\"").Stdout?.Trim();
+        if (string.IsNullOrWhiteSpace(real))
+            real = device;
+
+        var result = ShellHelper.EjecutarComoRoot(
+            $"findmnt -rn -S \"{real}\" -o TARGET"
+        );
+
+        if (result.ExitCode != 0 || string.IsNullOrWhiteSpace(result.Stdout))
+            return null;
+
+        return result.Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()?
+            .Trim();
+    }
+
+    /// <summary>
+    /// Comprueba si una ruta es un punto de montaje activo.
+    /// </summary>
+    public static bool EstaMontado(string? mountPoint)
+    {
+        if (string.IsNullOrWhiteSpace(mountPoint))
+            return false;
+
+        var result = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{mountPoint}\"");
+        return result.ExitCode == 0;
     }
 
     public static async Task ConectarSesion(SessionInfo s)
@@ -522,23 +545,69 @@ public static class IscsiHelper
     
     public static Task MontarDestino(IscsiDestino destino)
     {
-        if (destino == null || string.IsNullOrWhiteSpace(destino.DevicePath) || string.IsNullOrWhiteSpace(destino.MountPoint))
+        if (destino == null || string.IsNullOrWhiteSpace(destino.MountPoint))
+            return Task.CompletedTask;
+
+        // Montar la partición si existe; en discos superfloppy el LUN completo
+        // es el dispositivo efectivo.
+        string source = !string.IsNullOrWhiteSpace(destino.PartitionPath)
+            ? destino.PartitionPath
+            : destino.DevicePath ?? "";
+
+        if (string.IsNullOrWhiteSpace(source))
             return Task.CompletedTask;
 
         // Asegurarse de que el directorio de montaje existe
         if (!Directory.Exists(destino.MountPoint))
         {
-            Directory.CreateDirectory(destino.MountPoint);
+            try
+            {
+                Directory.CreateDirectory(destino.MountPoint);
+            }
+            catch (Exception ex)
+            {
+                LogService.Error($"[ISCSI] No se pudo crear {destino.MountPoint}: {ex.Message}");
+                NotificadorLinux.Enviar("[ERROR] No se pudo crear el punto de montaje.", 6000, "critical");
+                return Task.CompletedTask;
+            }
         }
 
-        // Ejecutar el comando mount utilizando el dispositivo y el punto de montaje calculados
-        var result = ShellHelper.EjecutarComoRoot($"mount \"{destino.DevicePath}\" \"{destino.MountPoint}\"");
+        string fs = (destino.FsType ?? "").Trim().ToLowerInvariant();
+        string fsDriver = fs == "ntfs" ? "ntfs-3g" : fs;
+
+        string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER") ?? "";
+        if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
+            usuarioReal = ShellHelper.EjecutarComoRoot("logname").Stdout?.Trim() ?? "1000";
+
+        string uid = ShellHelper.EjecutarComoRoot($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
+        string gid = ShellHelper.EjecutarComoRoot($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
+
+        string mountCommand;
+        if (fs is "ntfs" or "exfat" or "vfat")
+        {
+            mountCommand = $"mount -t {fsDriver} -o uid={uid},gid={gid},umask=000 " +
+                           $"\"{source}\" \"{destino.MountPoint}\"";
+        }
+        else
+        {
+            mountCommand = string.IsNullOrWhiteSpace(fs)
+                ? $"mount \"{source}\" \"{destino.MountPoint}\""
+                : $"mount -t {fs} \"{source}\" \"{destino.MountPoint}\"";
+        }
+
+        var result = ShellHelper.EjecutarComoRoot(mountCommand);
         if (result.ExitCode != 0)
         {
-            LogService.Error($"[ISCSI] No se pudo montar {destino.DevicePath} en {destino.MountPoint}: {result.Stderr}");
-            NotificadorLinux.Enviar($"[ERROR] No se pudo montar el volumen.", 6000, "critical");
+            LogService.Error($"[ISCSI] No se pudo montar {source} en {destino.MountPoint}: {result.Stderr}");
+            NotificadorLinux.Enviar("[ERROR] No se pudo montar el volumen.", 6000, "critical");
+            return Task.CompletedTask;
         }
 
+        // Permisos de escritura para el usuario de la sesión en filesystems POSIX.
+        if (fs is not ("ntfs" or "exfat" or "vfat" or "iso9660"))
+            ShellHelper.EjecutarComoRoot($"setfacl -m u:{uid}:rwx \"{destino.MountPoint}\"");
+
+        destino.MountPoint = ObtenerPuntoMontajeReal(source) ?? destino.MountPoint;
         return Task.CompletedTask;
     }
     
@@ -621,7 +690,7 @@ public static class IscsiHelper
     // ============================================================
 // LIMPIAR AUTO-MOUNTS (CachyOS, GVFS, Udisks2)
 // ============================================================
-private static void ForceUnmountAutoMounts(string partition)
+private static void ForceUnmountAutoMounts(string partition, string? keepMountPoint = null)
 {
     if (string.IsNullOrWhiteSpace(partition))
         return;
@@ -630,10 +699,23 @@ private static void ForceUnmountAutoMounts(string partition)
         $"findmnt -rn -o TARGET {partition}"
     ).Stdout?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
 
-    foreach (var mp in mounts)
+    string basePath = (ConfigManager.MountBasePath ?? "").TrimEnd('/');
+
+    foreach (var raw in mounts)
     {
-        // Ignorar nuestro mountpoint real
-        if (mp.StartsWith("/mnt/iscsi"))
+        string mp = raw.Trim();
+        if (mp.Length == 0)
+            continue;
+
+        // No desmontar el punto de montaje estable de esta aplicación ni el
+        // que se acaba de calcular para este LUN.
+        if (!string.IsNullOrWhiteSpace(keepMountPoint) &&
+            string.Equals(mp, keepMountPoint.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        if (basePath.Length > 0 &&
+            (string.Equals(mp, basePath, StringComparison.OrdinalIgnoreCase) ||
+             mp.StartsWith(basePath + "/", StringComparison.OrdinalIgnoreCase)))
             continue;
 
         ShellHelper.EjecutarComoRoot($"umount -l --force \"{mp}\"");
@@ -827,7 +909,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         // ============================================================
         // 5) LIMPIAR AUTO-MOUNTS DE CACHYOS
         // ============================================================
-        ForceUnmountAutoMounts(d.PartitionPath);
+        ForceUnmountAutoMounts(d.PartitionPath, d.MountPoint);
 
         // ============================================================
         // 6) Detectar filesystem

@@ -114,16 +114,15 @@ public partial class SessionsView : UserControl
     }
 
     /// <summary>
-    /// Botón Único Inteligente inferior: Conecta, Monta o Abre la carpeta según el estado actual.
+    /// Botón inferior inteligente: conecta la sesión o monta el volumen según
+    /// el estado actual. Cuando ya está montado, la apertura se hace con el
+    /// botón Open de la cabecera para no duplicar acciones.
     /// </summary>
     private async void OnPrimaryAction(object? sender, RoutedEventArgs e)
     {
         if (_selected == null) return;
 
-        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
-        var mounted = _selected.Connected &&
-                      !string.IsNullOrWhiteSpace(_selected.MountPoint) &&
-                      mountsRaw.Contains($"on {_selected.MountPoint} ", StringComparison.OrdinalIgnoreCase);
+        var mounted = _selected.Connected && IscsiHelper.EstaMontado(_selected.MountPoint);
 
         if (!_selected.Connected)
         {
@@ -144,18 +143,6 @@ public partial class SessionsView : UserControl
             }
             await CargarSesiones();
             if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
-        }
-        else if (mounted)
-        {
-            // 3) Si ya está montado -> Abrir el volumen en el explorador de archivos
-            if (!string.IsNullOrWhiteSpace(_selected.MountPoint) && System.IO.Directory.Exists(_selected.MountPoint))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = _selected.MountPoint,
-                    UseShellExecute = true
-                });
-            }
         }
     }
 
@@ -420,11 +407,8 @@ public partial class SessionsView : UserControl
         SessionTitle.Text = session.Iqn;
         SessionTitle.TextWrapping = TextWrapping.Wrap;
 
-        // Verificación real contra el comando mount de Linux
-        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
-        var mounted = session.Connected &&
-                      !string.IsNullOrWhiteSpace(session.MountPoint) &&
-                      mountsRaw.Contains($"on {session.MountPoint} ", StringComparison.OrdinalIgnoreCase);
+        // Verificación real del punto de montaje (findmnt/mountpoint).
+        var mounted = session.Connected && IscsiHelper.EstaMontado(session.MountPoint);
         
         SessionSubtitle.IsVisible = true;
         SessionSubtitle.Text = mounted ? "MOUNTED" : session.Connected ? "CONNECTED" : "SAVED";

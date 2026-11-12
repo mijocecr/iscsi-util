@@ -21,8 +21,8 @@
 
                 <Button x:Name="RescanButton"
                         Grid.Column="1" 
-                        Content="Rescan"
-                        ToolTip.Tip="Detect new LUNs or size changes without disconnecting or unmounting. Mounted ext2/3/4, XFS and Btrfs volumes are expanded online."
+                        Content="Rescan All"
+                        ToolTip.Tip="Rescan every connected target to detect new LUNs or size changes without disconnecting or unmounting."
                         HorizontalContentAlignment="Center"
                         Background="{DynamicResource SteamCard}"
                         Foreground="{DynamicResource SteamText}"

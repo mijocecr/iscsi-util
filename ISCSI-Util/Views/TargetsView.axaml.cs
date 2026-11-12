@@ -745,10 +745,7 @@ public partial class TargetsView : UserControl
 
         DetailsIcon.Source = LoadIcon(GetIconForChap(lun));
 
-        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
-        bool mounted = lun.Conectado &&
-                       !string.IsNullOrWhiteSpace(lun.MountPoint) &&
-                       mountsRaw.Contains($"on {lun.MountPoint} ", StringComparison.OrdinalIgnoreCase);
+        bool mounted = lun.Conectado && IscsiHelper.EstaMontado(lun.MountPoint);
 
         if (!lun.Conectado)
         {
@@ -890,10 +887,7 @@ public partial class TargetsView : UserControl
         if (selected == null)
             return;
 
-        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
-        var mounted = selected.Conectado &&
-                      !string.IsNullOrWhiteSpace(selected.MountPoint) &&
-                      mountsRaw.Contains($"on {selected.MountPoint} ", StringComparison.OrdinalIgnoreCase);
+        var mounted = selected.Conectado && IscsiHelper.EstaMontado(selected.MountPoint);
 
         try
         {

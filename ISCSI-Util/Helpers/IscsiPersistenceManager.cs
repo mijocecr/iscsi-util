@@ -283,24 +283,9 @@ WantedBy=multi-user.target
 
             ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
-            string portalValido = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
-
-            // 3) LOGOUT COMPLETO
-            ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {portalValido} --logout"
-            );
-
-            // 4) ELIMINAR NODO
-            ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {portalValido} --op delete"
-            );
-
-            // 5) ELIMINAR REGISTRO DE DISCOVERY
-            ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m discoverydb -t sendtargets -p {portalValido} --op delete"
-            );
-
-            // 6) LIMPIAR DIRECTORIO DE MONTAJE SI QUEDÓ VACÍO
+            // La sesión iSCSI es compartida por todos los LUNs del target y
+            // puede seguir en uso. "No Autostart" solo elimina la persistencia:
+            // no hace logout ni borra el nodo.
             if (Directory.Exists(mp))
             {
                 ShellHelper.EjecutarComoRoot($"rmdir \"{mp}\" 2>/dev/null");
