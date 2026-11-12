@@ -161,17 +161,33 @@ public static class IscsiSessions
             // 4) Vendor / Model / Size
             // ============================================================
 
-            var blkRaw = ShellHelper.EjecutarComoRoot($"lsblk -o SIZE {info.Device}").Stdout ?? "";
-            var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var sizeBytesResult = ShellHelper.EjecutarComoRoot(
+                $"blockdev --getsize64 \"{info.Device}\" 2>/dev/null"
+            );
 
-            string size = "-";
+            if (sizeBytesResult.ExitCode == 0 &&
+                long.TryParse(sizeBytesResult.Stdout.Trim(), out var sizeBytes) &&
+                sizeBytes > 0)
+            {
+                info.SizeBytes = sizeBytes;
+                info.SizeGb = (int)Math.Round(sizeBytes / 1024.0 / 1024.0 / 1024.0);
+            }
+            else
+            {
+                var blkRaw = ShellHelper.EjecutarComoRoot($"lsblk -o SIZE {info.Device}").Stdout ?? "";
+                var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            if (blkLines.Length >= 2)
-                size = blkLines[1].Trim();
+                string size = "-";
+
+                if (blkLines.Length >= 2)
+                    size = blkLines[1].Trim();
+
+                info.SizeGb = ExtraerSizeGb(size);
+                info.SizeBytes = info.SizeGb * 1024L * 1024L * 1024L;
+            }
 
             info.Vendor = "-";
             info.Model  = "-";
-            info.SizeGb = ExtraerSizeGb(size);
 
             // ============================================================
             // 5) Auth

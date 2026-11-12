@@ -19,6 +19,7 @@ public partial class SessionsView : UserControl
     private List<SessionInfo> _sesiones = new();
     private SessionInfo? _selected;
     private long _loadId;
+    private string _lastRescanStatus = string.Empty;
 
     public SessionsView()
     {
@@ -33,6 +34,7 @@ public partial class SessionsView : UserControl
     {
         var id = ++_loadId;
         RefreshButton.IsEnabled = false;
+        RescanButton.IsEnabled = false;
         SessionCountText.Text = "Loading sessions...";
 
         try
@@ -99,11 +101,15 @@ public partial class SessionsView : UserControl
             SessionsList.Children.Clear();
             EmptyState.IsVisible = true;
             DetailsCard.IsVisible = false;
+            RescanButton.IsEnabled = false;
         }
         finally
         {
             if (id == _loadId)
+            {
                 RefreshButton.IsEnabled = true;
+                RescanButton.IsEnabled = _sesiones.Any(s => s.Connected);
+            }
         }
     }
 
@@ -194,6 +200,8 @@ public partial class SessionsView : UserControl
             $"{_sesiones.Count} LUN{(_sesiones.Count == 1 ? "" : "s")}  ·  " +
             $"{connectedCount} connected";
 
+        RescanButton.IsEnabled = connectedCount > 0;
+
         EmptyState.IsVisible = visibleSessions.Count == 0;
         if (visibleSessions.Count == 0)
         {
@@ -264,7 +272,8 @@ public partial class SessionsView : UserControl
         row.PointerPressed += (_, _) =>
         {
             _selected = session;
-            
+            _lastRescanStatus = string.Empty;
+
             // Al hacer clic en un target, mostramos la tarjeta de detalles y la rellenamos
             DetailsCard.IsVisible = true;
             
@@ -351,7 +360,7 @@ public partial class SessionsView : UserControl
 
         var detail = session.Connected
             ? $"{EmptyAsDash(session.Device)}  ·  {EmptyAsDash(session.Filesystem)}  ·  " +
-              $"{(session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-")}"
+              $"{(session.SizeBytes > 0 ? IscsiRescan.FormatBytes(session.SizeBytes) : session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-")}"
             : "Saved configuration (not connected)";
 
         var text = new StackPanel { Spacing = 1 };
@@ -380,6 +389,7 @@ public partial class SessionsView : UserControl
         row.PointerPressed += (_, _) =>
         {
             _selected = session;
+            _lastRescanStatus = string.Empty;
             DetailsCard.IsVisible = true;
             PintarLista();
             PintarDetalles(session);
@@ -441,13 +451,18 @@ public partial class SessionsView : UserControl
         // El LUN se mantiene como metadato técnico secundario, incluso cuando
         // el target solo expone una unidad lógica.
         AddWideDetail("LUN", session.LunId.ToString());
-        AddWideDetail("SIZE", session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-");
+        AddWideDetail("SIZE", session.SizeBytes > 0
+            ? IscsiRescan.FormatBytes(session.SizeBytes)
+            : session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-");
 
         // Métrica modificada para mostrar la primera vez que se conectó en lugar de "CONNECTED SINCE"
         AddWideDetail("FIRST CONNECTED", session.ConnectedSince != default
             ? session.ConnectedSince.ToString("yyyy-MM-dd HH:mm:ss")
             : "-");
-        
+
+        RescanStatusText.Text = _lastRescanStatus;
+        RescanStatusText.IsVisible = !string.IsNullOrWhiteSpace(_lastRescanStatus);
+
         // Configuración limpia de los botones inferiores (máximo 2 visibles según el estado)
         if (!session.Connected)
         {
@@ -458,18 +473,20 @@ public partial class SessionsView : UserControl
             BtnAction.BorderBrush = GetThemeBrush("SteamAccent", "#66C0F4");
             BtnAction.IsEnabled = true;
 
+            BtnRescan.IsVisible = false;
             BtnUnmount.IsVisible = false;
             BtnDisconnect.IsVisible = false;
         }
         else if (!mounted)
         {
-            // 2. Conectado pero sin montar: Botón Mount + Botón Disconnect
+            // 2. Conectado pero sin montar: Botón Mount + Rescan + Disconnect
             BtnAction.IsVisible = true;
             BtnAction.Content = "Mount";
             BtnAction.Background = GetThemeBrush("SteamCard", "#2A475E");
             BtnAction.BorderBrush = GetThemeBrush("SteamBorder", "#0F141A");
             BtnAction.IsEnabled = IscsiHelper.EsFilesystemMontable(session.Filesystem);
 
+            BtnRescan.IsVisible = true;
             BtnUnmount.IsVisible = false;
             BtnDisconnect.IsVisible = true;
             BtnDisconnect.IsEnabled = true;
@@ -477,9 +494,10 @@ public partial class SessionsView : UserControl
         else
         {
             // 3. Montado: Ocultamos el botón principal inferior (porque "Open" ya está arriba) 
-            // y mostramos únicamente Unmount y Disconnect (este último bloqueado hasta desmontar).
+            // y mostramos Rescan, Unmount y Disconnect (este último bloqueado hasta desmontar).
             BtnAction.IsVisible = false; 
 
+            BtnRescan.IsVisible = true;
             BtnUnmount.IsVisible = true;
             BtnDisconnect.IsVisible = true;
             BtnDisconnect.IsEnabled = false; 
@@ -582,7 +600,99 @@ public partial class SessionsView : UserControl
 
     private async void RefreshButton_OnClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        _lastRescanStatus = string.Empty;
         await CargarSesiones();
+    }
+
+    private async void RescanButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (!_sesiones.Any(s => s.Connected))
+        {
+            NotificadorLinux.Enviar("No connected targets to rescan.", 4000, "low");
+            return;
+        }
+
+        RescanButton.IsEnabled = false;
+        try
+        {
+            List<TargetRescanResult> results;
+            using (LoadingService.Show("Rescanning targets..."))
+            {
+                results = await Task.Run(() => IscsiRescan.RescanAllAsync(_sesiones));
+            }
+
+            _lastRescanStatus = BuildRescanStatus(results);
+            await CargarSesiones();
+            NotificarRescan(results);
+        }
+        finally
+        {
+            RescanButton.IsEnabled = _sesiones.Any(s => s.Connected);
+        }
+    }
+
+    private async void OnRescan(object? sender, RoutedEventArgs e)
+    {
+        if (_selected == null || !_selected.Connected)
+            return;
+
+        var target = _selected;
+        BtnRescan.IsEnabled = false;
+        try
+        {
+            TargetRescanResult result;
+            using (LoadingService.Show("Rescanning target..."))
+            {
+                result = await Task.Run(() => IscsiRescan.RescanTargetAsync(target.Iqn, target.Portal, _sesiones));
+            }
+
+            _lastRescanStatus = BuildRescanStatus(new[] { result });
+            await CargarSesiones();
+            NotificarRescan(new[] { result });
+        }
+        finally
+        {
+            BtnRescan.IsEnabled = true;
+        }
+    }
+
+    private static string BuildRescanStatus(IReadOnlyList<TargetRescanResult> results)
+    {
+        if (results.Count == 0)
+            return "No connected targets to rescan.";
+
+        var failed = results.Where(r => !r.Success).ToList();
+        if (failed.Count > 0)
+            return $"Rescan failed: {failed[0].Message}";
+
+        var changed = results.Where(r => r.HasChanges).ToList();
+        if (changed.Count == 0)
+            return "Rescan finished: no LUN or size changes detected.";
+
+        return string.Join(Environment.NewLine,
+            changed.Select(r => $"{r.DisplayTarget}: {r.Summary}"));
+    }
+
+    private static void NotificarRescan(IReadOnlyList<TargetRescanResult> results)
+    {
+        var failed = results.Where(r => !r.Success).ToList();
+        if (failed.Count > 0)
+        {
+            NotificadorLinux.Enviar($"Rescan failed: {failed[0].Message}", 7000, "critical");
+            return;
+        }
+
+        var changed = results.Where(r => r.HasChanges).ToList();
+        if (changed.Count == 0)
+        {
+            NotificadorLinux.Enviar("Rescan finished: no LUN or size changes detected.", 4000, "low");
+            return;
+        }
+
+        var summary = string.Join(" | ",
+            changed.Select(r => $"{r.DisplayTarget}: {r.ShortSummary}"));
+
+        NotificadorLinux.Enviar(summary, 8000, "normal");
     }
 
     // Manejador del botón Open rápido situado junto a la etiqueta MOUNTED

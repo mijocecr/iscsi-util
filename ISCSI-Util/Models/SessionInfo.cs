@@ -8,6 +8,9 @@ public class SessionInfo
     public string Portal { get; set; } = "";
     public string Device { get; set; } = "";
     public int SizeGb { get; set; }
+    /// <summary>Tamaño exacto en bytes del dispositivo resuelto. Se usa para
+    /// detectar cambios de tamaño en caliente sin depender del redondeo a GB.</summary>
+    public long SizeBytes { get; set; }
     public string Filesystem { get; set; } = "";
     public string MountPoint { get; set; } = "";
     public bool Connected { get; set; }

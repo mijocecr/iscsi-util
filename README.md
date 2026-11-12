@@ -31,6 +31,15 @@ This application presents those capabilities through a modern interface that foc
 - **Session Management**  
   Connect to and disconnect from targets with clear status information and confirmation steps.
 
+- **Multi‑LUN Support**  
+  Targets that expose several logical units are shown as a target with independent LUN children, each with its own device, filesystem, mount point and size.
+
+- **Hot LUN Rescan**  
+  Detect newly exposed LUNs or capacity changes without restarting the iSCSI session or unmounting volumes. Mounted ext2/3/4, XFS and Btrfs filesystems are expanded online when the underlying device grows.
+
+- **Safe Boot Persistence**  
+  Generate fstab and systemd entries with `_netdev`, `nofail` and `x-systemd.requires=iscsid.service` so a boot without network storage does not block the system.
+
 - **Authentication Configuration**  
   Set up CHAP and Mutual CHAP credentials on a per‑target basis, with a dedicated overview panel for reviewing all stored configurations.
 

@@ -564,13 +564,28 @@ public static class CliApp
                 var session = sessions[i];
                 Console.WriteLine($"{i + 1}) {session.Iqn} ({session.Portal}) LUN {session.LunId}");
             }
-            Console.WriteLine($"{sessions.Count + 1}) Disconnect all sessions");
+            Console.WriteLine($"{sessions.Count + 1}) Rescan all targets");
+            Console.WriteLine($"{sessions.Count + 2}) Disconnect all sessions");
             Console.WriteLine("0) Back");
 
-            int choice = ReadChoice("Select an option: ", 0, sessions.Count + 1);
+            int choice = ReadChoice("Select an option: ", 0, sessions.Count + 2);
             if (choice == 0)
                 return;
+
             if (choice == sessions.Count + 1)
+            {
+                var results = await IscsiRescan.RescanAllAsync(sessions);
+                if (results.Count == 0)
+                    Console.WriteLine("No connected targets to rescan.");
+                else
+                    foreach (var result in results)
+                        PrintRescanResult(result);
+
+                sessions = await IscsiSessions.ObtenerVistaGlobal();
+                continue;
+            }
+
+            if (choice == sessions.Count + 2)
             {
                 if (Confirm($"Disconnect all {sessions.Count} active sessions?"))
                 {
@@ -603,16 +618,17 @@ public static class CliApp
             Console.WriteLine($"Status:       {(session.Connected ? "Connected" : "Disconnected")}");
             Console.WriteLine($"Device:       {session.Device}");
             Console.WriteLine($"Filesystem:   {session.Filesystem}");
-            Console.WriteLine($"Capacity:     {(session.SizeGb > 0 ? $"{session.SizeGb} GB" : "-")}");
+            Console.WriteLine($"Capacity:     {(session.SizeBytes > 0 ? IscsiRescan.FormatBytes(session.SizeBytes) : session.SizeGb > 0 ? $"{session.SizeGb} GB" : "-")}");
             Console.WriteLine($"Mount point:  {session.MountPoint}");
             Console.WriteLine($"LUN:          {session.LunId}");
             Console.WriteLine($"Authentication: {session.Auth}");
             Console.WriteLine("\nActions:");
             Console.WriteLine($"1) {(session.Connected ? "Disconnect" : "Connect")}");
             Console.WriteLine("2) Open mount point");
+            Console.WriteLine("3) Rescan target LUNs");
             Console.WriteLine("0) Back to sessions");
 
-            switch (ReadChoice("Option: ", 0, 2))
+            switch (ReadChoice("Option: ", 0, 3))
             {
                 case 1:
                     if (session.Connected)
@@ -623,12 +639,53 @@ public static class CliApp
                 case 2:
                     OpenMountPoint(session.MountPoint);
                     break;
+                case 3:
+                    if (!session.Connected)
+                    {
+                        Console.WriteLine("The target is not connected.");
+                        break;
+                    }
+
+                    var rescan = await IscsiRescan.RescanTargetAsync(session.Iqn, session.Portal);
+                    PrintRescanResult(rescan);
+
+                    var refreshed = (await IscsiSessions.ObtenerVistaGlobal())
+                        .FirstOrDefault(x => x.Connected &&
+                            x.Iqn.Equals(session.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                            x.Portal.Equals(session.Portal, StringComparison.OrdinalIgnoreCase) &&
+                            x.LunId == session.LunId);
+
+                    if (refreshed != null)
+                        session = refreshed;
+                    break;
                 case 0:
                     return;
             }
 
             Pause();
         }
+    }
+
+    private static void PrintRescanResult(TargetRescanResult result)
+    {
+        Console.WriteLine();
+
+        if (!result.Success)
+        {
+            Console.WriteLine($"Rescan failed: {result.Message}");
+            return;
+        }
+
+        if (!result.HasChanges)
+        {
+            Console.WriteLine($"{result.DisplayTarget}: {result.Summary}");
+            return;
+        }
+
+        Console.WriteLine($"{result.DisplayTarget}: {result.ShortSummary}");
+
+        foreach (var change in result.ChangedLuns)
+            Console.WriteLine($"  - {change.Describe()}");
     }
 
     private static async Task ShowSystemStatus()
