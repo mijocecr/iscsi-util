@@ -177,13 +177,12 @@ public static class IscsiCore
         var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/")
             .Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        var (ipSolo, _) = NormalizarPortal(d.Ip);
-
-        // 1) Detectar symlink del disco base (igual que GUI)
-        var link = byPath.FirstOrDefault(l =>
-            l.Contains(ipSolo, StringComparison.OrdinalIgnoreCase) &&
-            l.Contains("lun", StringComparison.OrdinalIgnoreCase) &&
-            !l.Contains("part", StringComparison.OrdinalIgnoreCase)
+        // 1) Detectar symlink del disco base por IQN + LUN
+        var link = IscsiByPath.Find(
+            byPath,
+            d.Iqn,
+            d.LunId,
+            fallbackToFirstLun: d.LunId == 0
         );
 
         if (link == null)
@@ -195,7 +194,8 @@ public static class IscsiCore
             return;
         }
 
-        d.DevicePath = "/dev/disk/by-path/" + link.Trim();
+        d.LunId = link.LunId;
+        d.DevicePath = "/dev/disk/by-path/" + link.Link;
 
         // 2) Detectar partición real
         var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}").Stdout;
@@ -236,11 +236,11 @@ public static class IscsiCore
 
         try
         {
-            string safe = IscsiHelper.SanitizarNombre(d.Iqn)
-                .Replace('.', '_')
-                .Replace('-', '_');
-
-            d.MountPoint = Path.Combine(ConfigManager.MountBasePath, safe);
+            d.MountPoint = IscsiNaming.MountPoint(
+                ConfigManager.MountBasePath,
+                d.Iqn,
+                d.LunId
+            );
 
             if (!Directory.Exists(d.MountPoint))
             {

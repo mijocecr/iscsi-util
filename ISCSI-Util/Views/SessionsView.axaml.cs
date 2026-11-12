@@ -169,12 +169,30 @@ public partial class SessionsView : UserControl
                     session.Model.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
+        // La lista refleja la jerarquía Target -> LUN -> dispositivo de bloques.
+        var targets = IscsiSessions.AgruparPorTarget(visibleSessions);
+
         SessionsList.Children.Clear();
-        foreach (var session in visibleSessions)
-            SessionsList.Children.Add(CrearTarjeta(session));
+        foreach (var target in targets)
+        {
+            SessionsList.Children.Add(target.HasMultipleLuns
+                ? CrearTarjetaMultiLun(target)
+                : CrearTarjeta(target.Luns[0].Session));
+        }
+
+        var targetCount = _sesiones
+            .Select(s => (
+                Iqn: s.Iqn.ToLowerInvariant(),
+                Portal: s.Portal.ToLowerInvariant()
+            ))
+            .Distinct()
+            .Count();
 
         var connectedCount = _sesiones.Count(session => session.Connected);
-        SessionCountText.Text = $"{_sesiones.Count} target{(_sesiones.Count == 1 ? "" : "s")}  ·  {connectedCount} connected";
+        SessionCountText.Text =
+            $"{targetCount} target{(targetCount == 1 ? "" : "s")}  ·  " +
+            $"{_sesiones.Count} LUN{(_sesiones.Count == 1 ? "" : "s")}  ·  " +
+            $"{connectedCount} connected";
 
         EmptyState.IsVisible = visibleSessions.Count == 0;
         if (visibleSessions.Count == 0)
@@ -193,19 +211,8 @@ public partial class SessionsView : UserControl
     {
         var selected = ReferenceEquals(session, _selected);
 
-        var displayName = session.Iqn;
-        var colonIndex = session.Iqn.LastIndexOf(':');
-        if (colonIndex >= 0 && colonIndex < session.Iqn.Length - 1)
-        {
-            displayName = session.Iqn.Substring(colonIndex + 1);
-        }
-
-        var displayPortal = session.Portal;
-        var portIndex = session.Portal.LastIndexOf(':');
-        if (portIndex >= 0)
-        {
-            displayPortal = session.Portal.Substring(0, portIndex);
-        }
+        var displayName = ShortIqn(session.Iqn);
+        var displayPortal = ShortPortal(session.Portal);
 
         var defaultTextColor = GetThemeBrush("SteamText", "#C7D5E0");
         var cardBackground = selected ? GetThemeBrush("SteamCard", "#2A475E") : new SolidColorBrush(Color.Parse("#151E28"));
@@ -267,7 +274,134 @@ public partial class SessionsView : UserControl
 
         return row;
     }
-    
+
+    /// <summary>
+    /// Tarjeta de un target que expone varios LUNs. El target es la cabecera
+    /// y cada LUN se muestra como un hijo independiente y seleccionable.
+    /// </summary>
+    private Border CrearTarjetaMultiLun(IscsiTargetNode target)
+    {
+        var sessions = target.Luns.Select(l => l.Session).ToList();
+        var anySelected = sessions.Any(s => ReferenceEquals(s, _selected));
+        var defaultTextColor = GetThemeBrush("SteamText", "#C7D5E0");
+
+        var container = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#151E28")),
+            BorderBrush = anySelected
+                ? new SolidColorBrush(Color.Parse("#4CFF4C"))
+                : GetThemeBrush("SteamBorder", "#0F141A"),
+            BorderThickness = new Thickness(anySelected ? 1.5 : 1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 8),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch
+        };
+
+        var panel = new StackPanel { Spacing = 6 };
+
+        var header = new StackPanel { Spacing = 2 };
+
+        header.Children.Add(new TextBlock
+        {
+            Text = ShortIqn(target.Iqn),
+            FontSize = 13,
+            FontWeight = FontWeight.Bold,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = anySelected
+                ? new SolidColorBrush(Color.Parse("#4CFF4C"))
+                : defaultTextColor
+        });
+
+        header.Children.Add(new TextBlock
+        {
+            Text = $"{ShortPortal(target.Portal)}  ·  {target.LunCount} LUNs",
+            FontSize = 11,
+            Opacity = 0.7,
+            Foreground = defaultTextColor
+        });
+
+        panel.Children.Add(header);
+
+        foreach (var lun in target.Luns)
+            panel.Children.Add(CrearFilaLun(lun.Session));
+
+        container.Child = panel;
+        return container;
+    }
+
+    private Border CrearFilaLun(SessionInfo session)
+    {
+        var selected = ReferenceEquals(session, _selected);
+        var defaultTextColor = GetThemeBrush("SteamText", "#C7D5E0");
+
+        var row = new Border
+        {
+            Background = selected
+                ? GetThemeBrush("SteamCard", "#2A475E")
+                : new SolidColorBrush(Color.Parse("#101820")),
+            BorderBrush = selected
+                ? new SolidColorBrush(Color.Parse("#4CFF4C"))
+                : GetThemeBrush("SteamBorder", "#0F141A"),
+            BorderThickness = new Thickness(selected ? 1.5 : 1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(8, 5),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch
+        };
+
+        var detail = session.Connected
+            ? $"{EmptyAsDash(session.Device)}  ·  {EmptyAsDash(session.Filesystem)}  ·  " +
+              $"{(session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-")}"
+            : "Saved configuration (not connected)";
+
+        var text = new StackPanel { Spacing = 1 };
+
+        text.Children.Add(new TextBlock
+        {
+            Text = $"LUN {session.LunId}",
+            FontSize = 11,
+            FontWeight = FontWeight.Bold,
+            Foreground = selected
+                ? new SolidColorBrush(Color.Parse("#4CFF4C"))
+                : GetThemeBrush("SteamAccent", "#66C0F4")
+        });
+
+        text.Children.Add(new TextBlock
+        {
+            Text = detail,
+            FontSize = 10,
+            Opacity = 0.75,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = defaultTextColor
+        });
+
+        row.Child = text;
+
+        row.PointerPressed += (_, _) =>
+        {
+            _selected = session;
+            DetailsCard.IsVisible = true;
+            PintarLista();
+            PintarDetalles(session);
+        };
+
+        return row;
+    }
+
+    private static string ShortIqn(string iqn)
+    {
+        var colonIndex = iqn.LastIndexOf(':');
+        return colonIndex >= 0 && colonIndex < iqn.Length - 1
+            ? iqn[(colonIndex + 1)..]
+            : iqn;
+    }
+
+    private static string ShortPortal(string portal)
+    {
+        var portIndex = portal.LastIndexOf(':');
+        return portIndex >= 0 ? portal[..portIndex] : portal;
+    }
+
     private void PintarDetalles(SessionInfo session)
     {
         // Asegurarnos de que la tarjeta seja visible al pintar detalles
@@ -298,14 +432,16 @@ public partial class SessionsView : UserControl
 
         DetailsPanel.Children.Clear();
         
+        AddWideDetail("PORTAL", EmptyAsDash(session.Portal));
         AddWideDetail("DEVICE", EmptyAsDash(session.Device));
         AddWideDetail("MOUNT POINT", EmptyAsDash(session.MountPoint), isCopyable: true); // Permitir copiar el mount point
         AddWideDetail("FILESYSTEM", EmptyAsDash(session.Filesystem));
         AddWideDetail("AUTHENTICATION", EmptyAsDash(session.Auth));
-        
-        // Bloque combinado LUN y SIZE
-        var lunAndSizeText = $"LUN {session.LunId}  ·  {(session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-")}";
-        AddWideDetail("LUN & SIZE", lunAndSizeText);
+
+        // El LUN se mantiene como metadato técnico secundario, incluso cuando
+        // el target solo expone una unidad lógica.
+        AddWideDetail("LUN", session.LunId.ToString());
+        AddWideDetail("SIZE", session.SizeGb > 0 ? FormatSize(session.SizeGb) : "-");
 
         // Métrica modificada para mostrar la primera vez que se conectó en lugar de "CONNECTED SINCE"
         AddWideDetail("FIRST CONNECTED", session.ConnectedSince != default
@@ -351,7 +487,8 @@ public partial class SessionsView : UserControl
 
         ToolTip.SetTip(BtnDisconnect, mounted
             ? "Unmount the volume before disconnecting."
-            : "Disconnect the iSCSI session without deleting its saved configuration.");
+            : "Disconnect the iSCSI session without deleting its saved configuration. " +
+              "The session is shared by every LUN of this target.");
     }
     
   

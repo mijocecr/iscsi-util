@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ISCSI_Util.Models;
@@ -92,21 +90,15 @@ public static class IscsiSessions
         var byPath = (ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        var iscsiLinks = byPath
-            .Where(p => p.Contains("iscsi") && !p.Contains("part"))
-            .ToList();
-
-        // Obtenemos los puntos de montaje activos del sistema operativo una sola vez por llamada
-        var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
-        var mounts = mountsRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var iscsiLinks = IscsiByPath.ParseAll(byPath).ToList();
 
         foreach (var link in iscsiLinks)
         {
-            string portal = ExtraerPortal(link);
-            string iqn = ExtraerIqn(link);
-            int lun = ExtraerLunId(link);
+            string portal = link.Portal;
+            string iqn = link.Iqn;
+            int lun = link.LunId;
 
-            var mountPointCalculado = CalcularMountPoint(iqn);
+            var mountPointCalculado = IscsiNaming.MountPoint(ConfigManager.MountBasePath, iqn, lun);
 
             // Gestionar la fecha de primera conexión de forma persistente
             var claveHistorial = $"{iqn}|{portal}|{lun}";
@@ -129,7 +121,7 @@ public static class IscsiSessions
                 Portal = portal,
                 LunId = lun,
                 Connected = true,
-                Device = "/dev/disk/by-path/" + link.Trim(),
+                Device = "/dev/disk/by-path/" + link.Link,
                 ConnectedSince = connectedSince,
                 MountPoint = mountPointCalculado
             };
@@ -161,7 +153,9 @@ public static class IscsiSessions
             // ============================================================
             // 3) Mount runtime (Verificación real contra el OS)
             // ============================================================
-            bool realmenteMontado = mounts.Any(m => m.Contains($"on {mountPointCalculado} ", StringComparison.OrdinalIgnoreCase));
+            var mountPointReal = ObtenerPuntoMontajeReal(info.Device);
+            if (!string.IsNullOrWhiteSpace(mountPointReal))
+                info.MountPoint = mountPointReal;
 
             // ============================================================
             // 4) Vendor / Model / Size
@@ -217,7 +211,9 @@ public static class IscsiSessions
                 Portal = portal,
                 Connected = false,
                 Auth = ExtraerAuthDesdeNode(iqn, portal),
-                MountPoint = CalcularMountPoint(iqn)
+                // Un nodo configurado pero desconectado se muestra a nivel de
+                // target (LUN 0) hasta que vuelva a exponer sus LUNs.
+                MountPoint = IscsiNaming.MountPoint(ConfigManager.MountBasePath, iqn, 0)
             });
         }
 
@@ -225,73 +221,63 @@ public static class IscsiSessions
     }
 
     // ============================================================
-    // MÉTODO AUXILIAR PARA CALCULAR EL MOUNTPOINT DE FORMA DETERMINISTA
+    // JERARQUÍA Target -> LUN -> DISPOSITIVO
     // ============================================================
-    private static string CalcularMountPoint(string iqn)
+
+    public static List<IscsiTargetNode> AgruparPorTarget(IEnumerable<SessionInfo> sesiones)
     {
-        if (string.IsNullOrWhiteSpace(iqn))
+        var targets = new List<IscsiTargetNode>();
+        var index = new Dictionary<string, IscsiTargetNode>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var session in sesiones)
+        {
+            var key = $"{session.Iqn}|{session.Portal}";
+
+            if (!index.TryGetValue(key, out var target))
+            {
+                target = new IscsiTargetNode
+                {
+                    Iqn = session.Iqn,
+                    Portal = session.Portal
+                };
+
+                index[key] = target;
+                targets.Add(target);
+            }
+
+            target.Luns.Add(new IscsiLunNode
+            {
+                LunId = session.LunId,
+                Session = session
+            });
+        }
+
+        foreach (var target in targets)
+            target.Luns.Sort((a, b) => a.LunId.CompareTo(b.LunId));
+
+        return targets;
+    }
+
+    // ============================================================
+    // MOUNTPOINT REAL EN RUNTIME
+    // ============================================================
+
+    private static string ObtenerPuntoMontajeReal(string device)
+    {
+        if (string.IsNullOrWhiteSpace(device))
             return string.Empty;
 
-        var basePath = ConfigManager.MountBasePath;
+        var result = ShellHelper.EjecutarComoRoot(
+            $"findmnt -rn -S \"{device}\" -o TARGET"
+        );
 
-        var safeIqn = iqn
-            .Replace(":", "_")
-            .Replace("/", "_")
-            .Replace(".", "_")
-            .Replace("-", "_");
+        if (result.ExitCode != 0 || string.IsNullOrWhiteSpace(result.Stdout))
+            return string.Empty;
 
-        var hash = Convert.ToHexString(
-            SHA1.HashData(Encoding.UTF8.GetBytes(iqn))
-        ).Substring(0, 8);
-
-        return Path.Combine(basePath, $"{safeIqn}_{hash}");
-    }
-
-    // ============================================================
-    // HELPERS EXISTENTES
-    // ============================================================
-    
-    private static string ExtraerPortal(string link)
-    {
-        var ipMarker = link.IndexOf("ip-", StringComparison.OrdinalIgnoreCase);
-        var iscsiMarker = link.IndexOf("-iscsi-", StringComparison.OrdinalIgnoreCase);
-        if (ipMarker < 0 || iscsiMarker <= ipMarker + 3)
-            return "";
-
-        return link[(ipMarker + 3)..iscsiMarker].Trim();
-    }
-
-    private static string ExtraerIqn(string link)
-    {
-        int start = link.IndexOf("iscsi-");
-        if (start < 0) return "";
-
-        string sub = link.Substring(start + "iscsi-".Length);
-
-        int lunIndex = sub.IndexOf("-lun");
-        if (lunIndex > 0)
-            sub = sub.Substring(0, lunIndex);
-
-        return sub.Trim();
-    }
-
-    private static int ExtraerLunId(string link)
-    {
-        try
-        {
-            var parts = link.Split('-');
-            foreach (var p in parts)
-            {
-                if (p.StartsWith("lun"))
-                {
-                    var num = p.Replace("lun", "").Replace("-", "");
-                    if (int.TryParse(num, out int lun))
-                        return lun;
-                }
-            }
-        }
-        catch { }
-        return 0;
+        return result.Stdout
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()?
+            .Trim() ?? string.Empty;
     }
 
     public static string ExtraerAuthDesdeNode(string iqn, string portal)
