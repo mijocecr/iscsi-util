@@ -34,6 +34,9 @@ This application presents those capabilities through a modern interface that foc
 - **Multi‑LUN Support**  
   Targets that expose several logical units are shown as a target with independent LUN children, each with its own device, filesystem, mount point and size.
 
+- **Per‑LUN Actions**
+  Select a specific LUN in the Targets panel and connect, mount, initialize, or enable autostart for that LUN without affecting the others.
+
 - **Hot LUN Rescan**  
   Detect newly exposed LUNs or capacity changes without restarting the iSCSI session or unmounting volumes. Mounted ext2/3/4, XFS and Btrfs filesystems are expanded online when the underlying device grows.
 

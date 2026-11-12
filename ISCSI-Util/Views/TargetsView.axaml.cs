@@ -25,8 +25,12 @@ public partial class TargetsView : UserControl
         "avares://ISCSI-Util/Assets/Icons/target-green.jpeg";
 
     private readonly List<IscsiDestino> _targets = new();
+    private readonly Dictionary<string, List<IscsiDestino>> _targetLuns =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _systemOperationLock = new(1, 1);
     private IscsiDestino? _selected;
+    private int _selectedLun = int.MinValue;
+    private bool _updatingLunSelector;
     private string _lastValidIp = "";
 
     public TargetsView()
@@ -37,7 +41,9 @@ public partial class TargetsView : UserControl
         BtnDeleteNode.Click += OnDeleteNode;
         BtnHeaderUnmount.Click += OnPrimaryHeaderAction; // Botón inteligente unificado
         BtnHeaderOpen.Click += OnHeaderOpen;
+        BtnInitializeLun.Click += OnInitializeLun;
         BtnTogglePersist.Click += OnTogglePersist;
+        LunSelector.SelectionChanged += OnLunSelectionChanged;
     }
 
     // ============================================================
@@ -107,6 +113,116 @@ public partial class TargetsView : UserControl
         return true;
     }
 
+    // ============================================================
+    // LUN HELPERS
+    // ============================================================
+
+    private static string TargetKey(IscsiDestino destino) =>
+        $"{destino.Iqn}|{destino.Ip}";
+
+    private static bool MismoPortal(string? a, string? b)
+    {
+        static string Normalizar(string? portal)
+        {
+            var value = (portal ?? "").Trim();
+            if (value.Length == 0)
+                return "";
+
+            var comma = value.IndexOf(',');
+            if (comma >= 0)
+                value = value[..comma];
+
+            if (!value.Contains(':'))
+                value += ":3260";
+
+            return value.ToLowerInvariant();
+        }
+
+        return Normalizar(a) == Normalizar(b);
+    }
+
+    private static IscsiDestino CrearDestinoLun(IscsiDestino target, int lunId) => new()
+    {
+        Iqn = target.Iqn,
+        Ip = target.Ip,
+        PortalReal = string.IsNullOrWhiteSpace(target.PortalReal) ? target.Ip : target.PortalReal,
+        LunId = lunId,
+        RequiresChap = target.RequiresChap,
+        RequiresMutualChap = target.RequiresMutualChap,
+        HasLocalChapConfigured = target.HasLocalChapConfigured,
+        HasLocalMutualConfigured = target.HasLocalMutualConfigured,
+        LocalUser = target.LocalUser,
+        LocalPass = target.LocalPass,
+        LocalUserIn = target.LocalUserIn,
+        LocalPassIn = target.LocalPassIn,
+        UsaChap = target.UsaChap,
+        UsaMutualChap = target.UsaMutualChap,
+        ConnectedSince = target.ConnectedSince
+    };
+
+    private async Task<List<IscsiDestino>> GetLunsAsync(IscsiDestino target)
+    {
+        string key = TargetKey(target);
+        if (_targetLuns.TryGetValue(key, out var cached))
+            return cached;
+
+        var luns = await CargarLunsAsync(target);
+        _targetLuns[key] = luns;
+        return luns;
+    }
+
+    private async Task<List<IscsiDestino>> CargarLunsAsync(IscsiDestino target)
+    {
+        var linksRaw = await RunSystemOperationAsync(
+            () => ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "");
+
+        var links = linksRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        var entries = IscsiByPath.ParseAll(links)
+            .Where(e => e.Iqn.Equals(target.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                        MismoPortal(e.Portal, target.Ip))
+            .GroupBy(e => e.LunId)
+            .Select(g => g.OrderBy(e => e.Link, StringComparer.OrdinalIgnoreCase).First())
+            .OrderBy(e => e.LunId)
+            .ToList();
+
+        var luns = new List<IscsiDestino>();
+
+        if (entries.Count == 0)
+        {
+            var placeholder = CrearDestinoLun(target, 0);
+            await RunSystemOperationAsync(async () =>
+            {
+                await IscsiHelper.CompletarInformacionDestino(placeholder, 0);
+                // CompletarInformacionDestino sale antes de detectar persistencia
+                // cuando el target está desconectado; la comprobamos igualmente.
+                placeholder.Persistir = IscsiPersistenceManager.Detect(placeholder);
+            });
+            luns.Add(placeholder);
+            return luns;
+        }
+
+        foreach (var entry in entries)
+        {
+            var lun = CrearDestinoLun(target, entry.LunId);
+            await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(lun, 0));
+            luns.Add(lun);
+        }
+
+        return luns;
+    }
+
+    private IscsiDestino? GetCurrentLun()
+    {
+        if (_selected == null)
+            return null;
+
+        if (!_targetLuns.TryGetValue(TargetKey(_selected), out var luns))
+            return null;
+
+        return luns.FirstOrDefault(l => l.LunId == _selectedLun) ?? luns.FirstOrDefault();
+    }
+
     private string RemoveInvalidChars(string s)
     {
         return new string(s.Where(c => char.IsDigit(c) || c == '.').ToArray());
@@ -151,6 +267,8 @@ public partial class TargetsView : UserControl
         using (LoadingService.Show("Discovering targets..."))
         {
             _targets.Clear();
+            _targetLuns.Clear();
+            _selectedLun = int.MinValue;
             discovered = await RunSystemOperationAsync(() => IscsiHelper.Descubrir(portal));
 
             // Scan targets safely
@@ -180,6 +298,9 @@ public partial class TargetsView : UserControl
     private async Task RefreshTargetsList()
     {
         string? selectedIQN = _selected?.Iqn;
+        string? selectedPortal = _selected?.Ip;
+
+        _targetLuns.Clear();
 
         // Safe scanning
         foreach (var destino in _targets)
@@ -198,7 +319,12 @@ public partial class TargetsView : UserControl
 
         RebuildTargetsList();
 
-        _selected = _targets.FirstOrDefault(t => t.Iqn == selectedIQN);
+        _selected = _targets.FirstOrDefault(t =>
+            t.Iqn.Equals(selectedIQN ?? "", StringComparison.OrdinalIgnoreCase) &&
+            MismoPortal(t.Ip, selectedPortal));
+
+        if (_selected == null && !string.IsNullOrWhiteSpace(selectedIQN))
+            _selected = _targets.FirstOrDefault(t => t.Iqn == selectedIQN);
 
         if (_selected != null)
             await LoadTargetDetailsAsync(_selected);
@@ -207,6 +333,7 @@ public partial class TargetsView : UserControl
             DetailsInfoPanel.Children.Clear();
             HeaderRow.IsVisible = false;
             HeaderActionsRow.IsVisible = false;
+            LunSelectorRow.IsVisible = false;
         }
     }
 
@@ -288,7 +415,9 @@ public partial class TargetsView : UserControl
             Cursor = new Cursor(StandardCursorType.Hand)
         };
 
-        if (_selected?.Iqn == destino.Iqn)
+        if (_selected != null &&
+            _selected.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
+            MismoPortal(_selected.Ip, destino.Ip))
             border.Classes.Add("selected");
 
         var grid = new Grid
@@ -416,76 +545,6 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(chapBtn);
         }
 
-        if (CanInitializeTarget(destino))
-        {
-            var initBtn = new Button
-            {
-                Content = "INIT",
-                Width = 90,
-                Height = 28,
-                Background = Brushes.Orange,
-                Foreground = Brushes.White,
-                FontWeight = FontWeight.Bold,
-                Classes = { "SteamButton" }
-            };
-
-            initBtn.Click += async (_, _) =>
-            {
-                if (this.GetVisualRoot() is Window owner)
-                {
-                    var current = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
-                    if (current == null)
-                    {
-                        await RefreshTargetsList();
-                        return;
-                    }
-
-                    try
-                    {
-                        using (LoadingService.Show("Verifying target..."))
-                        {
-                            await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
-                            await UpdateTargetStateAsync(current);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        LogService.Error($"[INIT] Unable to verify target: {ex.Message}");
-                        await RefreshTargetsList();
-                        return;
-                    }
-
-                    if (!CanInitializeTarget(current))
-                    {
-                        await RefreshTargetsList();
-                        return;
-                    }
-
-                    var dlg = new InitializeDiskDialog(current);
-                    bool? success = await dlg.ShowDialog<bool>(owner);
-
-                    if (success == true)
-                    {
-                        using (LoadingService.Show("Updating target info..."))
-                        {
-                            try
-                            {
-                                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(current, 0));
-                            }
-                            catch (Exception ex)
-                            {
-                                LogService.Error($"[INIT] {ex.Message}");
-                            }
-                        }
-                    }
-
-                    await RefreshTargetsList();
-                }
-            };
-
-            btnRow.Children.Add(initBtn);
-        }
-
         grid.Children.Add(btnRow);
         Grid.SetColumn(btnRow, 1);
         Grid.SetRow(btnRow, 1);
@@ -494,11 +553,17 @@ public partial class TargetsView : UserControl
         {
             e.Handled = true;
 
-            var selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+            var selected = _targets.FirstOrDefault(t =>
+                               t.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                               MismoPortal(t.Ip, destino.Ip))
+                           ?? _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+
             if (selected == null)
                 return;
 
             _selected = selected;
+            _selectedLun = int.MinValue;
+            _targetLuns.Remove(TargetKey(selected));
 
             foreach (var child in TargetsList.Children)
             {
@@ -522,7 +587,9 @@ public partial class TargetsView : UserControl
             }
 
             RebuildTargetsList();
-            if (_targets.Any(t => t.Iqn == selected.Iqn))
+            if (_targets.Any(t =>
+                    t.Iqn.Equals(selected.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                    MismoPortal(t.Ip, selected.Ip)))
                 await LoadTargetDetailsAsync(selected);
         };
 
@@ -536,26 +603,104 @@ public partial class TargetsView : UserControl
 
     private async Task LoadTargetDetailsAsync(IscsiDestino destino)
     {
-        _selected = _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+        _selected = _targets.FirstOrDefault(t =>
+                        t.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                        MismoPortal(t.Ip, destino.Ip))
+                    ?? _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+
         if (_selected == null)
             return;
 
         destino = _selected;
 
-        DetailsInfoPanel.Children.Clear();
         HeaderRow.IsVisible = true;
         HeaderActionsRow.IsVisible = true;
         BtnDeleteNode.IsVisible = true;
         TargetDetailsTitle.Text = GetTargetDisplayName(destino);
 
-        bool persistente = destino.Persistir;
-        BtnTogglePersist.IsEnabled = destino.Conectado;
-        BtnTogglePersist.Content = persistente ? "No Autostart" : "Autostart";
+        var luns = await GetLunsAsync(destino);
+        var lun = luns.FirstOrDefault(l => l.LunId == _selectedLun) ?? luns.FirstOrDefault();
+
+        if (lun == null)
+        {
+            DetailsInfoPanel.Children.Clear();
+            LunSelectorRow.IsVisible = false;
+            return;
+        }
+
+        _selectedLun = lun.LunId;
+        UpdateLunSelector(luns);
+        PintarDetallesLun(destino, lun);
+    }
+
+    private void UpdateLunSelector(IReadOnlyList<IscsiDestino> luns)
+    {
+        var options = luns
+            .Select(l => new LunOption(l.LunId, BuildLunLabel(l)))
+            .ToList();
+
+        _updatingLunSelector = true;
+        try
+        {
+            LunSelector.ItemsSource = options;
+            LunSelector.SelectedItem = options.FirstOrDefault(o => o.LunId == _selectedLun);
+        }
+        finally
+        {
+            _updatingLunSelector = false;
+        }
+
+        LunSelectorRow.IsVisible = options.Count > 1;
+    }
+
+    private static string BuildLunLabel(IscsiDestino lun)
+    {
+        var parts = new List<string> { $"LUN {lun.LunId}" };
+
+        if (!lun.Conectado)
+        {
+            parts.Add("disconnected");
+        }
+        else
+        {
+            if (lun.SizeGb > 0)
+                parts.Add($"{lun.SizeGb} GB");
+
+            parts.Add(lun.TieneFilesystem ? lun.FsType : "unformatted");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private async void OnLunSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingLunSelector || _selected == null)
+            return;
+
+        if (LunSelector.SelectedItem is not LunOption option || option.LunId == _selectedLun)
+            return;
+
+        var luns = await GetLunsAsync(_selected);
+        var lun = luns.FirstOrDefault(l => l.LunId == option.LunId);
+        if (lun == null)
+            return;
+
+        _selectedLun = lun.LunId;
+        PintarDetallesLun(_selected, lun);
+    }
+
+    private void PintarDetallesLun(IscsiDestino target, IscsiDestino lun)
+    {
+        _selectedLun = lun.LunId;
+        DetailsInfoPanel.Children.Clear();
+
+        BtnTogglePersist.IsEnabled = lun.Conectado;
+        BtnTogglePersist.Content = lun.Persistir ? "No Autostart" : "Autostart";
 
         var infoGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("80, *"),
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
             RowSpacing = 4
         };
 
@@ -582,33 +727,35 @@ public partial class TargetsView : UserControl
             infoGrid.Children.Add(val);
         }
 
-        AddRow("IQN:", destino.Iqn, 0);
-        AddRow("Portal:", destino.Ip, 1);
+        AddRow("IQN:", target.Iqn, 0);
+        AddRow("Portal:", target.Ip, 1);
+        AddRow("LUN:", lun.LunId.ToString(), 2);
         AddRow("Status:",
-            destino.Conectado ? "Connected" : "Disconnected",
-            2,
-            destino.Conectado
+            lun.Conectado ? "Connected" : "Disconnected",
+            3,
+            lun.Conectado
                 ? (IBrush)Application.Current!.FindResource("SteamGreen")!
                 : Brushes.OrangeRed
         );
-        AddRow("Filesystem:", destino.TieneFilesystem ? $"Yes ({destino.FsType})" : "No", 3);
-        AddRow("Capacity:", destino.SizeGb > 0 ? $"{destino.SizeGb} GB" : "-", 4);
+        AddRow("Filesystem:", lun.TieneFilesystem ? $"Yes ({lun.FsType})" : "No", 4);
+        AddRow("Capacity:", lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-", 5);
+        AddRow("Mount:", string.IsNullOrWhiteSpace(lun.MountPoint) ? "-" : lun.MountPoint, 6);
 
         DetailsInfoPanel.Children.Add(infoGrid);
-        
-        DetailsIcon.Source = LoadIcon(GetIconForChap(destino));
+
+        DetailsIcon.Source = LoadIcon(GetIconForChap(lun));
 
         var mountsRaw = ShellHelper.EjecutarComoRoot("mount").Stdout ?? "";
-        bool mounted = destino.Conectado &&
-                       !string.IsNullOrWhiteSpace(destino.MountPoint) &&
-                       mountsRaw.Contains($"on {destino.MountPoint} ", StringComparison.OrdinalIgnoreCase);
+        bool mounted = lun.Conectado &&
+                       !string.IsNullOrWhiteSpace(lun.MountPoint) &&
+                       mountsRaw.Contains($"on {lun.MountPoint} ", StringComparison.OrdinalIgnoreCase);
 
-        if (!destino.Conectado)
+        if (!lun.Conectado)
         {
             BtnHeaderUnmount.Content = "Connect";
             BtnHeaderUnmount.IsVisible = true;
         }
-        else if (!mounted && IscsiHelper.EsFilesystemMontable(destino.FsType))
+        else if (!mounted && IscsiHelper.EsFilesystemMontable(lun.FsType))
         {
             BtnHeaderUnmount.Content = "Mount";
             BtnHeaderUnmount.IsVisible = true;
@@ -624,10 +771,26 @@ public partial class TargetsView : UserControl
         }
 
         BtnHeaderOpen.IsVisible = mounted &&
-                                  !string.IsNullOrWhiteSpace(destino.MountPoint) &&
-                                  Directory.Exists(destino.MountPoint);
+                                  !string.IsNullOrWhiteSpace(lun.MountPoint) &&
+                                  Directory.Exists(lun.MountPoint);
 
-        await Task.CompletedTask;
+        bool canInitialize = CanInitializeTarget(lun);
+        BtnInitializeLun.IsVisible = canInitialize;
+        BtnInitializeLun.IsEnabled = canInitialize;
+    }
+
+    private sealed class LunOption
+    {
+        public LunOption(int lunId, string label)
+        {
+            LunId = lunId;
+            Label = label;
+        }
+
+        public int LunId { get; }
+        public string Label { get; }
+
+        public override string ToString() => Label;
     }
 
     private static bool CanInitializeTarget(IscsiDestino destino) =>
@@ -646,7 +809,7 @@ public partial class TargetsView : UserControl
 
     private async void OnTogglePersist(object? sender, RoutedEventArgs e)
     {
-        var selected = _selected;
+        var selected = GetCurrentLun();
         if (selected == null)
             return;
 
@@ -685,6 +848,9 @@ public partial class TargetsView : UserControl
         if (!EsIpCompletaValida(portal))
             return;
 
+        string? selectedIqn = _selected?.Iqn;
+        string? selectedPortal = _selected?.Ip;
+
         try
         {
             var discovered = await RunSystemOperationAsync(() => IscsiHelper.Descubrir(portal));
@@ -703,8 +869,13 @@ public partial class TargetsView : UserControl
 
             _targets.Clear();
             _targets.AddRange(discovered);
+            _targetLuns.Clear();
 
-            _selected = _targets.FirstOrDefault();
+            _selected = _targets.FirstOrDefault(t =>
+                            t.Iqn.Equals(selectedIqn ?? "", StringComparison.OrdinalIgnoreCase) &&
+                            MismoPortal(t.Ip, selectedPortal))
+                        ?? _targets.FirstOrDefault(t => t.Iqn == selectedIqn)
+                        ?? _targets.FirstOrDefault();
         }
         catch (Exception ex)
         {
@@ -715,7 +886,7 @@ public partial class TargetsView : UserControl
     // Botón inteligente unificado en la cabecera (Conectar, Montar o Desmontar según estado) - Protegido contra fallos CHAP
     private async void OnPrimaryHeaderAction(object? sender, RoutedEventArgs e)
     {
-        var selected = _selected;
+        var selected = GetCurrentLun();
         if (selected == null)
             return;
 
@@ -735,6 +906,14 @@ public partial class TargetsView : UserControl
             }
             else if (!mounted && IscsiHelper.EsFilesystemMontable(selected.FsType))
             {
+                if (string.IsNullOrWhiteSpace(selected.MountPoint))
+                {
+                    selected.MountPoint = IscsiNaming.MountPoint(
+                        ConfigManager.MountBasePath,
+                        selected.Iqn,
+                        selected.LunId);
+                }
+
                 using (LoadingService.Show("Mounting..."))
                 {
                     await RunSystemOperationAsync(() => IscsiHelper.MontarDestino(selected));
@@ -758,7 +937,8 @@ public partial class TargetsView : UserControl
 
     private void OnHeaderOpen(object? sender, RoutedEventArgs e)
     {
-        if (_selected == null || string.IsNullOrEmpty(_selected.MountPoint) || !Directory.Exists(_selected.MountPoint))
+        var lun = GetCurrentLun();
+        if (lun == null || string.IsNullOrEmpty(lun.MountPoint) || !Directory.Exists(lun.MountPoint))
             return;
 
         try
@@ -766,7 +946,7 @@ public partial class TargetsView : UserControl
             Process.Start(new ProcessStartInfo
             {
                 FileName = "xdg-open",
-                Arguments = $"\"{_selected.MountPoint}\"",
+                Arguments = $"\"{lun.MountPoint}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true
             });
@@ -775,6 +955,41 @@ public partial class TargetsView : UserControl
         {
             LogService.Error($"[TARGETS] Error opening directory: {ex.Message}");
         }
+    }
+
+    private async void OnInitializeLun(object? sender, RoutedEventArgs e)
+    {
+        var lun = GetCurrentLun();
+        if (lun == null || this.GetVisualRoot() is not Window owner)
+            return;
+
+        try
+        {
+            using (LoadingService.Show("Verifying LUN..."))
+            {
+                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(lun, 0));
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[INIT] Unable to verify LUN {lun.LunId}: {ex.Message}");
+            await RefreshTargetsList();
+            return;
+        }
+
+        if (!CanInitializeTarget(lun))
+        {
+            await RefreshTargetsList();
+            return;
+        }
+
+        var dlg = new InitializeDiskDialog(lun);
+        bool? success = await dlg.ShowDialog<bool>(owner);
+
+        if (success == true && _selected != null)
+            _targetLuns.Remove(TargetKey(_selected));
+
+        await RefreshTargetsList();
     }
 
     private async void OnDeleteNode(object? sender, RoutedEventArgs e)
@@ -796,8 +1011,15 @@ public partial class TargetsView : UserControl
         }
 
         _targets.Remove(selected);
-        if (_selected?.Iqn == selected.Iqn)
+        _targetLuns.Remove(TargetKey(selected));
+
+        if (_selected != null &&
+            _selected.Iqn.Equals(selected.Iqn, StringComparison.OrdinalIgnoreCase) &&
+            MismoPortal(_selected.Ip, selected.Ip))
+        {
             _selected = null;
+            _selectedLun = int.MinValue;
+        }
 
         await RefreshTargetsList();
     }
