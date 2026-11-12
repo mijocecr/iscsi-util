@@ -62,7 +62,7 @@
 
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+    <Grid RowDefinitions="Auto,*" Margin="12" RowSpacing="12">
 
         <!-- DISCOVER -->
         <StackPanel Grid.Row="0"
@@ -85,157 +85,153 @@
                     Click="DiscoverButton_Click" />
         </StackPanel>
 
-        <!-- TARGET LIST -->
-        <Border Grid.Row="1"
-                Cursor="Hand"
-                Classes="SteamCard"
-                MinHeight="120"
-                Margin="0,12,0,5">
+        <!-- CONTENIDO PRINCIPAL (2 Columnas) -->
+        <Grid Grid.Row="1" ColumnDefinitions="1*,1.5*" ColumnSpacing="12">
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel x:Name="TargetsList"
-                            Spacing="10" />
-            </ScrollViewer>
-        </Border>
+            <!-- COLUMNA IZQUIERDA: Lista de targets -->
+            <Border Grid.Column="0"
+                    Cursor="Hand"
+                    Background="{DynamicResource SteamPanel}"
+                    BorderBrush="{DynamicResource SteamBorder}"
+                    BorderThickness="1.2"
+                    CornerRadius="12"
+                    Padding="8">
 
-        <!-- DETAILS PANEL -->
-        <Border Grid.Row="2"
-                x:Name="DetailsCard"
-                Classes="SteamCard"
-                Margin="0,5,0,0"
-                MaxHeight="300"
-                CornerRadius="10"
-                IsVisible="False">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="TargetsList"
+                                Spacing="8"
+                                HorizontalAlignment="Stretch" />
+                </ScrollViewer>
+            </Border>
 
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#102A475E" Offset="0"/>
-                    <GradientStop Color="#081B2838" Offset="1"/>
-                </LinearGradientBrush>
-            </Border.Background>
+            <!-- COLUMNA DERECHA: Detalles del LUN seleccionado -->
+            <Border Grid.Column="1"
+                    x:Name="DetailsCard"
+                    Classes="SteamCard"
+                    BorderBrush="{DynamicResource SteamBorder}"
+                    BorderThickness="1.2"
+                    CornerRadius="10"
+                    IsVisible="False">
 
-            <StackPanel Spacing="1">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#102A475E" Offset="0"/>
+                        <GradientStop Color="#081B2838" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
 
-                <!-- TARGET TITLE -->
-                <Grid ColumnDefinitions="*,Auto"
-                      Margin="0,0,0,0"
-                      x:Name="HeaderRow"
-                      IsVisible="False">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="6">
 
-                    <TextBlock x:Name="TargetDetailsTitle"
-                               HorizontalAlignment="Center"
-                               FontSize="15"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamGreen}"
-                               VerticalAlignment="Center"
-                               TextAlignment="Center"/>
+                        <!-- CABECERA: título, borrar nodo e icono -->
+                        <Grid x:Name="HeaderRow"
+                              ColumnDefinitions="*,64"
+                              ColumnSpacing="8"
+                              IsVisible="False">
 
-                    <Button x:Name="BtnDeleteNode"
-                            Grid.Column="1"
-                            Content="Delete Node"
-                            ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
-                            Classes="SteamButton"
-                            Width="140"
-                            IsVisible="False"
-                            Background="DarkRed"
-                            Foreground="White"/>
-                </Grid>
+                            <StackPanel VerticalAlignment="Center" Spacing="4">
+                                <TextBlock x:Name="TargetDetailsTitle"
+                                           FontSize="13"
+                                           FontWeight="Bold"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SteamGreen}"/>
 
-                <!-- LUN SELECTOR -->
-                <Grid x:Name="LunSelectorRow"
-                      ColumnDefinitions="Auto,*"
-                      ColumnSpacing="8"
-                      Margin="0,2,0,2"
-                      IsVisible="False">
-                    <TextBlock Text="LUN:"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource SteamBlue}"/>
+                                <Button x:Name="BtnDeleteNode"
+                                        Content="Delete Node"
+                                        ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
+                                        Classes="SteamButton"
+                                        Width="100"
+                                        HorizontalAlignment="Left"
+                                        IsVisible="False"
+                                        Background="DarkRed"
+                                        Foreground="White"/>
+                            </StackPanel>
 
-                    <ComboBox x:Name="LunSelector"
-                              Grid.Column="1"
-                              Width="220"
-                              HorizontalAlignment="Left"
-                              ToolTip.Tip="Select the LUN to manage. Connect, mount, initialize and persistence apply to this LUN."/>
-                </Grid>
+                            <Border Grid.Column="1"
+                                    Width="64"
+                                    Height="64"
+                                    Padding="2"
+                                    CornerRadius="8"
+                                    BorderBrush="{DynamicResource SteamBorderStrong}"
+                                    BorderThickness="2"
+                                    Background="White"
+                                    ClipToBounds="True">
+                                <Image x:Name="DetailsIcon"
+                                       Width="58"
+                                       Height="58"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"/>
+                            </Border>
+                        </Grid>
 
-                <!-- TARGET ACTIONS -->
-                <Grid x:Name="HeaderActionsRow"
-                      ColumnDefinitions="Auto,Auto,Auto,*,Auto"
-                      ColumnSpacing="1"
-                      IsVisible="False">
-                    <Button x:Name="BtnHeaderUnmount"
-                            Grid.Column="0"
-                            Content="Unmount"
-                            Classes="SteamButton"
-                            Width="104"
-                            IsVisible="False"/>
+                        <!-- SELECTOR DE LUN -->
+                        <Grid x:Name="LunSelectorRow"
+                              ColumnDefinitions="Auto,*"
+                              ColumnSpacing="6"
+                              IsVisible="False">
+                            <TextBlock Text="LUN:"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SteamBlue}"/>
 
-                    <Button x:Name="BtnHeaderOpen"
-                            Grid.Column="1"
-                            Content="Open"
-                            Classes="SteamButton"
-                            Width="104"
-                            IsVisible="False"/>
+                            <ComboBox x:Name="LunSelector"
+                                      Grid.Column="1"
+                                      HorizontalAlignment="Stretch"
+                                      ToolTip.Tip="Select the LUN to manage. Connect, mount, initialize and persistence apply to this LUN."/>
+                        </Grid>
 
-                    <Button x:Name="BtnInitializeLun"
-                            Grid.Column="2"
-                            Content="Initialize LUN"
-                            ToolTip.Tip="Format and mount the selected LUN. This destroys existing data on it."
-                            Classes="SteamButton"
-                            Width="104"
-                            IsVisible="False"/>
+                        <!-- ACCIONES DEL LUN -->
+                        <WrapPanel x:Name="HeaderActionsRow"
+                                   Orientation="Horizontal"
+                                   IsVisible="False">
+                            <Button x:Name="BtnHeaderUnmount"
+                                    Content="Unmount"
+                                    Classes="SteamButton"
+                                    Width="104"
+                                    Margin="0,0,6,6"
+                                    IsVisible="False"/>
 
-                    <Button x:Name="BtnTogglePersist"
-                            Grid.Column="4"
-                            Content="Persist"
-                            Classes="SteamButton"
-                            Width="104"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"/>
-                </Grid>
+                            <Button x:Name="BtnHeaderOpen"
+                                    Content="Open"
+                                    Classes="SteamButton"
+                                    Width="104"
+                                    Margin="0,0,6,6"
+                                    IsVisible="False"/>
 
+                            <Button x:Name="BtnInitializeLun"
+                                    Content="Initialize LUN"
+                                    ToolTip.Tip="Format and mount the selected LUN. This destroys existing data on it."
+                                    Classes="SteamButton"
+                                    Width="104"
+                                    Margin="0,0,6,6"
+                                    IsVisible="False"/>
 
-                <Rectangle Height="1"
-                           Fill="#40FFFFFF"
-                           Margin="0,1,0,1"/>
+                            <Button x:Name="BtnTogglePersist"
+                                    Content="Persist"
+                                    Classes="SteamButton"
+                                    Width="104"
+                                    Margin="0,0,6,6"/>
+                        </WrapPanel>
 
-                <!-- CONTENIDO DETALLES -->
-                <Grid ColumnDefinitions="*,140"
-                      ColumnSpacing="6"
-                      Margin="0,0,0,0"
-                      VerticalAlignment="Top">
+                        <Rectangle Height="1"
+                                   Fill="#40FFFFFF"
+                                   Margin="0,1,0,1"/>
 
-                    <StackPanel x:Name="DetailsInfoPanel"
-                                Spacing="4"
-                                Margin="0,4,4,0"
-                                VerticalAlignment="Top" />
+                        <!-- INFORMACIÓN DEL LUN -->
+                        <StackPanel x:Name="DetailsInfoPanel"
+                                    Spacing="4"
+                                    VerticalAlignment="Top" />
 
-                    <Border Grid.Column="1"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Top"
-                            Padding="3"
-                            Margin="0"
-                            CornerRadius="10"
-                            BorderBrush="{DynamicResource SteamBorderStrong}"
-                            BorderThickness="3"
-                            Background="White"
-                            ClipToBounds="True">
-                        <Image x:Name="DetailsIcon"
-                               Width="130"
-                               Height="130"
-                               Stretch="Uniform"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Top"
-                               Margin="0"
-                               IsHitTestVisible="False"/>
-                    </Border>
+                    </StackPanel>
+                </ScrollViewer>
 
-                </Grid>
+            </Border>
 
-            </StackPanel>
-
-        </Border>
+        </Grid>
 
     </Grid>
 

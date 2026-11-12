@@ -408,9 +408,9 @@ public partial class TargetsView : UserControl
         var border = new Border
         {
             Classes = { "SteamCard" },
-            Padding = new Thickness(10),
+            Padding = new Thickness(8),
             CornerRadius = new CornerRadius(10),
-            Margin = new Thickness(0, 0, 0, 7),
+            Margin = new Thickness(0),
             BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
             BorderThickness = new Thickness(1.5),
             Cursor = new Cursor(StandardCursorType.Hand)
@@ -423,9 +423,9 @@ public partial class TargetsView : UserControl
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("78, *"),
+            ColumnDefinitions = new ColumnDefinitions("52, *"),
             RowDefinitions = new RowDefinitions("Auto,Auto"),
-            RowSpacing = 5
+            RowSpacing = 4
         };
 
         var icon = new Image
@@ -434,18 +434,18 @@ public partial class TargetsView : UserControl
             // El panel de detalles conserva el icono según CHAP/filesystem.
             Source = LoadIcon(TargetCardIconUri),
             Stretch = Stretch.Uniform,
-            Width = 54,
-            Height = 54,
+            Width = 40,
+            Height = 40,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
         };
 
         var iconFrame = new Border
         {
-            Width = 62,
-            Height = 62,
-            Padding = new Thickness(3),
-            CornerRadius = new CornerRadius(9),
+            Width = 46,
+            Height = 46,
+            Padding = new Thickness(2),
+            CornerRadius = new CornerRadius(8),
             BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorder")!,
             BorderThickness = new Thickness(1.5),
             Background = Brushes.White, // <--- Fondo blanco aplicado
@@ -456,7 +456,7 @@ public partial class TargetsView : UserControl
 
         grid.Children.Add(iconFrame);
         Grid.SetColumn(iconFrame, 0);
-        Grid.SetRowSpan(iconFrame, 2);
+        Grid.SetRow(iconFrame, 0);
 
         var titleRow = new Grid
         {
@@ -470,7 +470,7 @@ public partial class TargetsView : UserControl
             Text = GetTargetDisplayName(destino),
             TextAlignment = TextAlignment.Left,
             TextWrapping = TextWrapping.NoWrap,
-            FontSize = 16,
+            FontSize = 13,
             FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
@@ -547,7 +547,8 @@ public partial class TargetsView : UserControl
         }
 
         grid.Children.Add(btnRow);
-        Grid.SetColumn(btnRow, 1);
+        Grid.SetColumn(btnRow, 0);
+        Grid.SetColumnSpan(btnRow, 2);
         Grid.SetRow(btnRow, 1);
 
         border.PointerPressed += async (_, e) =>
