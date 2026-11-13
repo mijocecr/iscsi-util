@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Models;
 using ISCSI_Util.Services;
@@ -109,6 +110,10 @@ public partial class MainWindow : Window
             LogService.Error("[MAIN] Incorrect administrator password.");
             await MostrarPasswordIncorrecta();
         }
+
+        // A partir de aquí, si sudo rechaza la contraseña durante una
+        // operación, se pedirá una nueva sin reiniciar la aplicación.
+        ShellHelper.PasswordPrompt = PromptPasswordAsync;
 
         // ------------------------------------------------------------
         // 2) ARRANCAR LOS SERVICIOS iSCSI DISPONIBLES
@@ -231,6 +236,39 @@ public partial class MainWindow : Window
         ShellHelper.ResetPasswordRejection();
 
         LogService.Debug("[MAIN] Password dialog closed.");
+    }
+
+    /// <summary>
+    /// Pide una contraseña nueva cuando sudo rechazó la anterior en mitad de
+    /// una operación. Cancelar solo aborta esa operación, no cierra la app.
+    /// </summary>
+    private async Task<string?> PromptPasswordAsync()
+    {
+        try
+        {
+            return await Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                var dialog = new PasswordDialog
+                {
+                    ShutdownOnCancel = false,
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+
+                return await dialog.ShowDialog<string?>(this);
+            });
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[MAIN] Could not request a new password: {ex.Message}");
+            return null;
+        }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        ShellHelper.PasswordPrompt = null;
+        base.OnClosed(e);
     }
 
     // ============================================================

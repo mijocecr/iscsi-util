@@ -12,6 +12,14 @@ namespace ISCSI_Util.Views
     {
         private bool _closeApp = true;
 
+        /// <summary>
+        /// Cuando es <c>true</c> (valor por defecto), cerrar o cancelar el
+        /// diálogo durante el arranque termina la aplicación. Al pedir la
+        /// contraseña de nuevo en mitad de una operación debe ser <c>false</c>
+        /// para que cancelar solo aborte esa operación.
+        /// </summary>
+        public bool ShutdownOnCancel { get; set; } = true;
+
         public PasswordDialog()
         {
             LogService.Debug("[PWD_DIALOG] Inicializando diálogo de contraseña.");
@@ -21,9 +29,10 @@ namespace ISCSI_Util.Views
 
             this.Closed += (s, e) =>
             {
-                LogService.Debug($"[PWD_DIALOG] Closed → closeApp={_closeApp}");
+                LogService.Debug(
+                    $"[PWD_DIALOG] Closed → closeApp={_closeApp} shutdownOnCancel={ShutdownOnCancel}");
 
-                if (_closeApp)
+                if (_closeApp && ShutdownOnCancel)
                 {
                     LogService.Write("[PWD_DIALOG] Cerrando aplicación por cierre del diálogo.");
 

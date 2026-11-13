@@ -48,6 +48,18 @@ public static class ShellHelper
     private static readonly object PasswordStateSync = new();
     private static string _rejectedPassword = "";
 
+    // Re-prompt: cuando sudo rechaza la contraseña, la aplicación puede
+    // registrar aquí un diálogo para pedir una nueva. Solo se muestra uno a la
+    // vez aunque varias operaciones fallen al mismo tiempo.
+    private static readonly object PromptSync = new();
+    private static Task<string?>? _activePrompt;
+
+    /// <summary>
+    /// Delegado opcional que pide una contraseña nueva al usuario. Si es
+    /// <c>null</c> (por ejemplo en la CLI), un rechazo de sudo no reintenta.
+    /// </summary>
+    public static Func<Task<string?>>? PasswordPrompt { get; set; }
+
     /// <summary>Indica si la contraseña actual fue rechazada por sudo.</summary>
     public static bool HasRejectedPassword
     {
@@ -94,6 +106,98 @@ public static class ShellHelper
     }
 
     private static async Task<(int ExitCode, string Stdout, string Stderr)> RunRootCoreAsync(
+        string command,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        var attemptPassword = Credenciales.AdminPassword ?? "";
+
+        var result = await RunRootOnceAsync(command, timeout, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!IsPasswordFailure(result) || PasswordPrompt == null ||
+            cancellationToken.IsCancellationRequested)
+        {
+            return result;
+        }
+
+        // Si otra operación ya consiguió una contraseña nueva, no se vuelve a
+        // preguntar: basta con reintentar con la actual.
+        var currentPassword = Credenciales.AdminPassword ?? "";
+
+        if (string.Equals(currentPassword, attemptPassword, StringComparison.Ordinal))
+        {
+            LogService.Write("[SHELL] Sudo rechazó la contraseña; pidiendo una nueva.");
+
+            var newPassword = await RequestNewPasswordAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(newPassword))
+            {
+                LogService.Error(
+                    "[SHELL] El usuario no introdujo una contraseña nueva; no se reintenta.");
+                return result;
+            }
+
+            // Reenviar exactamente la misma contraseña que sudo acaba de
+            // rechazar solo gastaría otro intento de la cuenta.
+            if (string.Equals(newPassword, attemptPassword, StringComparison.Ordinal))
+            {
+                LogService.Error(
+                    "[SHELL] La contraseña nueva coincide con la rechazada; no se reintenta.");
+                return result;
+            }
+
+            Credenciales.AdminPassword = newPassword;
+            ResetPasswordRejection();
+        }
+
+        // Un único reintento, siempre con una contraseña distinta.
+        return await RunRootOnceAsync(command, timeout, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static bool IsPasswordFailure((int ExitCode, string Stdout, string Stderr) result)
+        => result.ExitCode == PasswordErrorExitCode &&
+           (result.Stderr == "PASSWORD_INCORRECT" ||
+            result.Stderr == "PASSWORD_REJECTED");
+
+    private static async Task<string?> RequestNewPasswordAsync(CancellationToken cancellationToken)
+    {
+        var prompt = PasswordPrompt;
+        if (prompt == null)
+            return null;
+
+        Task<string?> task;
+
+        lock (PromptSync)
+        {
+            if (_activePrompt == null || _activePrompt.IsCompleted)
+                _activePrompt = Task.Run(prompt);
+
+            task = _activePrompt;
+        }
+
+        try
+        {
+            return await task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SHELL] Error pidiendo la contraseña: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            lock (PromptSync)
+            {
+                if (ReferenceEquals(_activePrompt, task) && task.IsCompleted)
+                    _activePrompt = null;
+            }
+        }
+    }
+
+    private static async Task<(int ExitCode, string Stdout, string Stderr)> RunRootOnceAsync(
         string command,
         TimeSpan timeout,
         CancellationToken cancellationToken)

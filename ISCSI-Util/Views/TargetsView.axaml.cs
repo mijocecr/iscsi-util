@@ -908,14 +908,14 @@ public partial class TargetsView : UserControl
         if (selected == null)
             return;
 
-        bool persistente = await RunSystemOperationAsync(() => IscsiPersistenceManager.Detect(selected));
-
-        using (LoadingService.Show(persistente ? "Removing persistence..." : "Applying persistence..."))
+        try
         {
-            await Task.Delay(50);
+            bool persistente = await RunSystemOperationAsync(() => IscsiPersistenceManager.Detect(selected));
 
-            try
+            using (LoadingService.Show(persistente ? "Removing persistence..." : "Applying persistence..."))
             {
+                await Task.Delay(50);
+
                 await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
 
                 if (!persistente)
@@ -928,10 +928,11 @@ public partial class TargetsView : UserControl
                     await AutoRediscoverAfterPersistenceRemoval();
                 }
             }
-            catch (Exception ex)
-            {
-                LogService.Error($"[PERSISTENCE] {ex.Message}");
-            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[PERSISTENCE] {ex.Message}");
+            NotificadorLinux.Enviar($"Persistence change failed: {ex.Message}", 8000, "critical");
         }
 
         await RefreshTargetsList();

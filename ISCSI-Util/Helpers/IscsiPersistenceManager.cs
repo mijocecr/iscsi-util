@@ -162,6 +162,20 @@ public static class IscsiPersistenceManager
         return false;
     }
 
+    private static void EnsureSuccess(
+        (int ExitCode, string Stdout, string Stderr) result,
+        string description)
+    {
+        if (result.ExitCode == 0)
+            return;
+
+        var detail = string.IsNullOrWhiteSpace(result.Stderr)
+            ? $"exit code {result.ExitCode}"
+            : result.Stderr.Trim();
+
+        throw new Exception($"{description} failed: {detail}");
+    }
+
     // ============================================================
     // APPLY PERSISTENCE
     // ============================================================
@@ -174,6 +188,9 @@ public static class IscsiPersistenceManager
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(d.PartitionPath))
+            throw new Exception("Persistence requires a partition path.");
+
         TraceIn(id, "Apply", d.Iqn);
 
         try
@@ -184,10 +201,14 @@ public static class IscsiPersistenceManager
             if (!Directory.Exists(mp))
             {
                 Directory.CreateDirectory(mp);
-                ShellHelper.EjecutarComoRoot($"chmod {ConfigManager.DefaultPermissions} \"{mp}\"");
+                EnsureSuccess(
+                    ShellHelper.EjecutarComoRoot($"chmod {ConfigManager.DefaultPermissions} \"{mp}\""),
+                    "chmod mount point");
             }
 
             var blkid = ShellHelper.EjecutarComoRoot($"blkid {d.PartitionPath}");
+            EnsureSuccess(blkid, "blkid");
+
             string uuid = ExtraerUUID(blkid.Stdout);
 
             if (string.IsNullOrWhiteSpace(uuid))
@@ -196,8 +217,11 @@ public static class IscsiPersistenceManager
             string fs = d.FsType == "ntfs" ? "ntfs-3g" : d.FsType;
             string entry = $"UUID={uuid} {mp} {fs} {FstabHelper.NetworkOptions} 0 0";
 
-            FstabHelper.RemoveMountPoint(mp);
-            FstabHelper.AddEntry(entry);
+            if (!FstabHelper.RemoveMountPoint(mp))
+                throw new Exception("Could not clean the existing /etc/fstab entry.");
+
+            if (!FstabHelper.AddEntry(entry))
+                throw new Exception("Could not write the new /etc/fstab entry.");
 
             string portalValido = string.IsNullOrWhiteSpace(d.PortalReal) ? d.Ip : d.PortalReal;
             string servicePath = IscsiNaming.ServicePath(d.Iqn, d.LunId);
@@ -230,15 +254,22 @@ WantedBy=multi-user.target
             try
             {
                 File.WriteAllText(tempUnit, unit);
-                ShellHelper.EjecutarComoRoot($"install -m 644 \"{tempUnit}\" \"{servicePath}\"");
+                EnsureSuccess(
+                    ShellHelper.EjecutarComoRoot($"install -m 644 \"{tempUnit}\" \"{servicePath}\""),
+                    "install systemd unit");
             }
             finally
             {
                 try { File.Delete(tempUnit); } catch { }
             }
 
-            ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
-            ShellHelper.EjecutarComoRoot($"systemctl enable {serviceName}.service");
+            EnsureSuccess(
+                ShellHelper.EjecutarComoRoot("systemctl daemon-reload"),
+                "systemctl daemon-reload");
+
+            EnsureSuccess(
+                ShellHelper.EjecutarComoRoot($"systemctl enable {serviceName}.service"),
+                "systemctl enable");
 
             d.Persistir = true;
 
@@ -248,6 +279,7 @@ WantedBy=multi-user.target
         {
             LogService.Error($"[PERSIST] #{id} ERROR Apply: {ex.Message}");
             TraceOut(id, "Apply", "ERROR");
+            throw;
         }
 
         await Task.CompletedTask;
@@ -270,25 +302,41 @@ WantedBy=multi-user.target
             string mp = ObtenerMountPointTarget(d);
 
             // 1) Eliminar entrada fstab
-            FstabHelper.RemoveMountPoint(mp);
+            if (!FstabHelper.RemoveMountPoint(mp))
+                throw new Exception("Could not remove the /etc/fstab entry.");
 
             // 2) Eliminar servicio systemd
             string servicePath = IscsiNaming.ServicePath(d.Iqn, d.LunId);
 
             if (File.Exists(servicePath))
             {
-                ShellHelper.EjecutarComoRoot($"systemctl disable {serviceName}.service");
-                ShellHelper.EjecutarComoRoot($"rm -f {servicePath}");
+                EnsureSuccess(
+                    ShellHelper.EjecutarComoRoot($"systemctl disable {serviceName}.service"),
+                    "systemctl disable");
+
+                EnsureSuccess(
+                    ShellHelper.EjecutarComoRoot($"rm -f {servicePath}"),
+                    "remove systemd unit");
             }
 
-            ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
+            EnsureSuccess(
+                ShellHelper.EjecutarComoRoot("systemctl daemon-reload"),
+                "systemctl daemon-reload");
 
             // La sesión iSCSI es compartida por todos los LUNs del target y
             // puede seguir en uso. "No Autostart" solo elimina la persistencia:
             // no hace logout ni borra el nodo.
             if (Directory.Exists(mp))
             {
-                ShellHelper.EjecutarComoRoot($"rmdir \"{mp}\" 2>/dev/null");
+                var rmdir = ShellHelper.EjecutarComoRoot($"rmdir \"{mp}\" 2>/dev/null");
+
+                // rmdir falla si el punto de montaje sigue en uso; no es un
+                // error de la persistencia, así que solo se registra.
+                if (rmdir.ExitCode != 0)
+                {
+                    LogService.Debug(
+                        $"[PERSIST] #{id} No se pudo borrar '{mp}' (puede seguir en uso).");
+                }
             }
 
             d.Persistir = false;
@@ -299,6 +347,7 @@ WantedBy=multi-user.target
         {
             LogService.Error($"[PERSIST] #{id} ERROR Remove: {ex.Message}");
             TraceOut(id, "Remove", "ERROR");
+            throw;
         }
 
         await Task.CompletedTask;
