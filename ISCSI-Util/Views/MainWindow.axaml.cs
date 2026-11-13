@@ -412,13 +412,22 @@ public partial class MainWindow : Window
 
     private async void OnMainTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (MainTabs.SelectedIndex != 1)
+        // Durante InitializeComponent el campo MainTabs aun no esta asignado,
+        // pero el TabControl ya dispara SelectionChanged. Usamos el sender.
+        if (sender is not TabControl tabs || tabs.SelectedIndex != 1)
             return;
 
         if (TargetsView is ISCSI_Util.Views.TargetsView targets)
         {
-            LogService.Debug("[MAIN] Targets tab selected -> refreshing target states...");
-            await targets.ActualizarEstadoAsync();
+            try
+            {
+                LogService.Debug("[MAIN] Targets tab selected -> refreshing target states...");
+                await targets.ActualizarEstadoAsync();
+            }
+            catch (Exception ex)
+            {
+                LogService.Error($"[MAIN] Error refreshing targets: {ex.Message}");
+            }
         }
     }
 
