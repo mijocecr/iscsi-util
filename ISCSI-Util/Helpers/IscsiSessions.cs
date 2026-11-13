@@ -94,7 +94,7 @@ public static class IscsiSessions
         var historial = CargarHistorialConexiones();
         bool historialModificado = false;
 
-        var byPath = (ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "")
+        var byPath = (ShellHelper.RunClean("ls -1 /dev/disk/by-path/").Stdout ?? "")
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         var iscsiLinks = IscsiByPath.ParseAll(byPath).ToList();
@@ -142,7 +142,7 @@ public static class IscsiSessions
             // 1) Detect real partition (if any)
             // ============================================================
 
-            var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {info.Device}").Stdout ?? "";
+            var lsblkRaw = ShellHelper.RunClean($"lsblk -rno NAME,TYPE {info.Device}").Stdout ?? "";
             var lsblkLines = lsblkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var l in lsblkLines)
@@ -187,7 +187,7 @@ public static class IscsiSessions
             }
             else
             {
-                var blkRaw = ShellHelper.EjecutarComoRoot(
+                var blkRaw = ShellHelper.RunClean(
                     $"lsblk -b -dn -o SIZE \"{lunDevice}\""
                 ).Stdout ?? "";
                 var blkLines = blkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -303,7 +303,7 @@ public static class IscsiSessions
         if (string.IsNullOrWhiteSpace(device))
             return string.Empty;
 
-        var result = ShellHelper.EjecutarComoRoot(
+        var result = ShellHelper.RunClean(
             $"findmnt -rn -S \"{device}\" -o TARGET"
         );
 

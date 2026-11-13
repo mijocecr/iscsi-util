@@ -26,7 +26,7 @@ public static class IscsiPersistenceManager
         // 2. Detectar si la partición está montada
         if (!string.IsNullOrWhiteSpace(d.PartitionPath))
         {
-            string mountReal = ShellHelper.EjecutarComoRoot(
+            string mountReal = ShellHelper.RunClean(
                 $"findmnt -n -o TARGET \"{d.PartitionPath}\""
             ).Stdout.Trim();
 

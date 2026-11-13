@@ -331,7 +331,7 @@ public static class IscsiHelper
             }
 
             // 2) Detectar symlink / dispositivo activo
-            var byPathOut = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "";
+            var byPathOut = ShellHelper.RunClean("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "";
             var byPath = byPathOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             // La coincidencia debe ser por IQN + LUN: un mismo portal puede
@@ -363,7 +363,7 @@ public static class IscsiHelper
                 !long.TryParse(sizeOutput.Stdout?.Trim(), out var sizeBytes) ||
                 sizeBytes <= 0)
             {
-                sizeOutput = ShellHelper.EjecutarComoRoot(
+                sizeOutput = ShellHelper.RunClean(
                     $"lsblk -b -dn -o SIZE \"{d.DevicePath}\""
                 );
 
@@ -376,7 +376,7 @@ public static class IscsiHelper
                 : 0;
 
             // 3) Detectar si existe una partición o si es un dispositivo formateado en raw (Superfloppy)
-            var lsblk = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}");
+            var lsblk = ShellHelper.RunClean($"lsblk -rno NAME,TYPE {d.DevicePath}");
             var lines = (lsblk.Stdout ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             string? targetPath = null;
@@ -444,11 +444,11 @@ public static class IscsiHelper
         if (string.IsNullOrWhiteSpace(device))
             return null;
 
-        var real = ShellHelper.EjecutarComoRoot($"readlink -f \"{device}\"").Stdout?.Trim();
+        var real = ShellHelper.RunClean($"readlink -f \"{device}\"").Stdout?.Trim();
         if (string.IsNullOrWhiteSpace(real))
             real = device;
 
-        var result = ShellHelper.EjecutarComoRoot(
+        var result = ShellHelper.RunClean(
             $"findmnt -rn -S \"{real}\" -o TARGET"
         );
 
@@ -469,7 +469,7 @@ public static class IscsiHelper
         if (string.IsNullOrWhiteSpace(mountPoint))
             return false;
 
-        var result = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{mountPoint}\"");
+        var result = ShellHelper.RunClean($"mountpoint -q \"{mountPoint}\"");
         return result.ExitCode == 0;
     }
 
@@ -507,7 +507,7 @@ public static class IscsiHelper
         if (s == null || string.IsNullOrWhiteSpace(s.MountPoint))
             return Task.CompletedTask;
 
-        var check = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{s.MountPoint}\"");
+        var check = ShellHelper.RunClean($"mountpoint -q \"{s.MountPoint}\"");
         if (check.ExitCode == 32)
         {
             s.MountPoint = "";
@@ -538,7 +538,7 @@ public static class IscsiHelper
         if (destino == null || string.IsNullOrWhiteSpace(destino.MountPoint))
             return Task.CompletedTask;
 
-        var check = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{destino.MountPoint}\"");
+        var check = ShellHelper.RunClean($"mountpoint -q \"{destino.MountPoint}\"");
         if (check.ExitCode == 32)
         {
             destino.MountPoint = "";
@@ -598,10 +598,10 @@ public static class IscsiHelper
 
         string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER") ?? "";
         if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
-            usuarioReal = ShellHelper.EjecutarComoRoot("logname").Stdout?.Trim() ?? "1000";
+            usuarioReal = ShellHelper.RunClean("logname").Stdout?.Trim() ?? "1000";
 
-        string uid = ShellHelper.EjecutarComoRoot($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
-        string gid = ShellHelper.EjecutarComoRoot($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
+        string uid = ShellHelper.RunClean($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
+        string gid = ShellHelper.RunClean($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
 
         string mountCommand;
         if (fs is "ntfs" or "exfat" or "vfat")
@@ -640,7 +640,7 @@ public static class IscsiHelper
 
         if (!string.IsNullOrWhiteSpace(s.MountPoint))
         {
-            var mountPointCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{s.MountPoint}\"");
+            var mountPointCheck = ShellHelper.RunClean($"mountpoint -q \"{s.MountPoint}\"");
             if (mountPointCheck.ExitCode == 0)
             {
                 NotificadorLinux.Enviar("Desmonta el volumen antes de desconectar la sesión.", 5000, "warning");
@@ -656,7 +656,7 @@ public static class IscsiHelper
 
         if (!string.IsNullOrWhiteSpace(s.Device))
         {
-            var mountedDevice = ShellHelper.EjecutarComoRoot(
+            var mountedDevice = ShellHelper.RunClean(
                 $"findmnt -rn -S \"{s.Device}\" -o TARGET");
             if (mountedDevice.ExitCode > 1)
             {
@@ -716,7 +716,7 @@ private static void ForceUnmountAutoMounts(string partition, string? keepMountPo
     if (string.IsNullOrWhiteSpace(partition))
         return;
 
-    var mounts = ShellHelper.EjecutarComoRoot(
+    var mounts = ShellHelper.RunClean(
         $"findmnt -rn -o TARGET {partition}"
     ).Stdout?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
 
@@ -867,7 +867,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
 
         for (var i = 0; i < 10; i++)
         {
-            var byPathOut = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/").Stdout ?? "";
+            var byPathOut = ShellHelper.RunClean("ls -1 /dev/disk/by-path/").Stdout ?? "";
             var byPath = byPathOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             var match = IscsiByPath.Find(
@@ -961,7 +961,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         // ============================================================
         // 7) Montar con permisos eficientes (sin chown -R)
         // ============================================================
-        var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+        var mpCheck = ShellHelper.RunClean($"mountpoint -q \"{d.MountPoint}\"");
 
         if (mpCheck.ExitCode != 0)
         {
@@ -969,11 +969,11 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER");
             if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
             {
-                usuarioReal = ShellHelper.EjecutarComoRoot("logname").Stdout?.Trim() ?? "1000";
+                usuarioReal = ShellHelper.RunClean("logname").Stdout?.Trim() ?? "1000";
             }
 
-            string uid = ShellHelper.EjecutarComoRoot($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
-            string gid = ShellHelper.EjecutarComoRoot($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
+            string uid = ShellHelper.RunClean($"id -u {usuarioReal}").Stdout?.Trim() ?? "1000";
+            string gid = ShellHelper.RunClean($"id -g {usuarioReal}").Stdout?.Trim() ?? "1000";
 
             string fsLower = (d.FsType ?? "").ToLowerInvariant();
 
@@ -1144,7 +1144,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             // El nombre base cubre tanto el servicio histórico (LUN 0) como
             // los sufijos -lunN creados para el resto de unidades lógicas.
             var serviceBase = IscsiNaming.ServiceName(d.Iqn, 0);
-            var unitList = ShellHelper.EjecutarComoRoot(
+            var unitList = ShellHelper.RunClean(
                 $"ls -1 /etc/systemd/system/{serviceBase}*.service 2>/dev/null"
             ).Stdout ?? "";
 
@@ -1167,7 +1167,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             // que ya no están conectados en este momento.
             foreach (var unitPath in unitFiles)
             {
-                var unitContent = ShellHelper.EjecutarComoRoot(
+                var unitContent = ShellHelper.RunClean(
                     $"cat \"{unitPath}\" 2>/dev/null"
                 ).Stdout ?? "";
 
@@ -1184,7 +1184,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                 }
             }
 
-            var byPath = (ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "")
+            var byPath = (ShellHelper.RunClean("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "")
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             foreach (var lun in IscsiByPath.ParseAll(byPath)
@@ -1200,13 +1200,13 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             // 3) DESMONTAR Y LIMPIAR DIRECTORIOS / FSTAB
             foreach (var mountPoint in mountPoints)
             {
-                var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{mountPoint}\"");
+                var mpCheck = ShellHelper.RunClean($"mountpoint -q \"{mountPoint}\"");
                 if (mpCheck.ExitCode == 0)
                 {
                     ShellHelper.EjecutarComoRoot($"umount -l \"{mountPoint}\"");
                     await Task.Delay(300);
 
-                    mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{mountPoint}\"");
+                    mpCheck = ShellHelper.RunClean($"mountpoint -q \"{mountPoint}\"");
                     if (mpCheck.ExitCode == 0)
                     {
                         ShellHelper.EjecutarComoRoot($"umount -f \"{mountPoint}\"");
@@ -1405,7 +1405,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         try
         {
             // Strategy A: /dev/disk/by-path (IQN + LUN aware)
-            var byPathOut = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "";
+            var byPathOut = ShellHelper.RunClean("ls -1 /dev/disk/by-path/ 2>/dev/null").Stdout ?? "";
             var byPath = byPathOut.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             var entry = IscsiByPath.Find(byPath, iqn, lunId, fallbackToFirstLun: lunId == 0);
 
@@ -1413,7 +1413,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             {
                 resolvedLunId = entry.LunId;
 
-                var real = ShellHelper.EjecutarComoRoot(
+                var real = ShellHelper.RunClean(
                     $"realpath \"/dev/disk/by-path/{entry.Link}\""
                 );
 
@@ -1448,7 +1448,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                         if (!Directory.Exists(deviceSymlink))
                             continue;
 
-                        var realPath = ShellHelper.EjecutarComoRoot($"realpath \"{deviceSymlink}\"")
+                        var realPath = ShellHelper.RunClean($"realpath \"{deviceSymlink}\"")
                             .Stdout ?? "";
 
                         if (!realPath.Contains($"session{sid}") && !realPath.Contains($"target{sid}"))
@@ -1468,7 +1468,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             }
 
             // Strategy C: Fallback to lsblk + udevadm (IQN + LUN)
-            var res = ShellHelper.EjecutarComoRoot("lsblk -dno NAME,TRAN");
+            var res = ShellHelper.RunClean("lsblk -dno NAME,TRAN");
             if (res.ExitCode == 0 && !string.IsNullOrWhiteSpace(res.Stdout))
             {
                 var candidates = new List<(string Device, int Lun)>();
@@ -1580,7 +1580,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                 foreach (var file in files)
                     if (file.Contains(iqn, StringComparison.OrdinalIgnoreCase) && !file.EndsWith("-part1"))
                     {
-                        var res = ShellHelper.EjecutarComoRoot($"realpath \"{file}\"");
+                        var res = ShellHelper.RunClean($"realpath \"{file}\"");
                         if (res.ExitCode == 0 && !string.IsNullOrWhiteSpace(res.Stdout))
                         {
                             var realDev = res.Stdout.Trim();
@@ -1624,7 +1624,8 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         if (string.IsNullOrEmpty(cmd))
             return false;
 
-        var check = ShellHelper.EjecutarComoRoot($"which {cmd}");
+        var check = ShellHelper.RunClean(
+            $"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin which {cmd}");
         return check.ExitCode == 0;
     }
 

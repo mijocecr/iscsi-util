@@ -174,7 +174,7 @@ public static class IscsiCore
    
     private static void CompletarInfoCLI(IscsiDestino d)
     {
-        var byPath = ShellHelper.EjecutarComoRoot("ls -1 /dev/disk/by-path/")
+        var byPath = ShellHelper.RunClean("ls -1 /dev/disk/by-path/")
             .Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         // 1) Detectar symlink del disco base por IQN + LUN
@@ -198,7 +198,7 @@ public static class IscsiCore
         d.DevicePath = "/dev/disk/by-path/" + link.Link;
 
         // 2) Detectar partición real
-        var lsblkRaw = ShellHelper.EjecutarComoRoot($"lsblk -rno NAME,TYPE {d.DevicePath}").Stdout;
+        var lsblkRaw = ShellHelper.RunClean($"lsblk -rno NAME,TYPE {d.DevicePath}").Stdout;
         var lsblkLines = lsblkRaw.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var l in lsblkLines)
@@ -326,7 +326,7 @@ public static class IscsiCore
                 return;
             }
 
-            var mpCheck = ShellHelper.EjecutarComoRoot($"mountpoint -q \"{d.MountPoint}\"");
+            var mpCheck = ShellHelper.RunClean($"mountpoint -q \"{d.MountPoint}\"");
 
             if (mpCheck.ExitCode != 0)
             {

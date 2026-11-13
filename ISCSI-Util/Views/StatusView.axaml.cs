@@ -112,7 +112,7 @@ namespace ISCSI_Util.Views
 
             for (int i = 0; i < 60; i++)
             {
-                var result = await ShellHelper.EjecutarComoRootAsync(
+                var result = await ShellHelper.RunCleanResultAsync(
                     "systemctl show -p StatusText iscsid"
                 );
 
@@ -159,7 +159,7 @@ namespace ISCSI_Util.Views
             try
             {
                 Trace("LoadServiceStatus() → systemctl is-active iscsid");
-                var result = await ShellHelper.EjecutarComoRootAsync("systemctl is-active iscsid");
+                var result = await ShellHelper.RunCleanResultAsync("systemctl is-active iscsid");
 
                 string raw = result.Stdout.Trim().ToLower();
                 Trace($"LoadServiceStatus() raw='{raw}'");
@@ -218,7 +218,7 @@ namespace ISCSI_Util.Views
             try
             {
                 Trace("LoadDaemonStatus() → systemctl show -p StatusText iscsid");
-                var result = await ShellHelper.EjecutarComoRootAsync("systemctl show -p StatusText iscsid");
+                var result = await ShellHelper.RunCleanResultAsync("systemctl show -p StatusText iscsid");
                 string status = result.Stdout.Trim();
 
                 Trace($"LoadDaemonStatus() raw='{status}'");

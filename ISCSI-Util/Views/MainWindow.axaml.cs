@@ -132,8 +132,8 @@ public partial class MainWindow : Window
         const string daemonUnit = "iscsid.service";
         LogService.Debug("[MAIN] Discovering installed iSCSI systemd units...");
 
-        var unitsResult = await Task.Run(() =>
-            ShellHelper.EjecutarComoRoot("systemctl list-unit-files --type=service --no-legend --no-pager"));
+        var unitsResult = await ShellHelper.RunCleanResultAsync(
+            "systemctl list-unit-files --type=service --no-legend --no-pager");
 
         if (unitsResult.ExitCode != 0)
         {
@@ -155,8 +155,8 @@ public partial class MainWindow : Window
             return false;
         }
 
-        var daemonStatus = await Task.Run(() =>
-            ShellHelper.EjecutarComoRoot($"systemctl is-active --quiet {daemonUnit}"));
+        var daemonStatus = await ShellHelper.RunCleanResultAsync(
+            $"systemctl is-active --quiet {daemonUnit}");
 
         if (daemonStatus.ExitCode != 0)
         {
@@ -188,8 +188,8 @@ public partial class MainWindow : Window
                 LogService.Error($"[MAIN] Could not start optional service '{sessionUnit}': {sessionResult.Stderr}");
         }
 
-        var verifyResult = await Task.Run(() =>
-            ShellHelper.EjecutarComoRoot($"systemctl is-active --quiet {daemonUnit}"));
+        var verifyResult = await ShellHelper.RunCleanResultAsync(
+            $"systemctl is-active --quiet {daemonUnit}");
 
         if (verifyResult.ExitCode != 0)
         {
@@ -214,6 +214,7 @@ public partial class MainWindow : Window
         };
 
         Credenciales.AdminPassword = await dialog.ShowDialog<string?>(this) ?? string.Empty;
+        ShellHelper.ResetPasswordRejection();
 
         LogService.Debug("[MAIN] Password dialog closed.");
     }

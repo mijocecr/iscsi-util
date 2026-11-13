@@ -76,6 +76,7 @@ public static class CliApp
         {
             Console.Write("Enter sudo password: ");
             Credenciales.AdminPassword = ReadSecret();
+            ShellHelper.ResetPasswordRejection();
 
             if (string.IsNullOrWhiteSpace(Credenciales.AdminPassword))
             {

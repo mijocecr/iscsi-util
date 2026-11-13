@@ -18,6 +18,12 @@ namespace ISCSI_Util.Helpers;
 ///   de leer las salidas. Si se cumple, se mata todo el árbol de procesos.
 /// - Se usa ArgumentList en lugar de construir una cadena con comillas, lo que
 ///   evita problemas de escapado con rutas e IQNs.
+/// - Solo se ejecuta un comando sudo a la vez. Así se evita que varias
+///   operaciones envíen la contraseña simultáneamente y que una operación
+///   colgada bloquee a todas las demás.
+/// - Si sudo rechaza la contraseña, no se vuelve a intentar con la misma
+///   contraseña. Eso reduce el riesgo de disparar el bloqueo de la cuenta
+///   (faillock/PAM) por reintentos automáticos.
 /// </summary>
 public static class ShellHelper
 {
@@ -31,6 +37,36 @@ public static class ShellHelper
 
     private const int PasswordErrorExitCode = 1001;
     private const int TimeoutExitCode = 124;
+
+    // Un único sudo en vuelo. El timeout de la espera usa el mismo límite que
+    // el comando, de modo que una operación no puede quedarse esperando
+    // indefinidamente detrás de otra.
+    private static readonly SemaphoreSlim SudoGate = new(1, 1);
+
+    // Contraseña que sudo ya rechazó. Mientras no cambie, no se vuelve a
+    // enviar para evitar intentos repetidos que podrían bloquear la cuenta.
+    private static readonly object PasswordStateSync = new();
+    private static string _rejectedPassword = "";
+
+    /// <summary>Indica si la contraseña actual fue rechazada por sudo.</summary>
+    public static bool HasRejectedPassword
+    {
+        get
+        {
+            lock (PasswordStateSync)
+                return _rejectedPassword.Length > 0;
+        }
+    }
+
+    /// <summary>
+    /// Olvida el rechazo anterior. Se llama cuando el usuario introduce una
+    /// contraseña nueva.
+    /// </summary>
+    public static void ResetPasswordRejection()
+    {
+        lock (PasswordStateSync)
+            _rejectedPassword = "";
+    }
 
     // ============================================================
     // ROOT (sudo)
@@ -71,8 +107,36 @@ public static class ShellHelper
         if (string.IsNullOrWhiteSpace(command))
             return (1, "", "Empty command");
 
+        var password = Credenciales.AdminPassword ?? "";
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            LogService.Error(
+                $"[SHELL] #{callId} SIN CONTRASEÑA: no se ejecuta '{command}'");
+            return (PasswordErrorExitCode, "", "PASSWORD_REQUIRED");
+        }
+
+        if (IsPasswordRejected(password))
+        {
+            LogService.Error(
+                $"[SHELL] #{callId} CONTRASEÑA RECHAZADA previamente: no se ejecuta '{command}'");
+            return (PasswordErrorExitCode, "", "PASSWORD_REJECTED");
+        }
+
+        var gateTaken = false;
+
         try
         {
+            if (!await SudoGate.WaitAsync(timeout, cancellationToken).ConfigureAwait(false))
+            {
+                sw.Stop();
+                LogService.Error(
+                    $"[SHELL] #{callId} TIMEOUT esperando turno de sudo para '{command}'");
+                return (TimeoutExitCode, "", $"Timeout after {timeout.TotalSeconds:0}s waiting for sudo lock");
+            }
+
+            gateTaken = true;
+
             var psi = new ProcessStartInfo
             {
                 FileName = "sudo",
@@ -100,17 +164,21 @@ public static class ShellHelper
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
             var stderrTask = process.StandardError.ReadToEndAsync();
 
-            await WritePasswordAndCloseAsync(process).ConfigureAwait(false);
+            await WritePasswordAndCloseAsync(process, password).ConfigureAwait(false);
+
+            var remaining = timeout - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+                remaining = TimeSpan.FromMilliseconds(1);
 
             using var timeoutCts =
                 CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(timeout);
+            timeoutCts.CancelAfter(remaining);
 
             try
             {
                 await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 await KillTreeAndWaitAsync(process).ConfigureAwait(false);
 
@@ -120,6 +188,13 @@ public static class ShellHelper
                     stderrTask, TimeSpan.FromSeconds(3)).ConfigureAwait(false);
 
                 sw.Stop();
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    LogService.Error($"[SHELL] #{callId} CANCELADO: '{command}'");
+                    return (1, partialOut, "Cancelled");
+                }
+
                 LogService.Error(
                     $"[SHELL] #{callId} TIMEOUT ({timeout.TotalSeconds:0}s) ejecutando '{command}'");
 
@@ -139,10 +214,17 @@ public static class ShellHelper
             LogService.Debug(
                 $"[SHELL] #{callId} ← exit={process.ExitCode} en {sw.ElapsedMilliseconds} ms");
 
-            if (LooksLikePasswordError(stderr))
+            if (LooksLikeIncorrectPassword(stderr))
             {
+                MarkPasswordRejected(password);
                 LogService.Error($"[SHELL] #{callId} PASSWORD_INCORRECT");
                 return (PasswordErrorExitCode, stdout, "PASSWORD_INCORRECT");
+            }
+
+            if (LooksLikePasswordError(stderr))
+            {
+                LogService.Error($"[SHELL] #{callId} PASSWORD_ERROR: {stderr.Trim()}");
+                return (PasswordErrorExitCode, stdout, stderr.Trim());
             }
 
             return (process.ExitCode, stdout, stderr);
@@ -159,20 +241,21 @@ public static class ShellHelper
                 $"[SHELL] #{callId} EXCEPTION tras {sw.ElapsedMilliseconds} ms: {ex.Message}");
             return (1, "", ex.Message);
         }
+        finally
+        {
+            if (gateTaken)
+                SudoGate.Release();
+        }
     }
 
-    private static async Task WritePasswordAndCloseAsync(Process process)
+    private static async Task WritePasswordAndCloseAsync(Process process, string password)
     {
         try
         {
-            var password = Credenciales.AdminPassword;
-            if (!string.IsNullOrEmpty(password))
-            {
-                await process.StandardInput
-                    .WriteLineAsync(password.TrimEnd('\r', '\n'))
-                    .ConfigureAwait(false);
-                await process.StandardInput.FlushAsync().ConfigureAwait(false);
-            }
+            await process.StandardInput
+                .WriteLineAsync(password.TrimEnd('\r', '\n'))
+                .ConfigureAwait(false);
+            await process.StandardInput.FlushAsync().ConfigureAwait(false);
         }
         catch (IOException)
         {
@@ -224,17 +307,49 @@ public static class ShellHelper
         }
     }
 
-    private static bool LooksLikePasswordError(string stderr)
+    private static bool LooksLikeIncorrectPassword(string stderr)
     {
         if (string.IsNullOrEmpty(stderr))
             return false;
 
         return stderr.Contains("incorrect password", StringComparison.OrdinalIgnoreCase)
-            || stderr.Contains("Sorry, try again", StringComparison.OrdinalIgnoreCase)
+            || stderr.Contains("Sorry, try again", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikePasswordError(string stderr)
+    {
+        if (string.IsNullOrEmpty(stderr))
+            return false;
+
+        return LooksLikeIncorrectPassword(stderr)
             || stderr.Contains("no password was provided", StringComparison.OrdinalIgnoreCase)
             || stderr.Contains("a password is required", StringComparison.OrdinalIgnoreCase)
             || stderr.Contains("a terminal is required", StringComparison.OrdinalIgnoreCase)
             || stderr.Contains("is not in the sudoers", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPasswordRejected(string password)
+    {
+        lock (PasswordStateSync)
+        {
+            if (_rejectedPassword.Length == 0)
+                return false;
+
+            // Si la contraseña cambió, el rechazo anterior ya no aplica.
+            if (!string.Equals(_rejectedPassword, password, StringComparison.Ordinal))
+            {
+                _rejectedPassword = "";
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    private static void MarkPasswordRejected(string password)
+    {
+        lock (PasswordStateSync)
+            _rejectedPassword = password;
     }
 
     // ============================================================
@@ -250,13 +365,42 @@ public static class ShellHelper
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
+        var result = await RunCleanResultAsync(command, timeout, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.ExitCode != 0)
+        {
+            LogService.Error(
+                $"[SHELL] RunCleanAsync exit={result.ExitCode}: {command}");
+            return string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Stderr))
+        {
+            LogService.Error($"[SHELL] RunCleanAsync stderr: {result.Stderr}");
+            return string.Empty;
+        }
+
+        return result.Stdout.Trim();
+    }
+
+    /// <summary>
+    /// Igual que <see cref="RunCleanAsync"/> pero devuelve también el código de
+    /// salida. Necesario para comandos como `systemctl is-active`, donde un
+    /// código distinto de cero es una respuesta válida (inactivo).
+    /// </summary>
+    public static async Task<(int ExitCode, string Stdout, string Stderr)> RunCleanResultAsync(
+        string command,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+    {
         var effectiveTimeout = timeout ?? DefaultCleanTimeout;
 
         LogService.Debug(
             $"[SHELL] RunCleanAsync('{command}') timeout={effectiveTimeout.TotalSeconds:0}s");
 
         if (string.IsNullOrWhiteSpace(command))
-            return string.Empty;
+            return (1, "", "Empty command");
 
         try
         {
@@ -289,18 +433,25 @@ public static class ShellHelper
             {
                 await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 await KillTreeAndWaitAsync(process).ConfigureAwait(false);
 
-                await ReadWithTimeoutAsync(
+                var partialOut = await ReadWithTimeoutAsync(
                     stdoutTask, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-                await ReadWithTimeoutAsync(
+                var partialErr = await ReadWithTimeoutAsync(
                     stderrTask, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    LogService.Error($"[SHELL] RunCleanAsync CANCELADO: {command}");
+                    return (1, partialOut, "Cancelled");
+                }
 
                 LogService.Error(
                     $"[SHELL] RunCleanAsync TIMEOUT ({effectiveTimeout.TotalSeconds:0}s): {command}");
-                return string.Empty;
+                return (TimeoutExitCode, partialOut,
+                    $"Timeout after {effectiveTimeout.TotalSeconds:0}s");
             }
 
             var stdout = await ReadWithTimeoutAsync(
@@ -308,30 +459,25 @@ public static class ShellHelper
             var stderr = await ReadWithTimeoutAsync(
                 stderrTask, TimeSpan.FromSeconds(3)).ConfigureAwait(false);
 
-            if (!string.IsNullOrWhiteSpace(stderr))
-            {
-                LogService.Error($"[SHELL] RunCleanAsync stderr: {stderr}");
-                return string.Empty;
-            }
-
-            if (process.ExitCode != 0)
-            {
-                LogService.Error(
-                    $"[SHELL] RunCleanAsync exit={process.ExitCode}: {command}");
-                return string.Empty;
-            }
-
-            LogService.Debug("[SHELL] RunCleanAsync OK");
-            return stdout.Trim();
+            return (process.ExitCode, stdout, stderr);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return string.Empty;
+            return (1, "", "Cancelled");
         }
         catch (Exception ex)
         {
             LogService.Error($"[SHELL] RunCleanAsync exception: {ex.Message}");
-            return string.Empty;
+            return (1, "", ex.Message);
         }
     }
+
+    /// <summary>
+    /// Variante síncrona de <see cref="RunCleanAsync"/> para código que ya se
+    /// ejecuta en el thread pool. No usar desde el hilo de UI.
+    /// </summary>
+    public static (int ExitCode, string Stdout, string Stderr) RunClean(
+        string command,
+        TimeSpan? timeout = null)
+        => RunCleanResultAsync(command, timeout).GetAwaiter().GetResult();
 }
