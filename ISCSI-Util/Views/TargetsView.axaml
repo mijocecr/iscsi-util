@@ -147,6 +147,7 @@
                     BorderBrush="{DynamicResource SteamBorder}"
                     BorderThickness="1.2"
                     CornerRadius="10"
+                    Padding="10,10,2,10"
                     IsVisible="False">
 
                 <Border.Background>
