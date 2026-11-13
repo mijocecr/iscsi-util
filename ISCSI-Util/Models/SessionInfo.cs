@@ -14,6 +14,8 @@ public class SessionInfo
     public string Filesystem { get; set; } = "";
     public string MountPoint { get; set; } = "";
     public bool Connected { get; set; }
+    /// <summary>El volumen está montado ahora mismo (detectado con findmnt en segundo plano).</summary>
+    public bool Mounted { get; set; }
     public string Auth { get; set; } = "";
     public int LunId { get; set; }
     public string Vendor { get; set; } = "";

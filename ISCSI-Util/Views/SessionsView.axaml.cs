@@ -122,14 +122,14 @@ public partial class SessionsView : UserControl
     {
         if (_selected == null) return;
 
-        var mounted = _selected.Connected && IscsiHelper.EstaMontado(_selected.MountPoint);
+        var mounted = _selected.Connected && _selected.Mounted;
 
         if (!_selected.Connected)
         {
             // 1) Si está desconectado -> Conectar sesión iSCSI
             using (LoadingService.Show("Connecting..."))
             {
-                await IscsiHelper.ConectarSesion(_selected);
+                await Task.Run(() => IscsiHelper.ConectarSesion(_selected));
             }
             await CargarSesiones();
             if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
@@ -139,7 +139,7 @@ public partial class SessionsView : UserControl
             // 2) Si está conectado pero no montado -> Montar volumen
             using (LoadingService.Show("Mounting..."))
             {
-                await IscsiHelper.MontarSesion(_selected);
+                await Task.Run(() => IscsiHelper.MontarSesion(_selected));
             }
             await CargarSesiones();
             if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
@@ -408,7 +408,7 @@ public partial class SessionsView : UserControl
         SessionTitle.TextWrapping = TextWrapping.Wrap;
 
         // Verificación real del punto de montaje (findmnt/mountpoint).
-        var mounted = session.Connected && IscsiHelper.EstaMontado(session.MountPoint);
+        var mounted = session.Connected && session.Mounted;
         
         SessionSubtitle.IsVisible = true;
         SessionSubtitle.Text = mounted ? "MOUNTED" : session.Connected ? "CONNECTED" : "SAVED";
@@ -699,7 +699,7 @@ public partial class SessionsView : UserControl
 
         using (LoadingService.Show("Unmounting..."))
         {
-            await IscsiHelper.DesmontarSesion(_selected);
+            await Task.Run(() => IscsiHelper.DesmontarSesion(_selected));
         }
 
         await CargarSesiones();
@@ -722,7 +722,7 @@ public partial class SessionsView : UserControl
 
         using (LoadingService.Show("Disconnecting..."))
         {
-            await IscsiHelper.DesconectarSesion(_selected);
+            await Task.Run(() => IscsiHelper.DesconectarSesion(_selected));
         }
 
         await CargarSesiones();

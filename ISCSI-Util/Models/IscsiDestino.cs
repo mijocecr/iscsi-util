@@ -17,6 +17,8 @@ public class IscsiDestino
     // ============================================================
     public bool Conectado { get; set; } = false;
     public bool Seleccionado { get; set; } = false;
+    /// <summary>El volumen está montado ahora mismo (detectado con findmnt).</summary>
+    public bool Montado { get; set; } = false;
     public DateTime? ConnectedSince { get; set; } = null;
 
     // ============================================================
@@ -77,7 +79,7 @@ public class IscsiDestino
     // ============================================================
     public bool SinChap => !UsaChap && !UsaMutualChap;
     public bool EsRaw => !TieneFilesystem;
-    public bool IsMounted => !string.IsNullOrEmpty(MountPoint);
+    public bool IsMounted => Montado;
     public bool IsReady => Conectado && TieneFilesystem;
 
     public string Estado =>

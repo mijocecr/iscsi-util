@@ -84,7 +84,7 @@ public partial class MainWindow : Window
             StatusBarText.Text = "Validating password...";
             LogService.Debug("[MAIN] Validating admin password...");
 
-            var result = ShellHelper.EjecutarComoRoot("bash -c \"echo OK\"");
+            var result = await ShellHelper.EjecutarComoRootAsync("bash -c \"echo OK\"");
 
             if (result.ExitCode == 0)
             {
@@ -304,7 +304,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Discovering targets..."))
         {
-            await IscsiHelper.Descubrir(ip);
+            await Task.Run(() => IscsiHelper.Descubrir(ip));
         }
     }
 
@@ -314,7 +314,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Connecting to target..."))
         {
-            await IscsiHelper.Conectar(d);
+            await Task.Run(() => IscsiHelper.Conectar(d));
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
@@ -328,7 +328,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Disconnecting target..."))
         {
-            await IscsiHelper.Desconectar_Borrar(d);
+            await Task.Run(() => IscsiHelper.Desconectar_Borrar(d));
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
@@ -342,7 +342,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Initializing disk..."))
         {
-            await IscsiHelper.InicializarDestino(d, label, fsType);
+            await Task.Run(() => IscsiHelper.InicializarDestino(d, label, fsType));
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)

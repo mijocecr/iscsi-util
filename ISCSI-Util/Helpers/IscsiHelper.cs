@@ -322,6 +322,7 @@ public static class IscsiHelper
                 d.DevicePath = null;
                 d.PartitionPath = null;
                 d.MountPoint = null;
+                d.Montado = false;
                 d.TieneFilesystem = false;
                 d.FsType = "";
                 d.SizeGb = 0;
@@ -342,6 +343,7 @@ public static class IscsiHelper
                 d.DevicePath = null;
                 d.PartitionPath = null;
                 d.MountPoint = null;
+                d.Montado = false;
                 d.TieneFilesystem = false;
                 d.FsType = "";
                 d.SizeGb = 0;
@@ -407,7 +409,9 @@ public static class IscsiHelper
             // 5) Detectar punto de montaje en runtime.
             // findmnt resuelve el dispositivo real y evita depender del texto de
             // `mount`, que muestra /dev/sdX aunque se montara por by-path.
-            d.MountPoint = ObtenerPuntoMontajeReal(targetPath);
+            var mountPointReal = ObtenerPuntoMontajeReal(targetPath);
+            d.Montado = !string.IsNullOrWhiteSpace(mountPointReal);
+            d.MountPoint = mountPointReal;
 
             // 6) Detectar persistencia
             d.Persistir = DetectarPersistencia(d);

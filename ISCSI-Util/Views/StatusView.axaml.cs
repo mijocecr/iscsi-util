@@ -80,7 +80,7 @@ namespace ISCSI_Util.Views
 
                 try
                 {
-                    ShellHelper.EjecutarComoRoot("systemctl restart iscsid");
+                    await ShellHelper.EjecutarComoRootAsync("systemctl restart iscsid");
 
                     TxtLastOp.Text = "Service restarted.";
                     SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));
@@ -109,7 +109,7 @@ namespace ISCSI_Util.Views
 
             for (int i = 0; i < 60; i++)
             {
-                var result = ShellHelper.EjecutarComoRoot(
+                var result = await ShellHelper.EjecutarComoRootAsync(
                     "systemctl show -p StatusText iscsid"
                 );
 
@@ -156,7 +156,7 @@ namespace ISCSI_Util.Views
             try
             {
                 Trace("LoadServiceStatus() → systemctl is-active iscsid");
-                var result = ShellHelper.EjecutarComoRoot("systemctl is-active iscsid");
+                var result = await ShellHelper.EjecutarComoRootAsync("systemctl is-active iscsid");
 
                 string raw = result.Stdout.Trim().ToLower();
                 Trace($"LoadServiceStatus() raw='{raw}'");
@@ -215,7 +215,7 @@ namespace ISCSI_Util.Views
             try
             {
                 Trace("LoadDaemonStatus() → systemctl show -p StatusText iscsid");
-                var result = ShellHelper.EjecutarComoRoot("systemctl show -p StatusText iscsid");
+                var result = await ShellHelper.EjecutarComoRootAsync("systemctl show -p StatusText iscsid");
                 string status = result.Stdout.Trim();
 
                 Trace($"LoadDaemonStatus() raw='{status}'");

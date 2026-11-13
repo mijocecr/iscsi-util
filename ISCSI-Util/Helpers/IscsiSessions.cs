@@ -81,7 +81,14 @@ public static class IscsiSessions
     // OBTENER SESIONES REALES
     // ============================================================
 
-    public static async Task<List<SessionInfo>> ObtenerVistaGlobal()
+    public static Task<List<SessionInfo>> ObtenerVistaGlobal()
+    {
+        // El cuerpo hace muchas llamadas a sudo de forma síncrona. Ejecutarlo
+        // en el thread pool evita congelar la interfaz y el diálogo de carga.
+        return Task.Run(ObtenerVistaGlobalCore);
+    }
+
+    private static List<SessionInfo> ObtenerVistaGlobalCore()
     {
         var sesiones = new List<SessionInfo>();
         var historial = CargarHistorialConexiones();
@@ -159,7 +166,8 @@ public static class IscsiSessions
             // 3) Mount runtime (Verificación real contra el OS)
             // ============================================================
             var mountPointReal = ObtenerPuntoMontajeReal(info.Device);
-            if (!string.IsNullOrWhiteSpace(mountPointReal))
+            info.Mounted = !string.IsNullOrWhiteSpace(mountPointReal);
+            if (info.Mounted)
                 info.MountPoint = mountPointReal;
 
             // ============================================================

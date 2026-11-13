@@ -839,7 +839,7 @@ public partial class TargetsView : UserControl
 
         DetailsIcon.Source = LoadIcon(GetIconForChap(lun));
 
-        bool mounted = lun.Conectado && IscsiHelper.EstaMontado(lun.MountPoint);
+        bool mounted = lun.Conectado && lun.Montado;
 
         if (!lun.Conectado)
         {
@@ -1017,7 +1017,7 @@ public partial class TargetsView : UserControl
         if (selected == null)
             return;
 
-        var mounted = selected.Conectado && IscsiHelper.EstaMontado(selected.MountPoint);
+        var mounted = selected.Conectado && selected.Montado;
 
         try
         {
