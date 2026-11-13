@@ -8,8 +8,8 @@
         <!-- Tarjeta estilo Sessions -->
         <Style Selector="Border.SteamCard">
             <Setter Property="Background" Value="#1B2838" />
-            <Setter Property="BorderBrush" Value="#66C0F4" />
-            <Setter Property="BorderThickness" Value="1.6" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SteamBorderStrong}" />
+            <Setter Property="BorderThickness" Value="1.5" />
             <Setter Property="CornerRadius" Value="10" />
             <Setter Property="Padding" Value="14,10" />
             <Setter Property="BoxShadow" Value="0 6 14 #80000000" />
@@ -29,11 +29,11 @@
         </Style>
 
         <!-- Seleccionado estilo Sessions -->
-        <Style Selector="Border.SteamCard:selected">
-            <Setter Property="Background" Value="#1E2F45" />
-            <Setter Property="BorderBrush" Value="{DynamicResource SteamBlue}" />
-            <Setter Property="BorderThickness" Value="2.4" />
-            <Setter Property="BoxShadow" Value="0 0 22 #AA1E90FF" />
+        <Style Selector="Border.SteamCard.selected">
+            <Setter Property="Background" Value="#2A475E" />
+            <Setter Property="BorderBrush" Value="#4CFF4C" />
+            <Setter Property="BorderThickness" Value="1.5" />
+            <Setter Property="BoxShadow" Value="0 0 22 #AA4CFF4C" />
         </Style>
 
         <!-- Botones Steam -->

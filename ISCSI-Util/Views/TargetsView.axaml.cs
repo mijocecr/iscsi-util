@@ -406,8 +406,6 @@ public partial class TargetsView : UserControl
             Padding = new Thickness(10),
             CornerRadius = new CornerRadius(10),
             Margin = new Thickness(0),
-            BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
-            BorderThickness = new Thickness(1.5),
             Cursor = new Cursor(StandardCursorType.Hand)
         };
 
