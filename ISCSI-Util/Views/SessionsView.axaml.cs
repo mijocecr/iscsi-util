@@ -122,27 +122,35 @@ public partial class SessionsView : UserControl
     {
         if (_selected == null) return;
 
-        var mounted = _selected.Connected && _selected.Mounted;
+        try
+        {
+            var mounted = _selected.Connected && _selected.Mounted;
 
-        if (!_selected.Connected)
-        {
-            // 1) Si está desconectado -> Conectar sesión iSCSI
-            using (LoadingService.Show("Connecting..."))
+            if (!_selected.Connected)
             {
-                await SystemOperationLock.RunAsync(() => IscsiHelper.ConectarSesion(_selected));
+                // 1) Si está desconectado -> Conectar sesión iSCSI
+                using (LoadingService.Show("Connecting..."))
+                {
+                    await SystemOperationLock.RunAsync(() => IscsiHelper.ConectarSesion(_selected));
+                }
+                await CargarSesiones();
+                if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
             }
-            await CargarSesiones();
-            if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
+            else if (!mounted && IscsiHelper.EsFilesystemMontable(_selected.Filesystem))
+            {
+                // 2) Si está conectado pero no montado -> Montar volumen
+                using (LoadingService.Show("Mounting..."))
+                {
+                    await SystemOperationLock.RunAsync(() => IscsiHelper.MontarSesion(_selected));
+                }
+                await CargarSesiones();
+                if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
+            }
         }
-        else if (!mounted && IscsiHelper.EsFilesystemMontable(_selected.Filesystem))
+        catch (Exception ex)
         {
-            // 2) Si está conectado pero no montado -> Montar volumen
-            using (LoadingService.Show("Mounting..."))
-            {
-                await SystemOperationLock.RunAsync(() => IscsiHelper.MontarSesion(_selected));
-            }
-            await CargarSesiones();
-            if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
+            LogService.Error($"[SESSIONS] Primary action failed: {ex.Message}");
+            NotificadorLinux.Enviar($"Operation failed: {ex.Message}", 7000, "critical");
         }
     }
 
@@ -582,8 +590,16 @@ public partial class SessionsView : UserControl
 
     private async void RefreshButton_OnClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        _lastRescanStatus = string.Empty;
-        await CargarSesiones();
+        try
+        {
+            _lastRescanStatus = string.Empty;
+            await CargarSesiones();
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SESSIONS] Refresh failed: {ex.Message}");
+            NotificadorLinux.Enviar($"Refresh failed: {ex.Message}", 7000, "critical");
+        }
     }
 
     private async void RescanButton_OnClick(object? sender, RoutedEventArgs e)
@@ -606,6 +622,11 @@ public partial class SessionsView : UserControl
             _lastRescanStatus = BuildRescanStatus(results);
             await CargarSesiones();
             NotificarRescan(results);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SESSIONS] Rescan all failed: {ex.Message}");
+            NotificadorLinux.Enviar($"Rescan failed: {ex.Message}", 7000, "critical");
         }
         finally
         {
@@ -631,6 +652,11 @@ public partial class SessionsView : UserControl
             _lastRescanStatus = BuildRescanStatus(new[] { result });
             await CargarSesiones();
             NotificarRescan(new[] { result });
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SESSIONS] Rescan failed: {ex.Message}");
+            NotificadorLinux.Enviar($"Rescan failed: {ex.Message}", 7000, "critical");
         }
         finally
         {
@@ -697,9 +723,17 @@ public partial class SessionsView : UserControl
         if (_selected == null)
             return;
 
-        using (LoadingService.Show("Unmounting..."))
+        try
         {
-            await SystemOperationLock.RunAsync(() => IscsiHelper.DesmontarSesion(_selected));
+            using (LoadingService.Show("Unmounting..."))
+            {
+                await SystemOperationLock.RunAsync(() => IscsiHelper.DesmontarSesion(_selected));
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SESSIONS] Unmount failed: {ex.Message}");
+            NotificadorLinux.Enviar($"Unmount failed: {ex.Message}", 7000, "critical");
         }
 
         await CargarSesiones();
@@ -720,9 +754,17 @@ public partial class SessionsView : UserControl
         if (_selected == null)
             return;
 
-        using (LoadingService.Show("Disconnecting..."))
+        try
         {
-            await SystemOperationLock.RunAsync(() => IscsiHelper.DesconectarSesion(_selected));
+            using (LoadingService.Show("Disconnecting..."))
+            {
+                await SystemOperationLock.RunAsync(() => IscsiHelper.DesconectarSesion(_selected));
+            }
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[SESSIONS] Disconnect failed: {ex.Message}");
+            NotificadorLinux.Enviar($"Disconnect failed: {ex.Message}", 7000, "critical");
         }
 
         await CargarSesiones();

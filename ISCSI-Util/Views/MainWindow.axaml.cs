@@ -55,6 +55,20 @@ public partial class MainWindow : Window
     {
         base.OnOpened(e);
 
+        try
+        {
+            await InicializarAsync();
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"[MAIN] Initialization failed: {ex.Message}");
+            StatusBarText.Text = "Initialization failed.";
+            NotificadorLinux.Enviar($"Initialization failed: {ex.Message}", 8000, "critical");
+        }
+    }
+
+    private async Task InicializarAsync()
+    {
         LogService.Write("[MAIN] Application startup sequence initiated.");
 
         // ------------------------------------------------------------
