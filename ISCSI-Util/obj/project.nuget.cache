@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "Pq9VF7IEtsk=",
+  "dgSpecHash": "7xUTglQhKgc=",
   "success": true,
   "projectFilePath": "/home/miguel/RiderProjects/iscsi-util/ISCSI-Util/ISCSI-Util.csproj",
   "expectedPackageFiles": [
@@ -32,7 +32,7 @@
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.webassembly/2.88.9/skiasharp.nativeassets.webassembly.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/skiasharp.nativeassets.win32/2.88.9/skiasharp.nativeassets.win32.2.88.9.nupkg.sha512",
     "/home/miguel/.nuget/packages/tmds.dbus.protocol/0.21.2/tmds.dbus.protocol.0.21.2.nupkg.sha512",
-    "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.13/microsoft.aspnetcore.app.ref.10.0.13.nupkg.sha512"
+    "/home/miguel/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.14/microsoft.aspnetcore.app.ref.10.0.14.nupkg.sha512"
   ],
   "logs": [
     {

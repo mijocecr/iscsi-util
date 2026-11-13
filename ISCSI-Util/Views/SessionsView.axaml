@@ -10,7 +10,7 @@
             <!-- BÚSQUEDA, RESCAN Y REFRESCAR -->
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
                 <TextBox x:Name="SearchBox" 
-                         Watermark="Search targets by IQN or portal..."
+                         Watermark="Search by IQN or portal..."
                          Padding="12,8" 
                          Background="{DynamicResource SteamPanel}"
                          BorderBrush="{DynamicResource SteamBorder}" 

@@ -192,19 +192,50 @@ public partial class MainWindow : Window
             }
         }
 
+        // El servicio de sesiones (iscsi.service) es opcional: la aplicación
+        // gestiona las sesiones con iscsiadm. Además, arrancarlo cuando ya hay
+        // un iscsid activo falla porque iscsid.socket se niega a escuchar, así
+        // que solo se intenta si está habilitado y aún no está activo.
         var sessionUnit = new[] { "iscsi.service", "open-iscsi.service" }
             .FirstOrDefault(installedUnits.Contains);
 
         if (sessionUnit != null)
         {
-            StatusBarText.Text = "Starting iSCSI session service...";
-            LogService.Write($"[MAIN] Starting available session service '{sessionUnit}'...");
+            var sessionActive = await ShellHelper.RunCleanResultAsync(
+                $"systemctl is-active --quiet {sessionUnit}");
 
-            var sessionResult = await Task.Run(() =>
-                ShellHelper.EjecutarComoRoot($"systemctl start {sessionUnit}"));
+            if (sessionActive.ExitCode == 0)
+            {
+                LogService.Debug($"[MAIN] Optional service '{sessionUnit}' is already active.");
+            }
+            else
+            {
+                var sessionEnabled = await ShellHelper.RunCleanResultAsync(
+                    $"systemctl is-enabled --quiet {sessionUnit}");
 
-            if (sessionResult.ExitCode != 0)
-                LogService.Error($"[MAIN] Could not start optional service '{sessionUnit}': {sessionResult.Stderr}");
+                if (sessionEnabled.ExitCode != 0)
+                {
+                    LogService.Debug(
+                        $"[MAIN] Optional service '{sessionUnit}' is disabled; not starting it.");
+                }
+                else
+                {
+                    StatusBarText.Text = "Starting iSCSI session service...";
+                    LogService.Debug($"[MAIN] Starting enabled session service '{sessionUnit}'...");
+
+                    var sessionResult = await Task.Run(() =>
+                        ShellHelper.EjecutarComoRoot($"systemctl start {sessionUnit}"));
+
+                    if (sessionResult.ExitCode != 0)
+                    {
+                        // No es un error de la aplicación: es opcional y las
+                        // sesiones se gestionan con iscsiadm.
+                        LogService.Write(
+                            $"[MAIN] Optional service '{sessionUnit}' could not start " +
+                            $"(sessions are managed with iscsiadm): {sessionResult.Stderr.Trim()}");
+                    }
+                }
+            }
         }
 
         var verifyResult = await ShellHelper.RunCleanResultAsync(
