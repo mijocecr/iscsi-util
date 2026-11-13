@@ -21,9 +21,6 @@ namespace ISCSI_Util.Views;
 
 public partial class TargetsView : UserControl
 {
-    private const string TargetCardIconUri =
-        "avares://ISCSI-Util/Assets/Icons/target-green.jpeg";
-
     private readonly List<IscsiDestino> _targets = new();
     private readonly Dictionary<string, List<IscsiDestino>> _targetLuns =
         new(StringComparer.OrdinalIgnoreCase);
@@ -408,7 +405,7 @@ public partial class TargetsView : UserControl
         var border = new Border
         {
             Classes = { "SteamCard" },
-            Padding = new Thickness(8),
+            Padding = new Thickness(10),
             CornerRadius = new CornerRadius(10),
             Margin = new Thickness(0),
             BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorderStrong")!,
@@ -423,40 +420,9 @@ public partial class TargetsView : UserControl
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("52, *"),
-            RowDefinitions = new RowDefinitions("Auto,Auto"),
-            RowSpacing = 4
+            RowDefinitions = new RowDefinitions("Auto"),
+            RowSpacing = 6
         };
-
-        var icon = new Image
-        {
-            // Las tarjetas de target usan siempre el icono genérico verde.
-            // El panel de detalles conserva el icono según CHAP/filesystem.
-            Source = LoadIcon(TargetCardIconUri),
-            Stretch = Stretch.Uniform,
-            Width = 40,
-            Height = 40,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-        };
-
-        var iconFrame = new Border
-        {
-            Width = 46,
-            Height = 46,
-            Padding = new Thickness(2),
-            CornerRadius = new CornerRadius(8),
-            BorderBrush = (IBrush)Application.Current!.FindResource("SteamBorder")!,
-            BorderThickness = new Thickness(1.5),
-            Background = Brushes.White, // <--- Fondo blanco aplicado
-            Child = icon,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-        };
-
-        grid.Children.Add(iconFrame);
-        Grid.SetColumn(iconFrame, 0);
-        Grid.SetRow(iconFrame, 0);
 
         var titleRow = new Grid
         {
@@ -469,10 +435,9 @@ public partial class TargetsView : UserControl
         {
             Text = GetTargetDisplayName(destino),
             TextAlignment = TextAlignment.Left,
-            TextWrapping = TextWrapping.NoWrap,
+            TextWrapping = TextWrapping.Wrap,
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            TextTrimming = TextTrimming.CharacterEllipsis,
             Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
         };
 
@@ -485,13 +450,12 @@ public partial class TargetsView : UserControl
             CornerRadius = new CornerRadius(5),
             Background = destino.Conectado ? Brushes.LimeGreen : Brushes.Gray,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0)
+            Margin = new Thickness(0, 0, 4, 0)
         };
         titleRow.Children.Add(connectionIndicator);
         Grid.SetColumn(connectionIndicator, 1);
 
         grid.Children.Add(titleRow);
-        Grid.SetColumn(titleRow, 1);
         Grid.SetRow(titleRow, 0);
 
         var btnRow = new StackPanel
@@ -546,10 +510,12 @@ public partial class TargetsView : UserControl
             btnRow.Children.Add(chapBtn);
         }
 
-        grid.Children.Add(btnRow);
-        Grid.SetColumn(btnRow, 0);
-        Grid.SetColumnSpan(btnRow, 2);
-        Grid.SetRow(btnRow, 1);
+        if (btnRow.Children.Count > 0)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            grid.Children.Add(btnRow);
+            Grid.SetRow(btnRow, 1);
+        }
 
         border.PointerPressed += async (_, e) =>
         {
