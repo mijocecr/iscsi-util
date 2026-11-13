@@ -14,7 +14,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace ISCSI_Util.Views;
@@ -24,7 +23,6 @@ public partial class TargetsView : UserControl
     private readonly List<IscsiDestino> _targets = new();
     private readonly Dictionary<string, List<IscsiDestino>> _targetLuns =
         new(StringComparer.OrdinalIgnoreCase);
-    private readonly SemaphoreSlim _systemOperationLock = new(1, 1);
     private IscsiDestino? _selected;
     private int _selectedLun = int.MinValue;
     private bool _updatingLunSelector;
@@ -348,44 +346,14 @@ public partial class TargetsView : UserControl
         destino.UsaMutualChap = hasMutual;
     }
 
-    private async Task RunSystemOperationAsync(Func<Task> operation)
-    {
-        await _systemOperationLock.WaitAsync();
-        try
-        {
-            await Task.Run(operation);
-        }
-        finally
-        {
-            _systemOperationLock.Release();
-        }
-    }
+    private Task RunSystemOperationAsync(Func<Task> operation)
+        => SystemOperationLock.RunAsync(operation);
 
-    private async Task<T> RunSystemOperationAsync<T>(Func<Task<T>> operation)
-    {
-        await _systemOperationLock.WaitAsync();
-        try
-        {
-            return await Task.Run(operation);
-        }
-        finally
-        {
-            _systemOperationLock.Release();
-        }
-    }
+    private Task<T> RunSystemOperationAsync<T>(Func<Task<T>> operation)
+        => SystemOperationLock.RunAsync(operation);
 
-    private async Task<T> RunSystemOperationAsync<T>(Func<T> operation)
-    {
-        await _systemOperationLock.WaitAsync();
-        try
-        {
-            return await Task.Run(operation);
-        }
-        finally
-        {
-            _systemOperationLock.Release();
-        }
-    }
+    private Task<T> RunSystemOperationAsync<T>(Func<T> operation)
+        => SystemOperationLock.RunAsync(operation);
 
     private void RebuildTargetsList()
     {

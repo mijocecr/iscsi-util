@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Media;
 using ISCSI_Util.Helpers;
+using ISCSI_Util.Services;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -80,7 +81,9 @@ namespace ISCSI_Util.Views
 
                 try
                 {
-                    await ShellHelper.EjecutarComoRootAsync("systemctl restart iscsid");
+                    await SystemOperationLock.RunAsync(
+                        () => ShellHelper.EjecutarComoRootAsync("systemctl restart iscsid")
+                    );
 
                     TxtLastOp.Text = "Service restarted.";
                     SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));

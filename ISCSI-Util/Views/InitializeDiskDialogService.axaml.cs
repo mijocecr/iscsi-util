@@ -59,17 +59,20 @@ public partial class InitializeDiskDialog : Window
         {
             using (LoadingService.Show($"Initializing disk ({fs})..."))
             {
-                // 1) Formatear y montar el destino (ya maneja la asignación de dispositivo y montaje)
-                await Task.Run(() => IscsiHelper.InicializarDestino(_destino, label, fs));
-                LogService.Debug("[INIT_DISK] Initialization & mount completed.");
+                await SystemOperationLock.RunAsync(async () =>
+                {
+                    // 1) Formatear y montar el destino (ya maneja la asignación de dispositivo y montaje)
+                    await IscsiHelper.InicializarDestino(_destino, label, fs);
+                    LogService.Debug("[INIT_DISK] Initialization & mount completed.");
 
-                // 2) Actualizar la información completa en el modelo
-                await Task.Run(() => IscsiHelper.CompletarInformacionDestino(_destino, 0));
-                LogService.Debug("[INIT_DISK] Target info refreshed after initialization.");
+                    // 2) Actualizar la información completa en el modelo
+                    await IscsiHelper.CompletarInformacionDestino(_destino, 0);
+                    LogService.Debug("[INIT_DISK] Target info refreshed after initialization.");
 
-                // 3) Detectar persistencia y CHAP
-                _destino.Persistir = await Task.Run(() => IscsiHelper.DetectarPersistencia(_destino));
-                await Task.Run(() => IscsiHelper.DetectarChap(_destino));
+                    // 3) Detectar persistencia y CHAP
+                    _destino.Persistir = IscsiHelper.DetectarPersistencia(_destino);
+                    IscsiHelper.DetectarChap(_destino);
+                });
             }
 
             LogService.Debug("[INIT_DISK] Closing dialog with success result.");

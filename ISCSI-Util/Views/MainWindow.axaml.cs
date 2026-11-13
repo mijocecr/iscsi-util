@@ -304,7 +304,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Discovering targets..."))
         {
-            await Task.Run(() => IscsiHelper.Descubrir(ip));
+            await SystemOperationLock.RunAsync(() => IscsiHelper.Descubrir(ip));
         }
     }
 
@@ -314,7 +314,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Connecting to target..."))
         {
-            await Task.Run(() => IscsiHelper.Conectar(d));
+            await SystemOperationLock.RunAsync(() => IscsiHelper.Conectar(d));
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
@@ -328,7 +328,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Disconnecting target..."))
         {
-            await Task.Run(() => IscsiHelper.Desconectar_Borrar(d));
+            await SystemOperationLock.RunAsync(() => IscsiHelper.Desconectar_Borrar(d));
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)
@@ -342,7 +342,7 @@ public partial class MainWindow : Window
 
         using (LoadingService.Show("Initializing disk..."))
         {
-            await Task.Run(() => IscsiHelper.InicializarDestino(d, label, fsType));
+            await SystemOperationLock.RunAsync(() => IscsiHelper.InicializarDestino(d, label, fsType));
             await Task.Delay(1500);
 
             if (StatusPanel is StatusView status)

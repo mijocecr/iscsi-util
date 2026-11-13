@@ -129,7 +129,7 @@ public partial class SessionsView : UserControl
             // 1) Si está desconectado -> Conectar sesión iSCSI
             using (LoadingService.Show("Connecting..."))
             {
-                await Task.Run(() => IscsiHelper.ConectarSesion(_selected));
+                await SystemOperationLock.RunAsync(() => IscsiHelper.ConectarSesion(_selected));
             }
             await CargarSesiones();
             if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
@@ -139,7 +139,7 @@ public partial class SessionsView : UserControl
             // 2) Si está conectado pero no montado -> Montar volumen
             using (LoadingService.Show("Mounting..."))
             {
-                await Task.Run(() => IscsiHelper.MontarSesion(_selected));
+                await SystemOperationLock.RunAsync(() => IscsiHelper.MontarSesion(_selected));
             }
             await CargarSesiones();
             if (_selected != null) { PintarLista(); PintarDetalles(_selected); }
@@ -600,7 +600,7 @@ public partial class SessionsView : UserControl
             List<TargetRescanResult> results;
             using (LoadingService.Show("Rescanning targets..."))
             {
-                results = await Task.Run(() => IscsiRescan.RescanAllAsync(_sesiones));
+                results = await SystemOperationLock.RunAsync(() => IscsiRescan.RescanAllAsync(_sesiones));
             }
 
             _lastRescanStatus = BuildRescanStatus(results);
@@ -625,7 +625,7 @@ public partial class SessionsView : UserControl
             TargetRescanResult result;
             using (LoadingService.Show("Rescanning target..."))
             {
-                result = await Task.Run(() => IscsiRescan.RescanTargetAsync(target.Iqn, target.Portal, _sesiones));
+                result = await SystemOperationLock.RunAsync(() => IscsiRescan.RescanTargetAsync(target.Iqn, target.Portal, _sesiones));
             }
 
             _lastRescanStatus = BuildRescanStatus(new[] { result });
@@ -699,7 +699,7 @@ public partial class SessionsView : UserControl
 
         using (LoadingService.Show("Unmounting..."))
         {
-            await Task.Run(() => IscsiHelper.DesmontarSesion(_selected));
+            await SystemOperationLock.RunAsync(() => IscsiHelper.DesmontarSesion(_selected));
         }
 
         await CargarSesiones();
@@ -722,7 +722,7 @@ public partial class SessionsView : UserControl
 
         using (LoadingService.Show("Disconnecting..."))
         {
-            await Task.Run(() => IscsiHelper.DesconectarSesion(_selected));
+            await SystemOperationLock.RunAsync(() => IscsiHelper.DesconectarSesion(_selected));
         }
 
         await CargarSesiones();
