@@ -674,7 +674,7 @@ public partial class TargetsView : UserControl
             Spacing = 8
         };
 
-        void AddField(string label, string value, IBrush? color = null)
+        Control CreateField(string label, string value, IBrush? color = null)
         {
             var field = new StackPanel
             {
@@ -698,22 +698,50 @@ public partial class TargetsView : UserControl
             };
             field.Children.Add(val);
 
-            infoStack.Children.Add(field);
+            return field;
+        }
+
+        void AddField(string label, string value, IBrush? color = null)
+        {
+            infoStack.Children.Add(CreateField(label, value, color));
+        }
+
+        void AddPair(
+            string label1, string value1,
+            string label2, string value2,
+            IBrush? color2 = null)
+        {
+            var pair = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,*"),
+                ColumnSpacing = 12
+            };
+
+            var field1 = CreateField(label1, value1);
+            Grid.SetColumn(field1, 0);
+            pair.Children.Add(field1);
+
+            var field2 = CreateField(label2, value2, color2);
+            Grid.SetColumn(field2, 1);
+            pair.Children.Add(field2);
+
+            infoStack.Children.Add(pair);
         }
 
         AddField("IQN:", target.Iqn);
-        AddField("Portal:", target.Ip);
-        AddField("LUN:", lun.LunId.ToString());
+        AddPair("Portal:", target.Ip, "LUN:", lun.LunId.ToString());
         AddField("Status:",
             lun.Conectado ? "Connected" : "Disconnected",
             lun.Conectado
                 ? (IBrush)Application.Current!.FindResource("SteamGreen")!
                 : Brushes.OrangeRed
         );
-        AddField("Filesystem:", lun.TieneFilesystem ? $"Yes ({lun.FsType})" : "No");
-        AddField("Capacity:", lun.SizeBytes > 0
-            ? IscsiRescan.FormatBytes(lun.SizeBytes)
-            : lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-");
+        AddPair(
+            "Filesystem:", lun.TieneFilesystem ? $"Yes ({lun.FsType})" : "No",
+            "Capacity:", lun.SizeBytes > 0
+                ? IscsiRescan.FormatBytes(lun.SizeBytes)
+                : lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-"
+        );
         AddField("Mount:", string.IsNullOrWhiteSpace(lun.MountPoint) ? "-" : lun.MountPoint);
 
         DetailsInfoPanel.Children.Add(infoStack);
