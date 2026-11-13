@@ -669,24 +669,26 @@ public partial class TargetsView : UserControl
         BtnTogglePersist.IsEnabled = lun.Conectado;
         BtnTogglePersist.Content = lun.Persistir ? "No Autostart" : "Autostart";
 
-        var infoGrid = new Grid
+        var infoStack = new StackPanel
         {
-            ColumnDefinitions = new ColumnDefinitions("80, *"),
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
-            RowSpacing = 4
+            Spacing = 8
         };
 
-        void AddRow(string label, string value, int row, IBrush? color = null)
+        void AddField(string label, string value, IBrush? color = null)
         {
+            var field = new StackPanel
+            {
+                Spacing = 1
+            };
+
             var lbl = new TextBlock
             {
                 Text = label,
+                FontSize = 11,
                 Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
                 FontWeight = FontWeight.SemiBold
             };
-            Grid.SetColumn(lbl, 0);
-            Grid.SetRow(lbl, row);
-            infoGrid.Children.Add(lbl);
+            field.Children.Add(lbl);
 
             var val = new TextBlock
             {
@@ -694,28 +696,27 @@ public partial class TargetsView : UserControl
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = color ?? (IBrush)Application.Current!.FindResource("SteamText")!
             };
-            Grid.SetColumn(val, 1);
-            Grid.SetRow(val, row);
-            infoGrid.Children.Add(val);
+            field.Children.Add(val);
+
+            infoStack.Children.Add(field);
         }
 
-        AddRow("IQN:", target.Iqn, 0);
-        AddRow("Portal:", target.Ip, 1);
-        AddRow("LUN:", lun.LunId.ToString(), 2);
-        AddRow("Status:",
+        AddField("IQN:", target.Iqn);
+        AddField("Portal:", target.Ip);
+        AddField("LUN:", lun.LunId.ToString());
+        AddField("Status:",
             lun.Conectado ? "Connected" : "Disconnected",
-            3,
             lun.Conectado
                 ? (IBrush)Application.Current!.FindResource("SteamGreen")!
                 : Brushes.OrangeRed
         );
-        AddRow("Filesystem:", lun.TieneFilesystem ? $"Yes ({lun.FsType})" : "No", 4);
-        AddRow("Capacity:", lun.SizeBytes > 0
+        AddField("Filesystem:", lun.TieneFilesystem ? $"Yes ({lun.FsType})" : "No");
+        AddField("Capacity:", lun.SizeBytes > 0
             ? IscsiRescan.FormatBytes(lun.SizeBytes)
-            : lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-", 5);
-        AddRow("Mount:", string.IsNullOrWhiteSpace(lun.MountPoint) ? "-" : lun.MountPoint, 6);
+            : lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-");
+        AddField("Mount:", string.IsNullOrWhiteSpace(lun.MountPoint) ? "-" : lun.MountPoint);
 
-        DetailsInfoPanel.Children.Add(infoGrid);
+        DetailsInfoPanel.Children.Add(infoStack);
 
         DetailsIcon.Source = LoadIcon(GetIconForChap(lun));
 
