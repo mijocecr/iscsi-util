@@ -28,6 +28,7 @@ public partial class TargetsView : UserControl
     private IscsiDestino? _selected;
     private int _selectedLun = int.MinValue;
     private bool _updatingLunSelector;
+    private bool _refreshing;
     private string _lastValidIp = "";
 
     public TargetsView()
@@ -388,11 +389,40 @@ public partial class TargetsView : UserControl
 
     private void RebuildTargetsList()
     {
+        bool hasTargets = _targets.Count > 0;
+
+        EmptyStatePanel.IsVisible = !hasTargets;
+        TargetsContent.IsVisible = hasTargets;
+
         TargetsList.Children.Clear();
 
         foreach (var destino in _targets)
         {
             TargetsList.Children.Add(CreateTargetCard(destino));
+        }
+    }
+
+    /// <summary>
+    /// Vuelve a leer el estado de los targets ya descubiertos. Se usa al
+    /// entrar en la pestana para reflejar cambios hechos en SessionsView.
+    /// </summary>
+    public async Task ActualizarEstadoAsync()
+    {
+        if (_targets.Count == 0 || _refreshing)
+            return;
+
+        _refreshing = true;
+
+        try
+        {
+            using (LoadingService.Show("Refreshing target states..."))
+            {
+                await RefreshTargetsList();
+            }
+        }
+        finally
+        {
+            _refreshing = false;
         }
     }
 

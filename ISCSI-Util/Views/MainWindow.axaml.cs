@@ -410,6 +410,18 @@ public partial class MainWindow : Window
         StatusBarText.Text = "All discoverable targets";
     }
 
+    private async void OnMainTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (MainTabs.SelectedIndex != 1)
+            return;
+
+        if (TargetsView is ISCSI_Util.Views.TargetsView targets)
+        {
+            LogService.Debug("[MAIN] Targets tab selected -> refreshing target states...");
+            await targets.ActualizarEstadoAsync();
+        }
+    }
+
     private void OnTabStatusBarClick(object? sender, PointerPressedEventArgs e)
     {
         StatusBarText.Text = "Cerratonix  |  https://github.com/mijocecr";

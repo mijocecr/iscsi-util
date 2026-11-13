@@ -52,7 +52,7 @@
         </Border>
 
         <!-- MAIN CONTENT -->
-        <TabControl x:Name="MainTabs">
+        <TabControl x:Name="MainTabs" SelectionChanged="OnMainTabSelectionChanged">
 
             <!-- STATUS TAB -->
             <TabItem PointerPressed="OnTabStatusClick">
