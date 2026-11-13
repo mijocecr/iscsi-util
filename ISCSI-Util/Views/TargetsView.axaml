@@ -135,18 +135,15 @@
                                 <TextBlock x:Name="TargetDetailsTitle"
                                            FontSize="13"
                                            FontWeight="Bold"
+                                           TextAlignment="Center"
                                            TextWrapping="Wrap"
                                            Foreground="{DynamicResource SteamGreen}"/>
 
-                                <Button x:Name="BtnDeleteNode"
-                                        Content="Delete Node"
-                                        ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
+                                <Button x:Name="BtnTogglePersist"
+                                        Content="Persist"
                                         Classes="SteamButton"
                                         FontSize="11"
-                                        HorizontalAlignment="Stretch"
-                                        IsVisible="False"
-                                        Background="DarkRed"
-                                        Foreground="White"/>
+                                        HorizontalAlignment="Stretch"/>
                             </StackPanel>
 
                             <Border Grid.Column="1"
@@ -219,15 +216,21 @@
                                     Classes="SteamButton"
                                     FontSize="11"
                                     HorizontalAlignment="Stretch"
+                                    Background="Orange"
+                                    Foreground="White"
                                     IsVisible="False"/>
 
-                            <Button x:Name="BtnTogglePersist"
+                            <Button x:Name="BtnDeleteNode"
                                     Grid.Row="1"
                                     Grid.Column="1"
-                                    Content="Persist"
+                                    Content="Delete Node"
+                                    ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
                                     Classes="SteamButton"
                                     FontSize="11"
-                                    HorizontalAlignment="Stretch"/>
+                                    HorizontalAlignment="Stretch"
+                                    IsVisible="False"
+                                    Background="DarkRed"
+                                    Foreground="White"/>
                         </Grid>
 
                         <Rectangle Height="1"

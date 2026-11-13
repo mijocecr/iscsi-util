@@ -709,11 +709,12 @@ public partial class TargetsView : UserControl
         void AddPair(
             string label1, string value1,
             string label2, string value2,
-            IBrush? color2 = null)
+            IBrush? color2 = null,
+            string columns = "*,*")
         {
             var pair = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("*,*"),
+                ColumnDefinitions = new ColumnDefinitions(columns),
                 ColumnSpacing = 12
             };
 
@@ -728,8 +729,64 @@ public partial class TargetsView : UserControl
             infoStack.Children.Add(pair);
         }
 
+        void AddMountField(string? mountPoint)
+        {
+            var field = new StackPanel
+            {
+                Spacing = 1
+            };
+
+            var lbl = new TextBlock
+            {
+                Text = "Mount:",
+                FontSize = 11,
+                Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!,
+                FontWeight = FontWeight.SemiBold
+            };
+            field.Children.Add(lbl);
+
+            var row = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                ColumnSpacing = 6
+            };
+
+            var value = string.IsNullOrWhiteSpace(mountPoint) ? "-" : mountPoint;
+            var val = new SelectableTextBlock
+            {
+                Text = value,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (IBrush)Application.Current!.FindResource("SteamText")!
+            };
+            row.Children.Add(val);
+
+            if (!string.IsNullOrWhiteSpace(mountPoint))
+            {
+                var copyBtn = new Button
+                {
+                    Content = "Copy",
+                    Classes = { "SteamButton" },
+                    FontSize = 10,
+                    Padding = new Thickness(6, 2),
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+                };
+                copyBtn.Click += async (_, _) =>
+                {
+                    var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+                    if (clipboard != null)
+                        await clipboard.SetTextAsync(mountPoint);
+                };
+
+                Grid.SetColumn(copyBtn, 1);
+                row.Children.Add(copyBtn);
+            }
+
+            field.Children.Add(row);
+            infoStack.Children.Add(field);
+        }
+
         AddField("IQN:", target.Iqn);
-        AddPair("Portal:", target.Ip, "LUN:", lun.LunId.ToString());
+        AddPair("Portal:", target.Ip, "LUN:", lun.LunId.ToString(), columns: "1.8*,1*");
         AddField("Status:",
             lun.Conectado ? "Connected" : "Disconnected",
             lun.Conectado
@@ -742,7 +799,7 @@ public partial class TargetsView : UserControl
                 ? IscsiRescan.FormatBytes(lun.SizeBytes)
                 : lun.SizeGb > 0 ? $"{lun.SizeGb} GB" : "-"
         );
-        AddField("Mount:", string.IsNullOrWhiteSpace(lun.MountPoint) ? "-" : lun.MountPoint);
+        AddMountField(lun.MountPoint);
 
         DetailsInfoPanel.Children.Add(infoStack);
 
@@ -792,7 +849,7 @@ public partial class TargetsView : UserControl
             BtnHeaderUnmount,
             BtnHeaderOpen,
             BtnInitializeLun,
-            BtnTogglePersist
+            BtnDeleteNode
         }.Where(b => b.IsVisible).ToList();
 
         HeaderActionsRow.RowDefinitions.Clear();

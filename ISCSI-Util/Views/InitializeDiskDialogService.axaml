@@ -73,7 +73,9 @@
                     HorizontalContentAlignment="Center"
                     Width="75"
                     Height="30"
-                    Classes="SteamButton"/>
+                    Classes="SteamButton"
+                    Background="Orange"
+                    Foreground="White"/>
 
             <Button x:Name="CancelBtn"
                     Content="Cancel"
