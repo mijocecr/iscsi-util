@@ -199,7 +199,9 @@
                                     Grid.Column="0"
                                     Content="Unmount"
                                     Classes="SteamButton"
-                                    HorizontalAlignment="Stretch"
+                                    Width="100"
+                                    FontSize="11"
+                                    HorizontalAlignment="Center"
                                     IsVisible="False"/>
 
                             <Button x:Name="BtnHeaderOpen"
@@ -207,7 +209,9 @@
                                     Grid.Column="1"
                                     Content="Open"
                                     Classes="SteamButton"
-                                    HorizontalAlignment="Stretch"
+                                    Width="100"
+                                    FontSize="11"
+                                    HorizontalAlignment="Center"
                                     IsVisible="False"/>
 
                             <Button x:Name="BtnInitializeLun"
@@ -216,7 +220,9 @@
                                     Content="Initialize LUN"
                                     ToolTip.Tip="Format and mount the selected LUN. This destroys existing data on it."
                                     Classes="SteamButton"
-                                    HorizontalAlignment="Stretch"
+                                    Width="100"
+                                    FontSize="11"
+                                    HorizontalAlignment="Center"
                                     IsVisible="False"/>
 
                             <Button x:Name="BtnTogglePersist"
@@ -224,7 +230,9 @@
                                     Grid.Column="1"
                                     Content="Persist"
                                     Classes="SteamButton"
-                                    HorizontalAlignment="Stretch"/>
+                                    Width="100"
+                                    FontSize="11"
+                                    HorizontalAlignment="Center"/>
                         </Grid>
 
                         <Rectangle Height="1"
