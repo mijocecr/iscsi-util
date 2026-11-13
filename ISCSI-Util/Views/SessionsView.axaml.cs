@@ -412,11 +412,9 @@ public partial class SessionsView : UserControl
         
         SessionSubtitle.IsVisible = true;
         SessionSubtitle.Text = mounted ? "MOUNTED" : session.Connected ? "CONNECTED" : "SAVED";
-        SessionSubtitle.Foreground = mounted 
-            ? GetThemeBrush("SteamGreen", "#8BC53F") 
-            : session.Connected 
-                ? GetThemeBrush("SteamBlue", "#66C0F4") 
-                : GetThemeBrush("SteamText", "#C7D5E0");
+        SessionSubtitle.Foreground = session.Connected
+            ? GetThemeBrush("SteamGreen", "#8BC53F")
+            : GetThemeBrush("SteamText", "#C7D5E0");
 
         // Control del botón Open integrado justo a la izquierda del estado en la cabecera
         if (BtnOpenInline != null)
