@@ -142,19 +142,18 @@
                                         Content="Delete Node"
                                         ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
                                         Classes="SteamButton"
-                                        Width="100"
                                         FontSize="11"
-                                        HorizontalAlignment="Left"
+                                        HorizontalAlignment="Stretch"
                                         IsVisible="False"
                                         Background="DarkRed"
                                         Foreground="White"/>
                             </StackPanel>
 
                             <Border Grid.Column="1"
-                                    Width="64"
-                                    Height="64"
-                                    Padding="2"
-                                    CornerRadius="8"
+                                    Width="96"
+                                    Height="96"
+                                    Padding="1"
+                                    CornerRadius="10"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     BorderBrush="{DynamicResource SteamBorderStrong}"
@@ -162,8 +161,8 @@
                                     Background="White"
                                     ClipToBounds="True">
                                 <Image x:Name="DetailsIcon"
-                                       Width="58"
-                                       Height="58"
+                                       Width="90"
+                                       Height="90"
                                        Stretch="Uniform"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
@@ -199,9 +198,8 @@
                                     Grid.Column="0"
                                     Content="Unmount"
                                     Classes="SteamButton"
-                                    Width="100"
                                     FontSize="11"
-                                    HorizontalAlignment="Center"
+                                    HorizontalAlignment="Stretch"
                                     IsVisible="False"/>
 
                             <Button x:Name="BtnHeaderOpen"
@@ -209,9 +207,8 @@
                                     Grid.Column="1"
                                     Content="Open"
                                     Classes="SteamButton"
-                                    Width="100"
                                     FontSize="11"
-                                    HorizontalAlignment="Center"
+                                    HorizontalAlignment="Stretch"
                                     IsVisible="False"/>
 
                             <Button x:Name="BtnInitializeLun"
@@ -220,9 +217,8 @@
                                     Content="Initialize LUN"
                                     ToolTip.Tip="Format and mount the selected LUN. This destroys existing data on it."
                                     Classes="SteamButton"
-                                    Width="100"
                                     FontSize="11"
-                                    HorizontalAlignment="Center"
+                                    HorizontalAlignment="Stretch"
                                     IsVisible="False"/>
 
                             <Button x:Name="BtnTogglePersist"
@@ -230,9 +226,8 @@
                                     Grid.Column="1"
                                     Content="Persist"
                                     Classes="SteamButton"
-                                    Width="100"
                                     FontSize="11"
-                                    HorizontalAlignment="Center"/>
+                                    HorizontalAlignment="Stretch"/>
                         </Grid>
 
                         <Rectangle Height="1"

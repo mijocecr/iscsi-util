@@ -748,6 +748,42 @@ public partial class TargetsView : UserControl
         bool canInitialize = CanInitializeTarget(lun);
         BtnInitializeLun.IsVisible = canInitialize;
         BtnInitializeLun.IsEnabled = canInitialize;
+
+        ReflowLunActions();
+    }
+
+    /// <summary>
+    /// Coloca solo los botones visibles en filas de dos columnas. Si la
+    /// ultima fila queda con un unico boton, lo expande para no dejar huecos.
+    /// </summary>
+    private void ReflowLunActions()
+    {
+        var buttons = new Control[]
+        {
+            BtnHeaderUnmount,
+            BtnHeaderOpen,
+            BtnInitializeLun,
+            BtnTogglePersist
+        }.Where(b => b.IsVisible).ToList();
+
+        HeaderActionsRow.RowDefinitions.Clear();
+
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            var button = buttons[i];
+            int row = i / 2;
+            int column = i % 2;
+
+            if (row >= HeaderActionsRow.RowDefinitions.Count)
+                HeaderActionsRow.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            Grid.SetRow(button, row);
+            Grid.SetColumn(button, column);
+            Grid.SetColumnSpan(button, 1);
+
+            if (i == buttons.Count - 1 && column == 0)
+                Grid.SetColumnSpan(button, 2);
+        }
     }
 
     private sealed class LunOption
