@@ -265,7 +265,8 @@
                                     ToolTip.Tip="Remove the local iSCSI node configuration. Does not affect data"
                                     Classes="SteamButton"
                                     FontSize="11"
-                                    HorizontalAlignment="Stretch"
+                                    Width="96"
+                                    HorizontalAlignment="Center"
                                     IsVisible="False"
                                     Background="DarkRed"
                                     Foreground="White"/>

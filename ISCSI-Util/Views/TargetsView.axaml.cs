@@ -704,12 +704,15 @@ public partial class TargetsView : UserControl
             Spacing = 8
         };
 
-        Control CreateField(string label, string value, IBrush? color = null)
+        Control CreateField(string label, string value, IBrush? color = null, Thickness? margin = null)
         {
             var field = new StackPanel
             {
                 Spacing = 1
             };
+
+            if (margin.HasValue)
+                field.Margin = margin.Value;
 
             var lbl = new TextBlock
             {
@@ -731,9 +734,9 @@ public partial class TargetsView : UserControl
             return field;
         }
 
-        void AddField(string label, string value, IBrush? color = null)
+        void AddField(string label, string value, IBrush? color = null, Thickness? margin = null)
         {
-            infoStack.Children.Add(CreateField(label, value, color));
+            infoStack.Children.Add(CreateField(label, value, color, margin));
         }
 
         void AddPair(
@@ -778,7 +781,8 @@ public partial class TargetsView : UserControl
             var row = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-                ColumnSpacing = 6
+                ColumnSpacing = 6,
+                Margin = new Thickness(0, 0, 40, 0)
             };
 
             var value = string.IsNullOrWhiteSpace(mountPoint) ? "-" : mountPoint;
@@ -815,7 +819,7 @@ public partial class TargetsView : UserControl
             infoStack.Children.Add(field);
         }
 
-        AddField("IQN:", target.Iqn);
+        AddField("IQN:", target.Iqn, margin: new Thickness(0, 0, 40, 0));
         AddPair("Portal:", target.Ip, "LUN:", lun.LunId.ToString(), columns: "1.8*,1*");
         AddField("Status:",
             lun.Conectado ? "Connected" : "Disconnected",
