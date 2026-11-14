@@ -46,7 +46,7 @@ public static class IscsiCore
                 if (!portal.StartsWith(ip))
                     continue;
 
-                string iqn = partes.LastOrDefault(s => s.StartsWith("iqn."));
+                string? iqn = partes.LastOrDefault(s => s.StartsWith("iqn."));
                 if (string.IsNullOrWhiteSpace(iqn))
                     continue;
 
@@ -189,7 +189,7 @@ public static class IscsiCore
         {
             d.DevicePath = null;
             d.PartitionPath = null;
-            d.FsType = null;
+            d.FsType = "";
             d.TieneFilesystem = false;
             return;
         }
@@ -414,7 +414,7 @@ public static class IscsiCore
             d.TieneFilesystem = false;
             d.DevicePath = null;
             d.PartitionPath = null;
-            d.FsType = null;
+            d.FsType = "";
             d.MountPoint = null;
         }
         catch (Exception ex)
@@ -540,7 +540,7 @@ public static class IscsiCore
     // ---------------------------------------------------------
     public static async Task Mount(IscsiDestino d)
     {
-        if (d == null || string.IsNullOrWhiteSpace(d.Iqn))
+        if (d == null || string.IsNullOrWhiteSpace(d.Iqn) || string.IsNullOrWhiteSpace(d.MountPoint))
             return;
 
         if (!Directory.Exists(d.MountPoint))

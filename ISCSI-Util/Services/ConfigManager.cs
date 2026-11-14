@@ -148,8 +148,8 @@ public static class ConfigManager
     private class ConfigData
     {
         public int DefaultPermissions { get; set; }
-        public string MountBasePath { get; set; }
-        public string LogPath { get; set; }
+        public string? MountBasePath { get; set; }
+        public string? LogPath { get; set; }
         public bool Verbose { get; set; }
     }
 }

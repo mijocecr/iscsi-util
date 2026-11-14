@@ -39,12 +39,3 @@ public static class FileSystemUtils
         return input;
     }
 }
-
-/// <summary>
-/// Static class for storing admin credentials used for sudo commands.
-/// Stores the sudo password in memory during the session.
-/// </summary>
-public static class Credenciales
-{
-    public static string AdminPassword { get; set; }
-}

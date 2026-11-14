@@ -967,7 +967,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         if (mpCheck.ExitCode != 0)
         {
             // A) Obtener usuario real
-            string usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER");
+            string? usuarioReal = Environment.GetEnvironmentVariable("SUDO_USER");
             if (string.IsNullOrWhiteSpace(usuarioReal) || usuarioReal == "root")
             {
                 usuarioReal = ShellHelper.RunClean("logname").Stdout?.Trim() ?? "1000";
@@ -1259,7 +1259,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             d.DevicePath = null;
             d.PartitionPath = null;
             d.MountPoint = null;
-            d.FsType = null;
+            d.FsType = "";
 
             d.RequiresChap = false;
             d.RequiresMutualChap = false;

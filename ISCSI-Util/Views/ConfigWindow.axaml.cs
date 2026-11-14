@@ -1,8 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using ISCSI_Util.Services;
 using System;
-using System.IO;
+using System.Threading.Tasks;
 
 namespace ISCSI_Util.Views;
 
@@ -26,12 +27,16 @@ public partial class ConfigWindow : Window
     private void LoadConfig()
     {
         // Seleccionar el permiso actual en el ComboBox
-        foreach (ComboBoxItem item in PermCombo.Items)
+        if (PermCombo.Items is not null)
         {
-            if (item.Tag?.ToString() == ConfigManager.DefaultPermissions.ToString())
+            foreach (var element in PermCombo.Items)
             {
-                PermCombo.SelectedItem = item;
-                break;
+                if (element is ComboBoxItem item &&
+                    item.Tag?.ToString() == ConfigManager.DefaultPermissions.ToString())
+                {
+                    PermCombo.SelectedItem = item;
+                    break;
+                }
             }
         }
 
@@ -42,18 +47,27 @@ public partial class ConfigWindow : Window
 
     private async void OnBrowseMount(object? sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog();
-        var result = await dlg.ShowAsync(this);
+        var result = await PickFolderAsync("Select mount base path");
         if (!string.IsNullOrWhiteSpace(result))
             MountBaseBox.Text = result;
     }
 
     private async void OnBrowseLog(object? sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog();
-        var result = await dlg.ShowAsync(this);
+        var result = await PickFolderAsync("Select log path");
         if (!string.IsNullOrWhiteSpace(result))
             LogPathBox.Text = result;
+    }
+
+    private async Task<string?> PickFolderAsync(string title)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false
+        });
+
+        return folders.Count > 0 ? folders[0].Path.LocalPath : null;
     }
 
     private void OnSave(object? sender, RoutedEventArgs e)
