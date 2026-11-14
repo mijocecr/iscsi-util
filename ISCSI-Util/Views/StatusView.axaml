@@ -30,7 +30,12 @@
         <!-- Sombra suave estilo Steam (solo en Border, que sí soporta BoxShadow) -->
         <Style Selector="Border.SteamCard">
             <Setter Property="BoxShadow"
-                    Value="0 4 12 #80000000"/>
+                    Value="0 2 8 #60000000"/>
+        </Style>
+
+        <!-- Valores técnicos en monoespaciada -->
+        <Style Selector="TextBlock.mono">
+            <Setter Property="FontFamily" Value="Consolas, Menlo, Monospace"/>
         </Style>
 
         <!-- BOTONES STEAM (sin BoxShadow, para evitar AVLN2000) -->
@@ -79,48 +84,62 @@
 
     </UserControl.Styles>
 
+    <!-- La ventana es fija (500x580). Este grid reparte el alto disponible
+         en cuatro bandas sin necesidad de scroll:
+         1) banner de estado, 2) tarjetas de servicio/red/daemon,
+         3) información y rendimiento, 4) acciones. -->
     <Grid RowDefinitions="Auto,Auto,*,Auto"
-          Margin="20"
+          Margin="14"
           HorizontalAlignment="Stretch">
 
         <!-- ============================================================
-             SYSTEM SUMMARY
+             BANNER DE ESTADO
         ============================================================ -->
         <Border x:Name="SummaryBorder"
+                Grid.Row="0"
                 Classes="SteamCard"
                 Background="#1E4620"
                 BorderBrush="{DynamicResource SteamGreen}"
                 BorderThickness="2"
                 CornerRadius="8"
-                Padding="16"
-                Margin="0,0,0,16"
+                Padding="12,8"
+                Margin="0,0,0,10"
                 HorizontalAlignment="Stretch">
 
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="TxtSummary"
-                           Text="SYSTEM STATUS: OK"
-                           FontSize="18"
-                           FontWeight="Bold"
-                           HorizontalAlignment="Center"
-                           Foreground="{DynamicResource SteamGreen}"/>
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
 
-                <TextBlock x:Name="TxtSummaryDetail"
-                           Text="All systems operational"
-                           FontSize="12"
-                           TextAlignment="Center"
-                           TextWrapping="Wrap"
-                           HorizontalAlignment="Center"
-                           Foreground="{DynamicResource SteamGreen}"/>
-            </StackPanel>
+                <Ellipse x:Name="IconSummary"
+                         Width="14" Height="14"
+                         Fill="{DynamicResource SteamGreen}"
+                         VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="1" Spacing="1">
+                    <TextBlock x:Name="TxtSummary"
+                               Text="SYSTEM STATUS: OK"
+                               FontSize="16"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamGreen}"/>
+
+                    <TextBlock x:Name="TxtSummaryDetail"
+                               Text="All systems operational"
+                               FontSize="11"
+                               MaxLines="2"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SteamGreen}"/>
+                </StackPanel>
+
+            </Grid>
         </Border>
 
 
         <!-- ============================================================
-             TOP STATUS ROW
+             TARJETAS DE ESTADO (SERVICIO / RED / DAEMON)
         ============================================================ -->
         <Grid Grid.Row="1"
               ColumnDefinitions="*,*,*"
-              ColumnSpacing="16"
+              ColumnSpacing="10"
+              Margin="0,0,0,10"
               HorizontalAlignment="Stretch">
 
             <!-- SERVICE STATUS -->
@@ -130,21 +149,23 @@
                     BorderBrush="{DynamicResource SteamBorderStrong}"
                     BorderThickness="1.5"
                     CornerRadius="8"
-                    Padding="12">
+                    Padding="10,8">
 
-                <StackPanel>
-                    <TextBlock Text="Service Status"
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Service"
+                               FontSize="11"
                                FontWeight="Bold"
-                               
-                               Foreground="{DynamicResource SteamBlue}"
-                               Margin="0,0,0,6"/>
+                               Foreground="{DynamicResource SteamBlue}"/>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse x:Name="IconIscsid"
-                                 Width="12" Height="12"
-                                 Fill="{DynamicResource SteamGreen}"/>
+                                 Width="10" Height="10"
+                                 Fill="{DynamicResource SteamGreen}"
+                                 VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtIscsid"
                                    Text="Running"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
                                    Foreground="{DynamicResource SteamGreen}"/>
                     </StackPanel>
                 </StackPanel>
@@ -158,20 +179,23 @@
                     BorderBrush="{DynamicResource SteamBorderStrong}"
                     BorderThickness="1.5"
                     CornerRadius="8"
-                    Padding="12">
+                    Padding="10,8">
 
-                <StackPanel>
-                    <TextBlock Text="Network Status"
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Network"
+                               FontSize="11"
                                FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"
-                               Margin="0,0,0,6"/>
+                               Foreground="{DynamicResource SteamBlue}"/>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse x:Name="IconNetwork"
-                                 Width="12" Height="12"
-                                 Fill="{DynamicResource SteamGreen}"/>
+                                 Width="10" Height="10"
+                                 Fill="{DynamicResource SteamGreen}"
+                                 VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtNetwork"
                                    Text="Connected"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
                                    Foreground="{DynamicResource SteamGreen}"/>
                     </StackPanel>
                 </StackPanel>
@@ -185,20 +209,23 @@
                     BorderBrush="{DynamicResource SteamBorderStrong}"
                     BorderThickness="1.5"
                     CornerRadius="8"
-                    Padding="12">
+                    Padding="10,8">
 
-                <StackPanel>
-                    <TextBlock Text="Daemon Status"
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Daemon"
+                               FontSize="11"
                                FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"
-                               Margin="0,0,0,6"/>
+                               Foreground="{DynamicResource SteamBlue}"/>
 
-                    <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
                         <Ellipse x:Name="IconSocket"
-                                 Width="12" Height="12"
-                                 Fill="{DynamicResource SteamGreen}"/>
+                                 Width="10" Height="10"
+                                 Fill="{DynamicResource SteamGreen}"
+                                 VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtSocket"
                                    Text="Operational"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
                                    Foreground="{DynamicResource SteamGreen}"/>
                     </StackPanel>
                 </StackPanel>
@@ -209,15 +236,15 @@
 
 
         <!-- ============================================================
-             SYSTEM INFO FULL-WIDTH (MEJORADO)
+             INFORMACIÓN DEL SISTEMA + RENDIMIENTO iSCSI
         ============================================================ -->
         <Border Grid.Row="2"
                 Classes="SteamCard"
-                Margin="0,16,0,0"
                 BorderBrush="{DynamicResource SteamBorderStrong}"
-                BorderThickness="2"
-                CornerRadius="10"
-                Padding="18"
+                BorderThickness="1.5"
+                CornerRadius="8"
+                Padding="12"
+                VerticalAlignment="Stretch"
                 HorizontalAlignment="Stretch">
 
             <!-- Fondo con degradado Steam -->
@@ -228,161 +255,190 @@
                 </LinearGradientBrush>
             </Border.Background>
 
-            <StackPanel>
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="6">
 
-                <!-- Header visual -->
-                <StackPanel Margin="0,0,0,12">
-                    <TextBlock Text="System Information"
-                               FontSize="16"
-                               TextAlignment="Center"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"/>
-                    <Rectangle Height="1"
-                               Fill="#40FFFFFF"
-                               Margin="0,4,0,0"/>
-                </StackPanel>
+                <!-- Header -->
+                <TextBlock Grid.Row="0"
+                           Text="System Information"
+                           FontSize="13"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamBlue}"/>
 
-                <Grid ColumnDefinitions="140,*"
-                      RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                      ColumnSpacing="10"
-                      RowSpacing="6"
+                <!-- Datos en dos columnas para aprovechar el ancho -->
+                <Grid Grid.Row="1"
+                      ColumnDefinitions="Auto,*,Auto,*"
+                      RowDefinitions="Auto,Auto"
+                      ColumnSpacing="6"
+                      RowSpacing="4"
                       HorizontalAlignment="Stretch">
 
-                    <!-- Last Operation -->
                     <TextBlock Grid.Row="0" Grid.Column="0"
-                               Text="Last Operation:"
+                               Text="Uptime:"
+                               FontSize="11"
                                FontWeight="Bold"
+                               VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
 
                     <TextBlock Grid.Row="0" Grid.Column="1"
-                               x:Name="TxtLastOp"
-                               Classes="mono"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource SteamGreen}"/>
-
-                    <!-- Uptime -->
-                    <TextBlock Grid.Row="1" Grid.Column="0"
-                               Text="Uptime:"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"/>
-
-                    <TextBlock Grid.Row="1" Grid.Column="1"
                                x:Name="TxtUptime"
                                Classes="mono"
-                               TextWrapping="Wrap"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
 
-                    <!-- Hostname -->
-                    <TextBlock Grid.Row="2" Grid.Column="0"
+                    <TextBlock Grid.Row="0" Grid.Column="2"
                                Text="Hostname:"
+                               FontSize="11"
                                FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
                                Foreground="{DynamicResource SteamBlue}"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="1"
+                    <TextBlock Grid.Row="0" Grid.Column="3"
                                x:Name="TxtHostname"
                                Classes="mono"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource SteamGreen}"/>
-
-                    <!-- IP Address -->
-                    <TextBlock Grid.Row="3" Grid.Column="0"
-                               Text="IP Address:"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"/>
-
-                    <TextBlock Grid.Row="3" Grid.Column="1"
-                               x:Name="TxtIpAddress"
-                               Classes="mono"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource SteamGreen}"/>
-
-                    <!-- Latency -->
-                    <TextBlock Grid.Row="4" Grid.Column="0"
-                               Text="Latency:"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="1"
-                               x:Name="TxtLatency"
-                               Classes="mono"
-                               Text="Reading..."
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource SteamGreen}"/>
-
-                </Grid>
-
-                <!-- Métricas específicas de iSCSI -->
-                <Rectangle Height="1"
-                           Fill="#30FFFFFF"
-                           Margin="0,14,0,10"/>
-
-                <TextBlock Text="iSCSI Performance"
-                           FontSize="14"
-                           FontWeight="Bold"
-                           HorizontalAlignment="Center"
-                           Foreground="{DynamicResource SteamBlue}"
-                           Margin="0,0,0,8"/>
-
-                <Grid ColumnDefinitions="140,*"
-                      RowDefinitions="Auto,Auto"
-                      ColumnSpacing="10"
-                      RowSpacing="6"
-                      HorizontalAlignment="Stretch">
-
-                    <TextBlock Grid.Row="0" Grid.Column="0"
-                               Text="Sessions / Targets:"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamBlue}"/>
-
-                    <TextBlock Grid.Row="0" Grid.Column="1"
-                               x:Name="TxtSessions"
-                               Classes="mono"
-                               Text="Reading..."
-                               TextWrapping="Wrap"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0"
-                               Text="Throughput:"
+                               Text="IP:"
+                               FontSize="11"
                                FontWeight="Bold"
+                               VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
 
                     <TextBlock Grid.Row="1" Grid.Column="1"
-                               x:Name="TxtThroughput"
+                               x:Name="TxtIpAddress"
                                Classes="mono"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SteamGreen}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="2"
+                               Text="Latency:"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               Foreground="{DynamicResource SteamBlue}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="3"
+                               x:Name="TxtLatency"
+                               Classes="mono"
+                               FontSize="12"
                                Text="Reading..."
-                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
 
                 </Grid>
-            </StackPanel>
+
+                <!-- Última operación -->
+                <Grid Grid.Row="2"
+                      ColumnDefinitions="Auto,*"
+                      ColumnSpacing="6">
+
+                    <TextBlock Text="Last operation:"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SteamBlue}"/>
+
+                    <TextBlock Grid.Column="1"
+                               x:Name="TxtLastOp"
+                               Classes="mono"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SteamGreen}"/>
+                </Grid>
+
+                <Rectangle Grid.Row="3"
+                           Height="1"
+                           Fill="#30FFFFFF"
+                           Margin="0,2"/>
+
+                <!-- Rendimiento iSCSI -->
+                <Grid Grid.Row="4"
+                      RowDefinitions="Auto,Auto,Auto"
+                      RowSpacing="4">
+
+                    <TextBlock Grid.Row="0"
+                               Text="iSCSI Performance"
+                               FontSize="13"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamBlue}"/>
+
+                    <Grid Grid.Row="1"
+                          ColumnDefinitions="Auto,*"
+                          ColumnSpacing="6">
+                        <TextBlock Text="Sessions / Targets:"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SteamBlue}"/>
+                        <TextBlock Grid.Column="1"
+                                   x:Name="TxtSessions"
+                                   Classes="mono"
+                                   FontSize="12"
+                                   Text="Reading..."
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SteamGreen}"/>
+                    </Grid>
+
+                    <Grid Grid.Row="2"
+                          ColumnDefinitions="Auto,*"
+                          ColumnSpacing="6">
+                        <TextBlock Text="Throughput:"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SteamBlue}"/>
+                        <TextBlock Grid.Column="1"
+                                   x:Name="TxtThroughput"
+                                   Classes="mono"
+                                   FontSize="12"
+                                   Text="Reading..."
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SteamGreen}"/>
+                    </Grid>
+
+                </Grid>
+
+            </Grid>
         </Border>
 
 
         <!-- ============================================================
-             BUTTONS
+             ACCIONES: consulta a la izquierda, reinicio a la derecha
         ============================================================ -->
-        <StackPanel Grid.Row="3"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Spacing="8"
-                    Margin="0,16,0,0">
+        <Grid Grid.Row="3"
+              ColumnDefinitions="Auto,*,Auto"
+              Margin="0,10,0,0">
 
-            <Button Classes="SteamButton"
-                    x:Name="BtnReload"
-                    Content="Reload"
-                    Width="100"/>
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal"
+                        Spacing="8">
 
-            <Button Classes="SteamButton"
-                    x:Name="BtnRefresh"
-                    Content="Refresh"
-                    Width="100"/>
+                <Button Classes="SteamButton"
+                        x:Name="BtnReload"
+                        Content="Reload"
+                        Width="100"/>
 
-            <Button Classes="SteamButton DangerButton"
+                <Button Classes="SteamButton"
+                        x:Name="BtnRefresh"
+                        Content="Refresh"
+                        Width="100"/>
+            </StackPanel>
+
+            <Button Grid.Column="2"
+                    Classes="SteamButton DangerButton"
                     x:Name="BtnRestart"
                     Content="Restart Service"
                     Width="140"
                     ToolTip.Tip="Restarts iscsid. Active sessions and mounted volumes may be interrupted."/>
-        </StackPanel>
+
+        </Grid>
 
     </Grid>
 </UserControl>

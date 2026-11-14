@@ -100,10 +100,13 @@ namespace ISCSI_Util.Views
 
         private void SetSummary(string state, string detail, Color foreground, Color background)
         {
+            var brush = new SolidColorBrush(foreground);
+
             SummaryBorder.Background = new SolidColorBrush(background);
-            SummaryBorder.BorderBrush = new SolidColorBrush(foreground);
-            TxtSummary.Foreground = new SolidColorBrush(foreground);
-            TxtSummaryDetail.Foreground = new SolidColorBrush(foreground);
+            SummaryBorder.BorderBrush = brush;
+            IconSummary.Fill = brush;
+            TxtSummary.Foreground = brush;
+            TxtSummaryDetail.Foreground = brush;
             TxtSummary.Text = $"SYSTEM STATUS: {state}";
             TxtSummaryDetail.Text = detail;
         }
@@ -835,7 +838,8 @@ namespace ISCSI_Util.Views
             }
 
             string detail = reasons.Count > 0
-                ? Capitalize(string.Join(" · ", reasons))
+                ? Capitalize(reasons[0]) +
+                  (reasons.Count > 1 ? $" (+{reasons.Count - 1} more)" : "")
                 : _activeSessions == 0
                     ? "All systems operational · no active iSCSI sessions"
                     : $"All systems operational · {_activeSessions} active session(s)";
