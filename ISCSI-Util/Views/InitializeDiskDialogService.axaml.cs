@@ -82,7 +82,7 @@ public partial class InitializeDiskDialog : Window
         }
         catch (Exception ex)
         {
-            LogService.Error($"[INIT_DISK] ERROR during initialization: {ex.Message}");
+            LogService.Debug($"[INIT_DISK] ERROR during initialization: {ex.Message}");
             await MessageBox($"Failed to initialize disk:\n{ex.Message}");
         }
         finally

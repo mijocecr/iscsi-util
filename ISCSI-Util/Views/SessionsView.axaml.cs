@@ -149,7 +149,7 @@ public partial class SessionsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[SESSIONS] Primary action failed: {ex.Message}");
+            LogService.Debug($"[SESSIONS] Primary action failed: {ex.Message}");
             NotificadorLinux.Enviar($"Operation failed: {ex.Message}", 7000, "critical");
         }
     }
@@ -597,7 +597,7 @@ public partial class SessionsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[SESSIONS] Refresh failed: {ex.Message}");
+            LogService.Debug($"[SESSIONS] Refresh failed: {ex.Message}");
             NotificadorLinux.Enviar($"Refresh failed: {ex.Message}", 7000, "critical");
         }
     }
@@ -625,7 +625,7 @@ public partial class SessionsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[SESSIONS] Rescan all failed: {ex.Message}");
+            LogService.Debug($"[SESSIONS] Rescan all failed: {ex.Message}");
             NotificadorLinux.Enviar($"Rescan failed: {ex.Message}", 7000, "critical");
         }
         finally
@@ -655,7 +655,7 @@ public partial class SessionsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[SESSIONS] Rescan failed: {ex.Message}");
+            LogService.Debug($"[SESSIONS] Rescan failed: {ex.Message}");
             NotificadorLinux.Enviar($"Rescan failed: {ex.Message}", 7000, "critical");
         }
         finally
@@ -732,7 +732,7 @@ public partial class SessionsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[SESSIONS] Unmount failed: {ex.Message}");
+            LogService.Debug($"[SESSIONS] Unmount failed: {ex.Message}");
             NotificadorLinux.Enviar($"Unmount failed: {ex.Message}", 7000, "critical");
         }
 
@@ -763,7 +763,7 @@ public partial class SessionsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[SESSIONS] Disconnect failed: {ex.Message}");
+            LogService.Debug($"[SESSIONS] Disconnect failed: {ex.Message}");
             NotificadorLinux.Enviar($"Disconnect failed: {ex.Message}", 7000, "critical");
         }
 

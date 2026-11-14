@@ -319,7 +319,7 @@ public static class IscsiSessions
     public static string ExtraerAuthDesdeNode(string iqn, string portal)
     {
         var raw = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {iqn} -p {portal} --op show"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(iqn)} -p {ShellHelper.QuoteArg(portal)} --op show"
         ).Stdout;
 
         if (string.IsNullOrWhiteSpace(raw))

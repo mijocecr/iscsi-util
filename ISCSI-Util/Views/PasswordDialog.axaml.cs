@@ -55,7 +55,8 @@ namespace ISCSI_Util.Views
                 return;
             }
 
-            LogService.Write("[PWD_DIALOG] Contraseña aceptada por el usuario.");
+            // El resultado correcto lo registra MainWindow tras validar la
+            // contraseña con sudo; aquí no hace falta otro log.
 
             _closeApp = false;
             Close(pass);

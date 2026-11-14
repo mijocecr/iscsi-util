@@ -66,15 +66,15 @@ public partial class ChapDialog : Window
             LogService.Debug("[CHAP_DIALOG] Actualizando CHAP en iscsiadm...");
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.authmethod --value=CHAP"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.authmethod --value=CHAP"
             );
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username --value=\"{user}\""
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
             );
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password --value=\"{pass}\""
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
             );
 
             // --------------------------------------------------------------

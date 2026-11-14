@@ -108,7 +108,32 @@ public static class ConfigManager
             Directory.CreateDirectory(ConfigDir);
         }
 
-        File.WriteAllText(ConfigPath, json);
+        // Escritura atómica: se escribe primero un temporal y luego se
+        // reemplaza config.json con un rename. Un corte a mitad de guardado
+        // deja intacto el archivo anterior en vez de truncarlo.
+        var tempPath = ConfigPath + ".tmp";
+
+        try
+        {
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, ConfigPath, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch
+            {
+                // La limpieza del temporal no debe ocultar el error original.
+            }
+
+            LogService.Error($"[CONFIG] ERROR Save(): {ex.Message}");
+            throw;
+        }
+
         LogService.Debug($"[CONFIG] Archivo guardado en {ConfigPath}");
 
         if (!Directory.Exists(LogPath))

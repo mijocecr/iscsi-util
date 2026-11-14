@@ -38,6 +38,31 @@ public static class ShellHelper
     private const int PasswordErrorExitCode = 1001;
     private const int TimeoutExitCode = 124;
 
+    // Fuerza mensajes en inglés para que el parseo de ping, systemctl,
+    // iscsiadm, mountpoint, etc. no dependa del idioma del sistema.
+    private const string StableLocalePrefix = "export LC_ALL=C LANG=C; ";
+
+    /// <summary>
+    /// Escapa un valor para que bash lo trate como un único argumento.
+    /// Usa comillas simples POSIX, de modo que espacios, comillas dobles,
+    /// <c>$</c>, backticks y comodines no se expanden. Es obligatorio para
+    /// IQN, portales y credenciales CHAP que se interpolan en los comandos.
+    /// </summary>
+    public static string QuoteArg(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "''";
+
+        // 'abc'def' → 'abc'\''def'
+        return "'" + value.Replace("'", "'\\''") + "'";
+    }
+
+    private static void UseStableLocale(ProcessStartInfo psi)
+    {
+        psi.Environment["LC_ALL"] = "C";
+        psi.Environment["LANG"] = "C";
+    }
+
     // Un único sudo en vuelo. El timeout de la espera usa el mismo límite que
     // el comando, de modo que una operación no puede quedarse esperando
     // indefinidamente detrás de otra.
@@ -251,6 +276,8 @@ public static class ShellHelper
                 CreateNoWindow = true
             };
 
+            UseStableLocale(psi);
+
             // sudo -S lee la contraseña de stdin. -p "" evita que escriba el
             // prompt en stderr. El comando va como argumento único de bash -c.
             psi.ArgumentList.Add("-S");
@@ -258,7 +285,7 @@ public static class ShellHelper
             psi.ArgumentList.Add("");
             psi.ArgumentList.Add("bash");
             psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add(command);
+            psi.ArgumentList.Add(StableLocalePrefix + command);
 
             using var process = new Process { StartInfo = psi };
             process.Start();
@@ -518,8 +545,10 @@ public static class ShellHelper
                 CreateNoWindow = true
             };
 
+            UseStableLocale(psi);
+
             psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add(command);
+            psi.ArgumentList.Add(StableLocalePrefix + command);
 
             using var process = new Process { StartInfo = psi };
             process.Start();

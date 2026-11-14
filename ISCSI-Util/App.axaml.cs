@@ -4,7 +4,10 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 
+using ISCSI_Util.Helpers;
+using ISCSI_Util.Services;
 using ISCSI_Util.Views;
 
 namespace ISCSI_Util;
@@ -29,6 +32,16 @@ public partial class App : Application
     /// </summary>
     public override void OnFrameworkInitializationCompleted()
     {
+        // Último recurso para excepciones no controladas en el hilo de UI.
+        // Se registra en el log y se evita que Avalonia cierre la ventana.
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            LogService.Error($"[GLOBAL] UI thread exception: {e.Exception}");
+            NotificadorLinux.Enviar(
+                $"Unexpected error: {e.Exception.Message}", 8000, "critical");
+            e.Handled = true;
+        };
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Avoid duplicate validations from both Avalonia and the CommunityToolkit. 

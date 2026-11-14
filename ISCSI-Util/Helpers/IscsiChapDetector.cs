@@ -27,7 +27,7 @@ public static class IscsiChapDetector
         LogService.Debug($"Reading local CHAP config for {d.Iqn} at {d.Ip}");
 
         var show = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 -o show"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} -o show"
         );
 
         if (string.IsNullOrWhiteSpace(show.Stdout))
@@ -88,7 +88,7 @@ public static class IscsiChapDetector
 
         // Creamos nodo temporal si no existe
         var check = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")}"
         );
 
         bool exists = !check.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
@@ -97,13 +97,13 @@ public static class IscsiChapDetector
         {
             LogService.Debug("Node does not exist locally. Creating temporary node.");
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --op=new"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --op=new"
             );
         }
 
         // Intento de login
         var login = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --login"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --login"
         );
 
         // Logout inmediato si entró
@@ -111,7 +111,7 @@ public static class IscsiChapDetector
         {
             LogService.Debug("Login succeeded without CHAP. Logging out.");
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --logout"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --logout"
             );
         }
         else
@@ -139,7 +139,7 @@ public static class IscsiChapDetector
         {
             LogService.Debug("Deleting temporary node.");
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {d.Ip}:3260 --op=delete"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --op=delete"
             );
         }
     }

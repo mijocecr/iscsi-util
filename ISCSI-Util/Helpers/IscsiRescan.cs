@@ -187,7 +187,7 @@ public static class IscsiRescan
             .ToList();
 
         var rescan = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T \"{iqn}\" -p \"{portal}\" --rescan"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(iqn)} -p {ShellHelper.QuoteArg(portal)} --rescan"
         );
 
         if (rescan.ExitCode != 0)

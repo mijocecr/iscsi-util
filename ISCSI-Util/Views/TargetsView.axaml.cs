@@ -642,19 +642,28 @@ public partial class TargetsView : UserControl
 
     private async void OnLunSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_updatingLunSelector || _selected == null)
-            return;
+        try
+        {
+            if (_updatingLunSelector || _selected == null)
+                return;
 
-        if (LunSelector.SelectedItem is not LunOption option || option.LunId == _selectedLun)
-            return;
+            if (LunSelector.SelectedItem is not LunOption option || option.LunId == _selectedLun)
+                return;
 
-        var luns = await GetLunsAsync(_selected);
-        var lun = luns.FirstOrDefault(l => l.LunId == option.LunId);
-        if (lun == null)
-            return;
+            var luns = await GetLunsAsync(_selected);
+            var lun = luns.FirstOrDefault(l => l.LunId == option.LunId);
+            if (lun == null)
+                return;
 
-        _selectedLun = lun.LunId;
-        PintarDetallesLun(_selected, lun);
+            _selectedLun = lun.LunId;
+            PintarDetallesLun(_selected, lun);
+        }
+        catch (Exception ex)
+        {
+            // Al ser async void, una excepción aquí tumbaría la aplicación.
+            LogService.Error($"[TARGETS] No se pudo cambiar de LUN: {ex.Message}");
+            NotificadorLinux.Enviar($"Could not load LUN details: {ex.Message}", 6000, "critical");
+        }
     }
 
     private void PintarDetallesLun(IscsiDestino target, IscsiDestino lun)
@@ -929,7 +938,7 @@ public partial class TargetsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[PERSISTENCE] {ex.Message}");
+            LogService.Debug($"[PERSISTENCE] {ex.Message}");
             NotificadorLinux.Enviar($"Persistence change failed: {ex.Message}", 8000, "critical");
         }
 
@@ -1020,7 +1029,7 @@ public partial class TargetsView : UserControl
         }
         catch (Exception ex)
         {
-            LogService.Error($"[PRIMARY ACTION] Error en la operación del target: {ex.Message}");
+            LogService.Debug($"[PRIMARY ACTION] Error en la operación del target: {ex.Message}");
         }
 
         await RefreshTargetsList();
@@ -1097,7 +1106,7 @@ public partial class TargetsView : UserControl
             }
             catch (Exception ex)
             {
-                LogService.Error($"[DELETE] {ex.Message}");
+                LogService.Debug($"[DELETE] {ex.Message}");
             }
         }
 

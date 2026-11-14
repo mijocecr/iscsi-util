@@ -82,25 +82,25 @@ public partial class MutualChapDialog : Window
 
             // Activar CHAP
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.authmethod --value=CHAP"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.authmethod --value=CHAP"
             );
 
             // CHAP outgoing
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username --value=\"{user}\""
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
             );
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password --value=\"{pass}\""
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
             );
 
             // Mutual CHAP incoming
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.username_in --value={ShellHelper.QuoteArg(userIn)}"
             );
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {_destino.Iqn} -p {_destino.Ip} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.password_in --value={ShellHelper.QuoteArg(passIn)}"
             );
 
             // --------------------------------------------------------------

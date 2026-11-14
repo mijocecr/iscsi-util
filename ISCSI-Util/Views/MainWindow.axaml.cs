@@ -422,8 +422,6 @@ public partial class MainWindow : Window
 
     public async Task InitializeDisk(IscsiDestino d, string label, string fsType)
     {
-        LogService.Write($"[MAIN] Initializing disk for {d.Iqn} with FS={fsType}, Label={label}");
-
         using (LoadingService.Show("Initializing disk..."))
         {
             await SystemOperationLock.RunAsync(() => IscsiHelper.InicializarDestino(d, label, fsType));
@@ -468,9 +466,10 @@ public partial class MainWindow : Window
         LogService.Debug("[MAIN] Opening configuration window...");
 
         var win = new ConfigWindow();
-        await win.ShowDialog(this);
+        bool saved = await win.ShowDialog<bool>(this);
 
-        LogService.Write("[MAIN] Configuration updated.");
+        if (saved)
+            LogService.Write("[MAIN] Configuration updated.");
     }
 
     // ============================================================

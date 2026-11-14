@@ -20,7 +20,7 @@ public partial class ConfigWindow : Window
         BtnBrowseMount.Click += OnBrowseMount;
         BtnBrowseLog.Click += OnBrowseLog;
         BtnSave.Click += OnSave;
-        BtnCancel.Click += (_, _) => Close();
+        BtnCancel.Click += (_, _) => Close(false);
     }
 
     private void LoadConfig()
@@ -80,6 +80,6 @@ public partial class ConfigWindow : Window
         ConfigManager.Verbose = VerboseCheck.IsChecked ?? false;
 
         ConfigManager.Save();
-        Close();
+        Close(true);
     }
 }

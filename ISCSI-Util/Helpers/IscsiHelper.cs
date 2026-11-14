@@ -116,7 +116,7 @@ public static class IscsiHelper
             var portalIscsi = port == 3260 ? ipSolo : $"{ipSolo}:{port}";
 
             var check = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)}"
             );
 
             var nodoExiste = !check.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
@@ -125,14 +125,14 @@ public static class IscsiHelper
             {
                 LogService.Debug($"[ISCSI] #{id} Nodo no existe. Creándolo temporalmente...");
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=new"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=new"
                 );
             }
 
             LogService.Debug($"[ISCSI] #{id} Leyendo configuración CHAP real...");
 
             var show = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} -o show"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} -o show"
             );
 
             var config = show.Stdout ?? "";
@@ -167,7 +167,7 @@ public static class IscsiHelper
             {
                 LogService.Debug($"[ISCSI] #{id} Eliminando nodo temporal...");
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=delete"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=delete"
                 );
             }
 
@@ -218,7 +218,7 @@ public static class IscsiHelper
         {
             LogService.Debug($"[ISCSI] #{id} Ejecutando discovery sendtargets...");
             var discovery = await Task.Run(() =>
-                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ShellHelper.QuoteArg(ip)}")
             );
 
             if (string.IsNullOrWhiteSpace(discovery.Stdout))
@@ -313,7 +313,7 @@ public static class IscsiHelper
         try
         {
             // 1) Verificar la sesión activa en el Kernel
-            var sessionOutput = ShellHelper.EjecutarComoRoot($"iscsiadm -m session 2>/dev/null | grep -i \"{d.Iqn}\"")
+            var sessionOutput = ShellHelper.EjecutarComoRoot($"iscsiadm -m session 2>/dev/null | grep -i {ShellHelper.QuoteArg(d.Iqn)}")
                 .Stdout ?? "";
             d.Conectado = !string.IsNullOrWhiteSpace(sessionOutput);
 
@@ -491,9 +491,10 @@ public static class IscsiHelper
             await Conectar(target, reutilizarAutenticacionGuardada: true);
             ActualizarSesion(s, target);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            LogService.Error($"[ISCSI] Error al conectar sesión {s.Iqn}: {ex.Message}");
+            // Conectar() ya registra el error con el detalle del comando y
+            // envía la notificación; aquí solo se evita que llegue a la vista.
         }
     }
 
@@ -673,7 +674,7 @@ public static class IscsiHelper
             }
         }
 
-        var cmd = $"iscsiadm -m node -T {s.Iqn} -p {s.Portal} --logout";
+        var cmd = $"iscsiadm -m node -T {ShellHelper.QuoteArg(s.Iqn)} -p {ShellHelper.QuoteArg(s.Portal)} --logout";
         var res = ShellHelper.EjecutarComoRoot(cmd);
 
         if (res.ExitCode == 0)
@@ -778,14 +779,14 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         if (!yaConectado)
         {
             var checkNode = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)}"
             );
 
             var nodoExiste = !checkNode.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
 
             if (!nodoExiste)
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=new"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=new"
                 );
 
             // ============================================================
@@ -800,7 +801,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             {
                 // Forzar el método de autenticación a CHAP en el registro del nodo
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.authmethod --value=CHAP"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.authmethod --value=CHAP"
                 );
 
                 if (d.UsaChap)
@@ -811,11 +812,11 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                     if (!string.IsNullOrWhiteSpace(user) && !string.IsNullOrWhiteSpace(pass))
                     {
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username --value=\"{user}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
                         );
 
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password --value=\"{pass}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
                         );
                     }
                 }
@@ -832,11 +833,11 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                     if (!string.IsNullOrWhiteSpace(userIn) && !string.IsNullOrWhiteSpace(passIn))
                     {
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.username_in --value={ShellHelper.QuoteArg(userIn)}"
                         );
 
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.password_in --value={ShellHelper.QuoteArg(passIn)}"
                         );
                     }
                 }
@@ -845,12 +846,12 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             {
                 // Si no utiliza CHAP, restablecemos el método a None por seguridad
                 ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --op=update --name node.session.auth.authmethod --value=None"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.authmethod --value=None"
                 );
             }
 
             var loginResult = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {portalIscsi} --login"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --login"
             );
 
             if (loginResult.ExitCode != 0 &&
@@ -1003,7 +1004,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
     }
     catch (Exception ex)
     {
-        LogService.Error($"[ISCSI] #{id} ERROR Conectar: {ex.Message}");
+        LogService.Error($"[ISCSI] #{id} ERROR Conectar {d.Iqn}: {ex.Message}");
         NotificadorLinux.Enviar($"[ERROR] Failed to connect target {d.Iqn}", 6000, "critical");
         throw;
     }
@@ -1024,7 +1025,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         try
         {
             var result = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)}"
             );
 
             if (string.IsNullOrWhiteSpace(result.Stdout))
@@ -1082,7 +1083,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                 FstabHelper.RemoveMountPoint(d.MountPoint);
 
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op update --name node.startup --value manual"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(d.Ip)} --op update --name node.startup --value manual"
             );
 
             TraceOut(id, "EliminarPersistencia_Original");
@@ -1226,7 +1227,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             {
                 var (ipSolo, _) = NormalizarPortal(d.Ip);
                 var logoutTask = Task.Run(() =>
-                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --logout")
+                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --logout")
                 );
 
                 await Task.WhenAny(logoutTask, Task.Delay(5000));
@@ -1249,8 +1250,8 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
 
             // 6) BORRAR NODO Y DISCOVERYDB
             var (ipSolo2, _) = NormalizarPortal(d.Ip);
-            ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {d.Iqn} -p {ipSolo2} --op=delete");
-            ShellHelper.EjecutarComoRoot($"iscsiadm -m discoverydb -t sendtargets -p {ipSolo2} --op=delete");
+            ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo2)} --op=delete");
+            ShellHelper.EjecutarComoRoot($"iscsiadm -m discoverydb -t sendtargets -p {ShellHelper.QuoteArg(ipSolo2)} --op=delete");
 
             // 7) RESET COMPLETO DEL OBJETO
             d.Conectado = false;
@@ -1316,7 +1317,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                 if (string.IsNullOrEmpty(device))
                 {
                     var (ipSolo, _) = NormalizarPortal(d.Ip ?? "");
-                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T \"{d.Iqn}\" -p \"{ipSolo}\" --rescan");
+                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --rescan");
                     ShellHelper.EjecutarComoRoot("udevadm settle");
                     await Task.Delay(1000);
 

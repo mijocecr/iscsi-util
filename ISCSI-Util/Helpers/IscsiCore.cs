@@ -23,7 +23,7 @@ public static class IscsiCore
         try
         {
             var discovery = await Task.Run(() =>
-                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ip}")
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ShellHelper.QuoteArg(ip)}")
             );
 
             if (string.IsNullOrWhiteSpace(discovery.Stdout))
@@ -71,7 +71,7 @@ public static class IscsiCore
             foreach (var d in destinos)
             {
                 var raw = ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {d.Ip} --op show"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(d.Ip)} --op show"
                 ).Stdout;
 
                 bool chapEnabled = raw.Contains("node.session.auth.authmethod = CHAP");
@@ -258,7 +258,7 @@ public static class IscsiCore
             if (!yaConectado)
             {
                 var checkNode = ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo}"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)}"
                 );
 
                 bool nodoExiste = !checkNode.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
@@ -266,14 +266,14 @@ public static class IscsiCore
                 if (!nodoExiste)
                 {
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=new"
+                        $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=new"
                     );
                 }
 
                 if (d.UsaChap || d.UsaMutualChap)
                 {
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.authmethod --value=CHAP"
+                        $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=update --name node.session.auth.authmethod --value=CHAP"
                     );
 
                     if (d.UsaChap)
@@ -282,11 +282,11 @@ public static class IscsiCore
                         string pass = string.IsNullOrWhiteSpace(d.PasswordChap) ? d.LocalPass : d.PasswordChap;
 
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username --value=\"{user}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
                         );
 
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password --value=\"{pass}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
                         );
                     }
 
@@ -296,17 +296,17 @@ public static class IscsiCore
                         string passIn = string.IsNullOrWhiteSpace(d.PasswordMutualChap) ? d.LocalPassIn : d.PasswordMutualChap;
 
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.username_in --value=\"{userIn}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=update --name node.session.auth.username_in --value={ShellHelper.QuoteArg(userIn)}"
                         );
 
                         ShellHelper.EjecutarComoRoot(
-                            $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=update --name node.session.auth.password_in --value=\"{passIn}\""
+                            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=update --name node.session.auth.password_in --value={ShellHelper.QuoteArg(passIn)}"
                         );
                     }
                 }
 
                 var loginResult = ShellHelper.EjecutarComoRoot(
-                    $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --login"
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --login"
                 );
 
                 if (loginResult.ExitCode != 0 &&
@@ -402,7 +402,7 @@ public static class IscsiCore
 
                 var logoutTask = Task.Run(() =>
                     ShellHelper.EjecutarComoRoot(
-                        $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --logout"
+                        $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --logout"
                     )
                 );
 
@@ -439,11 +439,11 @@ public static class IscsiCore
             var (ipSolo, _) = NormalizarPortal(d.Ip);
 
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn} -p {ipSolo} --op=delete"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --op=delete"
             );
 
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m discoverydb -t sendtargets -p {ipSolo} --op=delete"
+                $"iscsiadm -m discoverydb -t sendtargets -p {ShellHelper.QuoteArg(ipSolo)} --op=delete"
             );
 
             d.RequiresChap = false;
@@ -502,7 +502,7 @@ public static class IscsiCore
         try
         {
             var result = ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {d.Iqn}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)}"
             );
 
             if (string.IsNullOrWhiteSpace(result.Stdout))
