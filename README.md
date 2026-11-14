@@ -128,6 +128,12 @@ Each section is designed to guide the user through the required steps with clear
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the changes in each release.
+
+---
+
 ## Contributing
 
 Contributions, suggestions, and issue reports are welcome.  
