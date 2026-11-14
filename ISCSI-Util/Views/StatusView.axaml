@@ -85,9 +85,17 @@
     </UserControl.Styles>
 
     <!-- La ventana es fija (500x580). Este grid reparte el alto disponible
-         en cuatro bandas sin necesidad de scroll:
+         en cuatro bandas:
          1) banner de estado, 2) tarjetas de servicio/red/daemon,
-         3) información y rendimiento, 4) acciones. -->
+         3) información y rendimiento, 4) acciones.
+         El ScrollViewer es solo una red de seguridad: con el contenido
+         normal no aparece, pero si crece (fuentes grandes, textos largos)
+         permite desplazarse en lugar de recortar. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalContentAlignment="Stretch"
+                  Background="Transparent">
+
     <Grid RowDefinitions="Auto,Auto,*,Auto"
           Margin="14"
           HorizontalAlignment="Stretch">
@@ -439,4 +447,6 @@
         </Grid>
 
     </Grid>
+
+    </ScrollViewer>
 </UserControl>
