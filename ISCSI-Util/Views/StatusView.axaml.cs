@@ -1,24 +1,78 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Services;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Avalonia.Interactivity;
 
 namespace ISCSI_Util.Views
 {
     public partial class StatusView : UserControl
     {
+        private readonly DispatcherTimer _metricsTimer = new()
+        {
+            Interval = TimeSpan.FromSeconds(3)
+        };
+
         private bool _isRefreshing;
+        private bool _metricsRefreshing;
+        private bool _hasLoadedStatus;
         private string _lastSummaryState = "";
+
+        private int _activeSessions;
+        private int _activeTargets;
+        private int _activeLuns;
+
+        private ThroughputSample? _lastThroughputSample;
+
+        private sealed record ThroughputSample(
+            DateTime At,
+            long ReadBytes,
+            long WriteBytes,
+            int Devices,
+            string Signature);
 
         public StatusView()
         {
             InitializeComponent();
             HookButtons();
+
+            _metricsTimer.Tick += OnMetricsTick;
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+            _metricsTimer.Start();
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            _metricsTimer.Stop();
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private async void OnMetricsTick(object? sender, EventArgs e)
+        {
+            if (!IsEffectivelyVisible || _isRefreshing || _metricsRefreshing)
+                return;
+
+            try
+            {
+                await RefreshMetricsAsync();
+            }
+            catch (Exception ex)
+            {
+                TraceError($"OnMetricsTick(): {ex.Message}");
+            }
         }
 
         // La traza de esta vista va al log (solo con Verbose activado) en vez
@@ -35,6 +89,32 @@ namespace ISCSI_Util.Views
             label.Text = text;
             label.Foreground = color;
         }
+
+        private static readonly Color OkColor = Color.Parse("#8BC53F");
+        private static readonly Color WarningColor = Color.Parse("#E6A23C");
+        private static readonly Color CriticalColor = Color.Parse("#E05A5A");
+
+        private static readonly Color OkBackground = Color.Parse("#1E4620");
+        private static readonly Color WarningBackground = Color.Parse("#4A3A12");
+        private static readonly Color CriticalBackground = Color.Parse("#5A1E1E");
+
+        private void SetSummary(string state, string detail, Color foreground, Color background)
+        {
+            SummaryBorder.Background = new SolidColorBrush(background);
+            SummaryBorder.BorderBrush = new SolidColorBrush(foreground);
+            TxtSummary.Foreground = new SolidColorBrush(foreground);
+            TxtSummaryDetail.Foreground = new SolidColorBrush(foreground);
+            TxtSummary.Text = $"SYSTEM STATUS: {state}";
+            TxtSummaryDetail.Text = detail;
+        }
+
+        private static string Capitalize(string text)
+            => string.IsNullOrEmpty(text)
+                ? text
+                : text[..1].ToUpperInvariant() + text[1..];
+
+        private static string FormatCount(int value, string singular, string plural)
+            => $"{value} {(value == 1 ? singular : plural)}";
 
         public async Task RefreshStatus()
         {
@@ -57,8 +137,7 @@ namespace ISCSI_Util.Views
             {
                 TraceError($"RefreshStatus(): {ex.Message}");
                 TxtLastOp.Text = $"Last update failed: {ex.Message}";
-                SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
-                TxtSummary.Text = "SYSTEM STATUS: Error";
+                SetSummary("Error", ex.Message, CriticalColor, CriticalBackground);
             }
             finally
             {
@@ -81,6 +160,12 @@ namespace ISCSI_Util.Views
 
             BtnRestart.Click += async (_, _) =>
             {
+                if (!await ConfirmRestartAsync())
+                {
+                    Trace("BtnRestart: cancelado por el usuario.");
+                    return;
+                }
+
                 Trace("BtnRestart: systemctl restart iscsid");
                 SetButtonsEnabled(false);
 
@@ -99,8 +184,8 @@ namespace ISCSI_Util.Views
                     }
 
                     TxtLastOp.Text = "Service restarted.";
-                    SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));
-                    TxtSummary.Text = "SYSTEM STATUS: Updating";
+                    SetSummary("Updating", "Restarting the iSCSI service...",
+                        WarningColor, WarningBackground);
 
                     // Esperar a que iscsid vuelva a estar activo en vez de
                     // asumir que 4 segundos siempre son suficientes.
@@ -116,14 +201,81 @@ namespace ISCSI_Util.Views
                 {
                     TraceError($"BtnRestart: {ex.Message}");
                     TxtLastOp.Text = $"Restart failed: {ex.Message}";
-                    SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
-                    TxtSummary.Text = "SYSTEM STATUS: Error";
+                    SetSummary("Error", $"Restart failed: {ex.Message}",
+                        CriticalColor, CriticalBackground);
                 }
                 finally
                 {
                     SetButtonsEnabled(true);
                 }
             };
+        }
+
+        /// <summary>
+        /// Reiniciar iscsid puede cortar sesiones y volúmenes montados, así que
+        /// se pide confirmación explícita antes de ejecutar la acción.
+        /// </summary>
+        private async Task<bool> ConfirmRestartAsync()
+        {
+            if (this.GetVisualRoot() is not Window owner)
+                return false;
+
+            var dialog = new Window
+            {
+                Width = 420,
+                Height = 190,
+                Title = "Restart iSCSI service",
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            var panel = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 16
+            };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Restarting iscsid can interrupt active iSCSI sessions and " +
+                       "mounted volumes.\n\nDo you want to continue?",
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Spacing = 8
+            };
+
+            var cancel = new Button
+            {
+                Content = "Cancel",
+                Width = 100,
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+
+            var confirm = new Button
+            {
+                Content = "Restart",
+                Width = 110,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Background = new SolidColorBrush(Color.Parse("#3A1518")),
+                BorderBrush = new SolidColorBrush(Color.Parse("#D9534F")),
+                BorderThickness = new Thickness(2),
+                Foreground = new SolidColorBrush(Color.Parse("#FF9A95"))
+            };
+
+            cancel.Click += (_, _) => dialog.Close(false);
+            confirm.Click += (_, _) => dialog.Close(true);
+
+            buttons.Children.Add(cancel);
+            buttons.Children.Add(confirm);
+            panel.Children.Add(buttons);
+            dialog.Content = panel;
+
+            return await dialog.ShowDialog<bool>(owner);
         }
 
         private async Task<bool> WaitForDaemonReadyAsync(TimeSpan timeout)
@@ -164,13 +316,188 @@ namespace ISCSI_Util.Views
             var tHostname = LoadHostname();
             var tIp       = LoadIpAddress();
             var tLatency  = LoadLatency();
+            var tSessions = LoadSessionMetrics();
+            var tThroughput = LoadThroughput();
 
-            await Task.WhenAll(tService, tNetwork, tDaemon, tUptime, tHostname, tIp, tLatency);
+            await Task.WhenAll(
+                tService, tNetwork, tDaemon, tUptime, tHostname, tIp,
+                tLatency, tSessions, tThroughput);
 
             TxtLastOp.Text = $"Last update: {DateTime.Now:HH:mm:ss}";
+            _hasLoadedStatus = true;
             UpdateSummary();
 
             Trace("LoadStatus() ← OK");
+        }
+
+        /// <summary>
+        /// Refresco ligero que usa el temporizador: solo sesiones/targets y
+        /// throughput, sin repetir ping ni lecturas de sistema.
+        /// </summary>
+        private async Task RefreshMetricsAsync()
+        {
+            if (_metricsRefreshing)
+                return;
+
+            _metricsRefreshing = true;
+
+            try
+            {
+                await Task.WhenAll(LoadSessionMetrics(), LoadThroughput());
+
+                // Antes del primer LoadStatus() los campos aún tienen sus
+                // valores por defecto; no se debe resumir el estado todavía.
+                if (_hasLoadedStatus)
+                    UpdateSummary();
+            }
+            finally
+            {
+                _metricsRefreshing = false;
+            }
+        }
+
+        private async Task LoadSessionMetrics()
+        {
+            try
+            {
+                Trace("LoadSessionMetrics() → /dev/disk/by-path");
+
+                var result = await ShellHelper.RunCleanResultAsync("ls -1 /dev/disk/by-path/");
+
+                var entries = IscsiByPath.ParseAll(
+                    result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries)).ToList();
+
+                _activeLuns = entries.Count;
+
+                _activeSessions = entries
+                    .Select(e => $"{e.Portal}|{e.Iqn}")
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+
+                _activeTargets = entries
+                    .Select(e => e.Iqn)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+
+                TxtSessions.Text =
+                    $"{FormatCount(_activeSessions, "session", "sessions")} · " +
+                    $"{FormatCount(_activeTargets, "target", "targets")} · " +
+                    $"{FormatCount(_activeLuns, "LUN", "LUNs")}";
+
+                Trace(
+                    $"LoadSessionMetrics() ← sessions={_activeSessions}, " +
+                    $"targets={_activeTargets}, luns={_activeLuns}");
+            }
+            catch (Exception ex)
+            {
+                TraceError($"LoadSessionMetrics(): {ex.Message}");
+                _activeSessions = 0;
+                _activeTargets = 0;
+                _activeLuns = 0;
+                TxtSessions.Text = "Unknown";
+            }
+        }
+
+        /// <summary>
+        /// Suma los contadores de todos los dispositivos iSCSI y calcula la
+        /// velocidad entre dos muestras. Los sectores del kernel son siempre
+        /// de 512 bytes, independientemente del tamaño lógico del disco.
+        /// </summary>
+        private async Task LoadThroughput()
+        {
+            try
+            {
+                const string script =
+                    """
+                    for l in /dev/disk/by-path/ip-*; do
+                      case "$l" in *-part*) continue;; esac
+                      d=$(readlink -f "$l" 2>/dev/null) || continue
+                      n=$(basename "$d")
+                      s="/sys/class/block/$n/stat"
+                      [ -r "$s" ] || continue
+                      printf '%s ' "$n"
+                      cat "$s"
+                    done | sort -u -k1,1
+                    """;
+
+                var result = await ShellHelper.RunCleanResultAsync(script);
+
+                long readSectors = 0;
+                long writeSectors = 0;
+                var deviceNames = new List<string>();
+
+                foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+                    // parts[0] = nombre; los sectores leídos/escritos son los
+                    // campos 3 y 7 del fichero stat (índices 3 y 7 aquí).
+                    if (parts.Length < 8 ||
+                        !long.TryParse(parts[3], out long rs) ||
+                        !long.TryParse(parts[7], out long ws))
+                    {
+                        continue;
+                    }
+
+                    readSectors += rs;
+                    writeSectors += ws;
+                    deviceNames.Add(parts[0]);
+                }
+
+                int devices = deviceNames.Count;
+
+                long readBytes = readSectors * 512L;
+                long writeBytes = writeSectors * 512L;
+                var now = DateTime.UtcNow;
+
+                if (devices == 0)
+                {
+                    _lastThroughputSample = null;
+                    TxtThroughput.Text = "No active iSCSI devices";
+                    Trace("LoadThroughput() ← sin dispositivos iSCSI");
+                    return;
+                }
+
+                string signature = string.Join(",", deviceNames.OrderBy(n => n, StringComparer.Ordinal));
+
+                if (_lastThroughputSample is { } previous && previous.Signature == signature)
+                {
+                    double seconds = (now - previous.At).TotalSeconds;
+
+                    if (seconds >= 0.2)
+                    {
+                        double readMbps =
+                            (readBytes - previous.ReadBytes) / seconds / (1024d * 1024d);
+                        double writeMbps =
+                            (writeBytes - previous.WriteBytes) / seconds / (1024d * 1024d);
+
+                        // Si el contador retrocede (dispositivo reiniciado),
+                        // no se muestran velocidades negativas.
+                        readMbps = Math.Max(0, readMbps);
+                        writeMbps = Math.Max(0, writeMbps);
+
+                        TxtThroughput.Text =
+                            $"{readMbps:F2} / {writeMbps:F2} MB/s (read/write) · " +
+                            $"{devices} device(s)";
+
+                        Trace($"LoadThroughput() ← {TxtThroughput.Text}");
+                    }
+                }
+                else
+                {
+                    // Primera muestra: hace falta otra para calcular velocidad.
+                    TxtThroughput.Text = "Calculating...";
+                }
+
+                _lastThroughputSample =
+                    new ThroughputSample(now, readBytes, writeBytes, devices, signature);
+            }
+            catch (Exception ex)
+            {
+                TraceError($"LoadThroughput(): {ex.Message}");
+                _lastThroughputSample = null;
+                TxtThroughput.Text = "Unknown";
+            }
         }
 
         private async Task LoadServiceStatus()
@@ -393,8 +720,8 @@ namespace ISCSI_Util.Views
 
                     string sub = raw[(idx + offset)..];
                     string ms = sub.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-                    TxtLatency.Text = ms;
-                    Trace($"LoadLatency() ← '{ms}'");
+                    TxtLatency.Text = $"{ms} ms";
+                    Trace($"LoadLatency() ← '{TxtLatency.Text}'");
                 }
                 else
                 {
@@ -409,17 +736,87 @@ namespace ISCSI_Util.Views
             }
         }
 
-        // ⭐ ACTUALIZADO: Syncing ya no es crítico
         private void UpdateSummary()
         {
-            bool serviceOk = TxtIscsid.Text == "Running";
-            bool networkOk = TxtNetwork.Text == "Connected";
-            bool daemonOk  = TxtSocket.Text is "Operational" or "Syncing";
+            var reasons = new List<string>();
+            bool critical = false;
+            bool degraded = false;
 
-            string state = serviceOk && networkOk && daemonOk ? "OK" : "Critical";
+            switch (TxtIscsid.Text)
+            {
+                case "Running":
+                    break;
+
+                case "Starting":
+                    degraded = true;
+                    reasons.Add("iscsid is starting");
+                    break;
+
+                case "Stopped":
+                    critical = true;
+                    reasons.Add("iscsid is stopped");
+                    break;
+
+                default:
+                    degraded = true;
+                    reasons.Add("iscsid state is unknown");
+                    break;
+            }
+
+            switch (TxtSocket.Text)
+            {
+                case "Operational":
+                    break;
+
+                case "Syncing":
+                    degraded = true;
+                    reasons.Add("iSCSI daemon is syncing");
+                    break;
+
+                case "Not operational":
+                    critical = true;
+                    reasons.Add("iSCSI daemon is not operational");
+                    break;
+
+                default:
+                    degraded = true;
+                    reasons.Add("iSCSI daemon state is unknown");
+                    break;
+            }
+
+            switch (TxtNetwork.Text)
+            {
+                case "Connected":
+                    break;
+
+                case "Disconnected":
+                    degraded = true;
+                    reasons.Add("no default network route");
+                    break;
+
+                default:
+                    degraded = true;
+                    reasons.Add("network state is unknown");
+                    break;
+            }
+
+            if (TxtLatency.Text == "Timeout")
+            {
+                degraded = true;
+                reasons.Add("network latency timeout");
+            }
+
+            if (_activeSessions > 0 && _activeLuns == 0)
+            {
+                degraded = true;
+                reasons.Add("check targets: no LUN devices detected");
+            }
+
+            string state = critical ? "Critical" : degraded ? "Degraded" : "OK";
 
             Trace($"UpdateSummary() state={state} service={TxtIscsid.Text}, " +
-                  $"network={TxtNetwork.Text}, daemon={TxtSocket.Text}");
+                  $"network={TxtNetwork.Text}, daemon={TxtSocket.Text}, " +
+                  $"sessions={_activeSessions}, luns={_activeLuns}");
 
             // Solo se registra cuando el estado cambia, para que el log sea
             // útil sin llenarse con una línea en cada refresco.
@@ -429,13 +826,26 @@ namespace ISCSI_Util.Views
 
                 LogService.Write(
                     $"[STATUS] System status {state}: iscsid={TxtIscsid.Text}, " +
-                    $"network={TxtNetwork.Text}, daemon={TxtSocket.Text}");
+                    $"network={TxtNetwork.Text}, daemon={TxtSocket.Text}, " +
+                    $"sessions={_activeSessions}, targets={_activeTargets}, " +
+                    $"luns={_activeLuns}, latency={TxtLatency.Text}" +
+                    (reasons.Count > 0
+                        ? $", reasons={string.Join("; ", reasons)}"
+                        : ""));
             }
 
-            SummaryBorder.Background = new SolidColorBrush(
-                Color.Parse(state == "OK" ? "#1E4620" : "#5A1E1E"));
+            string detail = reasons.Count > 0
+                ? Capitalize(string.Join(" · ", reasons))
+                : _activeSessions == 0
+                    ? "All systems operational · no active iSCSI sessions"
+                    : $"All systems operational · {_activeSessions} active session(s)";
 
-            TxtSummary.Text = $"SYSTEM STATUS: {state}";
+            if (critical)
+                SetSummary("Critical", detail, CriticalColor, CriticalBackground);
+            else if (degraded)
+                SetSummary("Degraded", detail, WarningColor, WarningBackground);
+            else
+                SetSummary("OK", detail, OkColor, OkBackground);
         }
     }
 }

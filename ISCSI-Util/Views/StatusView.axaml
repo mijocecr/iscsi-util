@@ -56,6 +56,27 @@
             <Setter Property="BorderBrush" Value="#1A9FFF"/>
         </Style>
 
+        <!-- Acción disruptiva: reiniciar el servicio. Se distingue del resto
+             de acciones de consulta para evitar clics accidentales. -->
+        <Style Selector="Button.DangerButton">
+            <Setter Property="Background" Value="#3A1518"/>
+            <Setter Property="BorderBrush" Value="#D9534F"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Foreground" Value="#FF9A95"/>
+        </Style>
+
+        <Style Selector="Button.DangerButton:pointerover">
+            <Setter Property="Background" Value="#5A1E1E"/>
+            <Setter Property="BorderBrush" Value="#FF6B66"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+
+        <Style Selector="Button.DangerButton:pressed">
+            <Setter Property="Background" Value="#2A0F11"/>
+            <Setter Property="BorderBrush" Value="#FF4D47"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto"
@@ -67,7 +88,7 @@
         ============================================================ -->
         <Border x:Name="SummaryBorder"
                 Classes="SteamCard"
-                Background="{DynamicResource SteamCardBackground}"
+                Background="#1E4620"
                 BorderBrush="{DynamicResource SteamGreen}"
                 BorderThickness="2"
                 CornerRadius="8"
@@ -75,13 +96,22 @@
                 Margin="0,0,0,16"
                 HorizontalAlignment="Stretch">
 
-            <TextBlock x:Name="TxtSummary"
-                       Text="SYSTEM STATUS: OK"
-                       FontSize="18"
-                       
-                       FontWeight="Bold"
-                       HorizontalAlignment="Center"
-                       Foreground="{DynamicResource SteamGreen}"/>
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="TxtSummary"
+                           Text="SYSTEM STATUS: OK"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource SteamGreen}"/>
+
+                <TextBlock x:Name="TxtSummaryDetail"
+                           Text="All systems operational"
+                           FontSize="12"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource SteamGreen}"/>
+            </StackPanel>
         </Border>
 
 
@@ -275,6 +305,51 @@
                     <TextBlock Grid.Row="4" Grid.Column="1"
                                x:Name="TxtLatency"
                                Classes="mono"
+                               Text="Reading..."
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource SteamGreen}"/>
+
+                </Grid>
+
+                <!-- Métricas específicas de iSCSI -->
+                <Rectangle Height="1"
+                           Fill="#30FFFFFF"
+                           Margin="0,14,0,10"/>
+
+                <TextBlock Text="iSCSI Performance"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource SteamBlue}"
+                           Margin="0,0,0,8"/>
+
+                <Grid ColumnDefinitions="140,*"
+                      RowDefinitions="Auto,Auto"
+                      ColumnSpacing="10"
+                      RowSpacing="6"
+                      HorizontalAlignment="Stretch">
+
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="Sessions / Targets:"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamBlue}"/>
+
+                    <TextBlock Grid.Row="0" Grid.Column="1"
+                               x:Name="TxtSessions"
+                               Classes="mono"
+                               Text="Reading..."
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource SteamGreen}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0"
+                               Text="Throughput:"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SteamBlue}"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="1"
+                               x:Name="TxtThroughput"
+                               Classes="mono"
+                               Text="Reading..."
                                TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}"/>
 
@@ -295,17 +370,18 @@
             <Button Classes="SteamButton"
                     x:Name="BtnReload"
                     Content="Reload"
-                    Width="110"/>
-
-            <Button Classes="SteamButton"
-                    x:Name="BtnRestart"
-                    Content="Restart Service"
-                    Width="130"/>
+                    Width="100"/>
 
             <Button Classes="SteamButton"
                     x:Name="BtnRefresh"
                     Content="Refresh"
-                    Width="110"/>
+                    Width="100"/>
+
+            <Button Classes="SteamButton DangerButton"
+                    x:Name="BtnRestart"
+                    Content="Restart Service"
+                    Width="140"
+                    ToolTip.Tip="Restarts iscsid. Active sessions and mounted volumes may be interrupted."/>
         </StackPanel>
 
     </Grid>
