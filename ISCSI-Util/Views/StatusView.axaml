@@ -262,12 +262,12 @@
             </Border.Background>
 
             <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                  RowSpacing="6">
+                  RowSpacing="5">
 
                 <!-- Header -->
                 <TextBlock Grid.Row="0"
                            Text="System Information"
-                           FontSize="13"
+                           FontSize="14"
                            FontWeight="Bold"
                            Foreground="{DynamicResource SteamBlue}"/>
 
@@ -276,12 +276,12 @@
                       ColumnDefinitions="Auto,*,Auto,*"
                       RowDefinitions="Auto,Auto"
                       ColumnSpacing="6"
-                      RowSpacing="4"
+                      RowSpacing="3"
                       HorizontalAlignment="Stretch">
 
                     <TextBlock Grid.Row="0" Grid.Column="0"
                                Text="Uptime:"
-                               FontSize="11"
+                               FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
@@ -289,13 +289,13 @@
                     <TextBlock Grid.Row="0" Grid.Column="1"
                                x:Name="TxtUptime"
                                Classes="mono"
-                               FontSize="12"
+                               FontSize="13"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
 
                     <TextBlock Grid.Row="0" Grid.Column="2"
                                Text="Hostname:"
-                               FontSize="11"
+                               FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Margin="8,0,0,0"
@@ -304,13 +304,13 @@
                     <TextBlock Grid.Row="0" Grid.Column="3"
                                x:Name="TxtHostname"
                                Classes="mono"
-                               FontSize="12"
+                               FontSize="13"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0"
                                Text="IP:"
-                               FontSize="11"
+                               FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
@@ -318,13 +318,13 @@
                     <TextBlock Grid.Row="1" Grid.Column="1"
                                x:Name="TxtIpAddress"
                                Classes="mono"
-                               FontSize="12"
+                               FontSize="13"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
 
                     <TextBlock Grid.Row="1" Grid.Column="2"
                                Text="Latency:"
-                               FontSize="11"
+                               FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Margin="8,0,0,0"
@@ -333,7 +333,7 @@
                     <TextBlock Grid.Row="1" Grid.Column="3"
                                x:Name="TxtLatency"
                                Classes="mono"
-                               FontSize="12"
+                               FontSize="13"
                                Text="Reading..."
                                TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
@@ -346,7 +346,7 @@
                       ColumnSpacing="6">
 
                     <TextBlock Text="Last operation:"
-                               FontSize="11"
+                               FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
@@ -354,7 +354,7 @@
                     <TextBlock Grid.Column="1"
                                x:Name="TxtLastOp"
                                Classes="mono"
-                               FontSize="12"
+                               FontSize="13"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SteamGreen}"/>
                 </Grid>
@@ -367,11 +367,11 @@
                 <!-- Rendimiento iSCSI -->
                 <Grid Grid.Row="4"
                       RowDefinitions="Auto,Auto,Auto,Auto"
-                      RowSpacing="4">
+                      RowSpacing="3">
 
                     <TextBlock Grid.Row="0"
                                Text="iSCSI Performance"
-                               FontSize="13"
+                               FontSize="14"
                                FontWeight="Bold"
                                Foreground="{DynamicResource SteamBlue}"/>
 
@@ -379,14 +379,14 @@
                           ColumnDefinitions="Auto,*"
                           ColumnSpacing="6">
                         <TextBlock Text="Sessions / Targets:"
-                                   FontSize="11"
+                                   FontSize="12"
                                    FontWeight="Bold"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource SteamBlue}"/>
                         <TextBlock Grid.Column="1"
                                    x:Name="TxtSessions"
                                    Classes="mono"
-                                   FontSize="12"
+                                   FontSize="13"
                                    Text="Reading..."
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource SteamGreen}"/>
@@ -395,15 +395,15 @@
                     <Grid Grid.Row="2"
                           ColumnDefinitions="Auto,*"
                           ColumnSpacing="6">
-                        <TextBlock Text="Throughput:"
-                                   FontSize="11"
+                        <TextBlock Text="Throughput R/W:"
+                                   FontSize="12"
                                    FontWeight="Bold"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource SteamBlue}"/>
                         <TextBlock Grid.Column="1"
                                    x:Name="TxtThroughput"
                                    Classes="mono"
-                                   FontSize="12"
+                                   FontSize="13"
                                    Text="Reading..."
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource SteamGreen}"/>
@@ -412,15 +412,15 @@
                     <Grid Grid.Row="3"
                           ColumnDefinitions="Auto,*"
                           ColumnSpacing="6">
-                        <TextBlock Text="IOPS:"
-                                   FontSize="11"
+                        <TextBlock Text="IOPS R/W:"
+                                   FontSize="12"
                                    FontWeight="Bold"
                                    VerticalAlignment="Center"
                                    Foreground="{DynamicResource SteamBlue}"/>
                         <TextBlock Grid.Column="1"
                                    x:Name="TxtIops"
                                    Classes="mono"
-                                   FontSize="12"
+                                   FontSize="13"
                                    Text="Reading..."
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource SteamGreen}"/>

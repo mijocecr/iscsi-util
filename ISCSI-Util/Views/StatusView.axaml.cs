@@ -499,11 +499,11 @@ namespace ISCSI_Util.Views
                         writeIops = Math.Max(0, writeIops);
 
                         TxtThroughput.Text =
-                            $"{readMbps:F2} / {writeMbps:F2} MB/s (read/write) · " +
+                            $"{readMbps:F2} / {writeMbps:F2} MB/s · " +
                             $"{devices} device(s)";
 
                         TxtIops.Text =
-                            $"{FormatIops(readIops)} / {FormatIops(writeIops)} IOPS (read/write)";
+                            $"{FormatIops(readIops)} / {FormatIops(writeIops)} IOPS";
 
                         Trace($"LoadThroughput() ← {TxtThroughput.Text}; {TxtIops.Text}");
                     }
