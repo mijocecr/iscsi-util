@@ -106,30 +106,28 @@
                 Margin="0,0,0,10"
                 HorizontalAlignment="Stretch">
 
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+            <StackPanel Spacing="1"
+                        HorizontalAlignment="Center">
 
-                <Ellipse x:Name="IconSummary"
-                         Width="14" Height="14"
-                         Fill="{DynamicResource SteamGreen}"
-                         VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtSummary"
+                           Text="SYSTEM STATUS: OK"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource SteamGreen}"/>
 
-                <StackPanel Grid.Column="1" Spacing="1">
-                    <TextBlock x:Name="TxtSummary"
-                               Text="SYSTEM STATUS: OK"
-                               FontSize="16"
-                               FontWeight="Bold"
-                               Foreground="{DynamicResource SteamGreen}"/>
+                <TextBlock x:Name="TxtSummaryDetail"
+                           Text="All systems operational"
+                           FontSize="11"
+                           MaxLines="2"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource SteamGreen}"/>
 
-                    <TextBlock x:Name="TxtSummaryDetail"
-                               Text="All systems operational"
-                               FontSize="11"
-                               MaxLines="2"
-                               TextWrapping="Wrap"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource SteamGreen}"/>
-                </StackPanel>
-
-            </Grid>
+            </StackPanel>
         </Border>
 
 

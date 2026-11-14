@@ -104,7 +104,6 @@ namespace ISCSI_Util.Views
 
             SummaryBorder.Background = new SolidColorBrush(background);
             SummaryBorder.BorderBrush = brush;
-            IconSummary.Fill = brush;
             TxtSummary.Foreground = brush;
             TxtSummaryDetail.Foreground = brush;
             TxtSummary.Text = $"SYSTEM STATUS: {state}";
