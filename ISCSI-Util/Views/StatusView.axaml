@@ -366,7 +366,7 @@
 
                 <!-- Rendimiento iSCSI -->
                 <Grid Grid.Row="4"
-                      RowDefinitions="Auto,Auto,Auto"
+                      RowDefinitions="Auto,Auto,Auto,Auto"
                       RowSpacing="4">
 
                     <TextBlock Grid.Row="0"
@@ -402,6 +402,23 @@
                                    Foreground="{DynamicResource SteamBlue}"/>
                         <TextBlock Grid.Column="1"
                                    x:Name="TxtThroughput"
+                                   Classes="mono"
+                                   FontSize="12"
+                                   Text="Reading..."
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SteamGreen}"/>
+                    </Grid>
+
+                    <Grid Grid.Row="3"
+                          ColumnDefinitions="Auto,*"
+                          ColumnSpacing="6">
+                        <TextBlock Text="IOPS:"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SteamBlue}"/>
+                        <TextBlock Grid.Column="1"
+                                   x:Name="TxtIops"
                                    Classes="mono"
                                    FontSize="12"
                                    Text="Reading..."

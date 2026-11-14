@@ -37,6 +37,8 @@ namespace ISCSI_Util.Views
             DateTime At,
             long ReadBytes,
             long WriteBytes,
+            long ReadIos,
+            long WriteIos,
             int Devices,
             string Signature);
 
@@ -117,6 +119,11 @@ namespace ISCSI_Util.Views
 
         private static string FormatCount(int value, string singular, string plural)
             => $"{value} {(value == 1 ? singular : plural)}";
+
+        private static string FormatIops(double value)
+            => value >= 1000
+                ? $"{value / 1000d:F1}k"
+                : $"{value:F0}";
 
         public async Task RefreshStatus()
         {
@@ -426,21 +433,28 @@ namespace ISCSI_Util.Views
 
                 long readSectors = 0;
                 long writeSectors = 0;
+                long readIos = 0;
+                long writeIos = 0;
                 var deviceNames = new List<string>();
 
                 foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                 {
                     var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-                    // parts[0] = nombre; los sectores leídos/escritos son los
-                    // campos 3 y 7 del fichero stat (índices 3 y 7 aquí).
+                    // parts[0] = nombre; tras él vienen los campos del fichero
+                    // stat: 1) I/Os leídas, 3) sectores leídos, 5) I/Os
+                    // escritas y 7) sectores escritos.
                     if (parts.Length < 8 ||
+                        !long.TryParse(parts[1], out long ri) ||
                         !long.TryParse(parts[3], out long rs) ||
+                        !long.TryParse(parts[5], out long wi) ||
                         !long.TryParse(parts[7], out long ws))
                     {
                         continue;
                     }
 
+                    readIos += ri;
+                    writeIos += wi;
                     readSectors += rs;
                     writeSectors += ws;
                     deviceNames.Add(parts[0]);
@@ -456,6 +470,7 @@ namespace ISCSI_Util.Views
                 {
                     _lastThroughputSample = null;
                     TxtThroughput.Text = "No active iSCSI devices";
+                    TxtIops.Text = "—";
                     Trace("LoadThroughput() ← sin dispositivos iSCSI");
                     return;
                 }
@@ -473,32 +488,43 @@ namespace ISCSI_Util.Views
                         double writeMbps =
                             (writeBytes - previous.WriteBytes) / seconds / (1024d * 1024d);
 
+                        double readIops = (readIos - previous.ReadIos) / seconds;
+                        double writeIops = (writeIos - previous.WriteIos) / seconds;
+
                         // Si el contador retrocede (dispositivo reiniciado),
                         // no se muestran velocidades negativas.
                         readMbps = Math.Max(0, readMbps);
                         writeMbps = Math.Max(0, writeMbps);
+                        readIops = Math.Max(0, readIops);
+                        writeIops = Math.Max(0, writeIops);
 
                         TxtThroughput.Text =
                             $"{readMbps:F2} / {writeMbps:F2} MB/s (read/write) · " +
                             $"{devices} device(s)";
 
-                        Trace($"LoadThroughput() ← {TxtThroughput.Text}");
+                        TxtIops.Text =
+                            $"{FormatIops(readIops)} / {FormatIops(writeIops)} IOPS (read/write)";
+
+                        Trace($"LoadThroughput() ← {TxtThroughput.Text}; {TxtIops.Text}");
                     }
                 }
                 else
                 {
                     // Primera muestra: hace falta otra para calcular velocidad.
                     TxtThroughput.Text = "Calculating...";
+                    TxtIops.Text = "Calculating...";
                 }
 
                 _lastThroughputSample =
-                    new ThroughputSample(now, readBytes, writeBytes, devices, signature);
+                    new ThroughputSample(
+                        now, readBytes, writeBytes, readIos, writeIos, devices, signature);
             }
             catch (Exception ex)
             {
                 TraceError($"LoadThroughput(): {ex.Message}");
                 _lastThroughputSample = null;
                 TxtThroughput.Text = "Unknown";
+                TxtIops.Text = "Unknown";
             }
         }
 
