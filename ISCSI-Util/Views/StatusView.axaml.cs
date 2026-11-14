@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using ISCSI_Util.Helpers;
 using ISCSI_Util.Services;
@@ -12,6 +13,7 @@ namespace ISCSI_Util.Views
     public partial class StatusView : UserControl
     {
         private bool _isRefreshing;
+        private string _lastSummaryState = "";
 
         public StatusView()
         {
@@ -19,9 +21,19 @@ namespace ISCSI_Util.Views
             HookButtons();
         }
 
-        private void Trace(string message)
+        // La traza de esta vista va al log (solo con Verbose activado) en vez
+        // de a la consola, para que el diagnóstico quede junto al resto.
+        private static void Trace(string message)
+            => LogService.Debug($"[STATUS] {message}");
+
+        private static void TraceError(string message)
+            => LogService.Error($"[STATUS] {message}");
+
+        private static void SetIndicator(Ellipse icon, TextBlock label, string text, IBrush color)
         {
-            Console.WriteLine($"[StatusView] {DateTime.Now:HH:mm:ss} {message}");
+            icon.Fill = color;
+            label.Text = text;
+            label.Foreground = color;
         }
 
         public async Task RefreshStatus()
@@ -43,7 +55,7 @@ namespace ISCSI_Util.Views
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] RefreshStatus(): {ex}");
+                TraceError($"RefreshStatus(): {ex.Message}");
                 TxtLastOp.Text = $"Last update failed: {ex.Message}";
                 SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
                 TxtSummary.Text = "SYSTEM STATUS: Error";
@@ -53,14 +65,6 @@ namespace ISCSI_Util.Views
                 _isRefreshing = false;
                 SetButtonsEnabled(true);
             }
-        }
-
-        // ⭐ Fuerza un refresh aunque haya uno en curso
-        private async Task ForceRefreshStatus()
-        {
-            Trace("ForceRefreshStatus() → forzando refresco");
-            _isRefreshing = false;
-            await RefreshStatus();
         }
 
         private void SetButtonsEnabled(bool enabled)
@@ -78,60 +82,75 @@ namespace ISCSI_Util.Views
             BtnRestart.Click += async (_, _) =>
             {
                 Trace("BtnRestart: systemctl restart iscsid");
+                SetButtonsEnabled(false);
 
                 try
                 {
-                    await SystemOperationLock.RunAsync(
-                        () => ShellHelper.EjecutarComoRootAsync("systemctl restart iscsid")
-                    );
+                    var restart = await SystemOperationLock.RunAsync(
+                        () => ShellHelper.EjecutarComoRootAsync("systemctl restart iscsid"));
+
+                    if (restart.ExitCode != 0)
+                    {
+                        var detail = string.IsNullOrWhiteSpace(restart.Stderr)
+                            ? $"exit code {restart.ExitCode}"
+                            : restart.Stderr.Trim();
+
+                        throw new Exception(detail);
+                    }
 
                     TxtLastOp.Text = "Service restarted.";
                     SummaryBorder.Background = new SolidColorBrush(Color.Parse("#6C5A1E"));
                     TxtSummary.Text = "SYSTEM STATUS: Updating";
 
-                    // Esperar 4 segundos
-                    await Task.Delay(4000);
+                    // Esperar a que iscsid vuelva a estar activo en vez de
+                    // asumir que 4 segundos siempre son suficientes.
+                    if (!await WaitForDaemonReadyAsync(TimeSpan.FromSeconds(10)))
+                    {
+                        TraceError("BtnRestart: iscsid no volvió a estar activo tras el reinicio.");
+                        TxtLastOp.Text = "Service restarted, but it did not become active.";
+                    }
 
-                    // ⭐ Forzar refresh
-                    Trace("BtnRestart: llamando a ForceRefreshStatus() tras 4s");
-                    await ForceRefreshStatus();
+                    await RefreshStatus();
                 }
                 catch (Exception ex)
                 {
-                    Trace($"[ERROR] BtnRestart: {ex}");
+                    TraceError($"BtnRestart: {ex.Message}");
                     TxtLastOp.Text = $"Restart failed: {ex.Message}";
                     SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
                     TxtSummary.Text = "SYSTEM STATUS: Error";
                 }
+                finally
+                {
+                    SetButtonsEnabled(true);
+                }
             };
         }
 
-        public async Task WaitForDaemonReady()
+        private async Task<bool> WaitForDaemonReadyAsync(TimeSpan timeout)
         {
-            Trace("WaitForDaemonReady() → esperando iscsid listo...");
+            Trace($"WaitForDaemonReadyAsync() → esperando iscsid (máx. {timeout.TotalSeconds:0}s)...");
 
-            for (int i = 0; i < 60; i++)
+            var deadline = DateTime.UtcNow + timeout;
+            int attempt = 0;
+
+            while (DateTime.UtcNow < deadline)
             {
+                attempt++;
+
                 var result = await ShellHelper.RunCleanResultAsync(
-                    "systemctl show -p StatusText iscsid"
-                );
+                    "systemctl is-active --quiet iscsid");
 
-                string status = result.Stdout.Trim();
-                Trace($"WaitForDaemonReady() intento {i + 1}: '{status}'");
-
-                string clean = status.Replace("StatusText=", "").Trim();
-                bool ready = clean.Contains("Ready", StringComparison.OrdinalIgnoreCase);
-
-                if (ready)
+                if (result.ExitCode == 0)
                 {
-                    Trace("WaitForDaemonReady() ← daemon listo (READY).");
-                    return;
+                    Trace($"WaitForDaemonReadyAsync() ← activo tras {attempt} intento(s).");
+                    return true;
                 }
 
                 await Task.Delay(500);
             }
 
-            Trace("[WARN] WaitForDaemonReady() timeout: iscsid no llegó a READY.");
+            TraceError("WaitForDaemonReadyAsync(): iscsid no llegó a estar activo a tiempo.");
+            return false;
         }
 
         private async Task LoadStatus()
@@ -161,30 +180,32 @@ namespace ISCSI_Util.Views
                 Trace("LoadServiceStatus() → systemctl is-active iscsid");
                 var result = await ShellHelper.RunCleanResultAsync("systemctl is-active iscsid");
 
-                string raw = result.Stdout.Trim().ToLower();
-                Trace($"LoadServiceStatus() raw='{raw}'");
+                // Se compara el estado exacto: "inactive" contiene la palabra
+                // "active" y antes se mostraba como Running.
+                string state = result.Stdout.Trim().ToLowerInvariant();
+                Trace($"LoadServiceStatus() state='{state}' exit={result.ExitCode}");
 
-                if (raw.Contains("active"))
+                switch (state)
                 {
-                    IconIscsid.Fill = Brushes.LimeGreen;
-                    TxtIscsid.Text = "Running";
-                }
-                else if (raw.Contains("inactive") || raw.Contains("failed"))
-                {
-                    IconIscsid.Fill = Brushes.Red;
-                    TxtIscsid.Text = "Stopped";
-                }
-                else
-                {
-                    IconIscsid.Fill = Brushes.Goldenrod;
-                    TxtIscsid.Text = "Unknown";
+                    case "active":
+                        SetIndicator(IconIscsid, TxtIscsid, "Running", Brushes.LimeGreen);
+                        break;
+
+                    case "activating":
+                    case "reloading":
+                    case "deactivating":
+                        SetIndicator(IconIscsid, TxtIscsid, "Starting", Brushes.Goldenrod);
+                        break;
+
+                    default:
+                        SetIndicator(IconIscsid, TxtIscsid, "Stopped", Brushes.Red);
+                        break;
                 }
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadServiceStatus(): {ex}");
-                IconIscsid.Fill = Brushes.Goldenrod;
-                TxtIscsid.Text = "Unknown";
+                TraceError($"LoadServiceStatus(): {ex.Message}");
+                SetIndicator(IconIscsid, TxtIscsid, "Unknown", Brushes.Goldenrod);
             }
         }
 
@@ -192,62 +213,71 @@ namespace ISCSI_Util.Views
         {
             try
             {
-                Trace("LoadNetworkStatus() → ip -o -4 addr show scope global");
-                string output = await ShellHelper.RunCleanAsync("ip -o -4 addr show scope global");
+                // Una dirección global puede ser solo docker0. Lo que indica
+                // conectividad real es tener una ruta por defecto.
+                Trace("LoadNetworkStatus() → ip -o -4 route show default");
+                var result = await ShellHelper.RunCleanResultAsync("ip -o -4 route show default");
 
-                bool connected = output
-                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Any();
+                bool connected = result.ExitCode == 0 &&
+                                 !string.IsNullOrWhiteSpace(result.Stdout);
 
-                IconNetwork.Fill = connected ? Brushes.LimeGreen : Brushes.Red;
-                TxtNetwork.Text = connected ? "Connected" : "Disconnected";
+                SetIndicator(IconNetwork, TxtNetwork,
+                    connected ? "Connected" : "Disconnected",
+                    connected ? Brushes.LimeGreen : Brushes.Red);
 
                 Trace($"LoadNetworkStatus() ← connected={connected}");
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadNetworkStatus(): {ex}");
-                IconNetwork.Fill = Brushes.Goldenrod;
-                TxtNetwork.Text = "Unknown";
+                TraceError($"LoadNetworkStatus(): {ex.Message}");
+                SetIndicator(IconNetwork, TxtNetwork, "Unknown", Brushes.Goldenrod);
             }
         }
 
-        // ⭐ ACTUALIZADO: ahora distingue Syncing
+        private static string GetSystemdProperty(string output, string name)
+        {
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int idx = line.IndexOf('=');
+
+                if (idx <= 0)
+                    continue;
+
+                if (line[..idx].Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return line[(idx + 1)..].Trim().ToLowerInvariant();
+            }
+
+            return "";
+        }
+
+        // iscsid es Type=notify: cuando ActiveState es "active" ya envió READY.
+        // StatusText no sirve aquí porque iscsid no lo establece y siempre
+        // aparecía vacío, dejando el daemon como "Not operational" aunque
+        // estuviera funcionando.
         private async Task LoadDaemonStatus()
         {
             try
             {
-                Trace("LoadDaemonStatus() → systemctl show -p StatusText iscsid");
-                var result = await ShellHelper.RunCleanResultAsync("systemctl show -p StatusText iscsid");
-                string status = result.Stdout.Trim();
+                Trace("LoadDaemonStatus() → systemctl show ActiveState/SubState iscsid");
+                var result = await ShellHelper.RunCleanResultAsync(
+                    "systemctl show -p ActiveState -p SubState iscsid");
 
-                Trace($"LoadDaemonStatus() raw='{status}'");
+                string active = GetSystemdProperty(result.Stdout, "ActiveState");
+                string sub = GetSystemdProperty(result.Stdout, "SubState");
 
-                string clean = status.Replace("StatusText=", "").Trim();
+                Trace($"LoadDaemonStatus() ActiveState='{active}' SubState='{sub}'");
 
-                if (clean.Contains("Ready", StringComparison.OrdinalIgnoreCase))
-                {
-                    IconSocket.Fill = Brushes.LimeGreen;
-                    TxtSocket.Text = "Operational";
-                }
-                else if (clean.Contains("Syncing", StringComparison.OrdinalIgnoreCase))
-                {
-                    IconSocket.Fill = Brushes.Goldenrod;
-                    TxtSocket.Text = "Syncing";
-                }
+                if (active == "active")
+                    SetIndicator(IconSocket, TxtSocket, "Operational", Brushes.LimeGreen);
+                else if (active is "activating" or "reloading" or "deactivating")
+                    SetIndicator(IconSocket, TxtSocket, "Syncing", Brushes.Goldenrod);
                 else
-                {
-                    IconSocket.Fill = Brushes.Red;
-                    TxtSocket.Text = "Not operational";
-                }
-
-                Trace($"LoadDaemonStatus() ← estado='{TxtSocket.Text}'");
+                    SetIndicator(IconSocket, TxtSocket, "Not operational", Brushes.Red);
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadDaemonStatus(): {ex}");
-                IconSocket.Fill = Brushes.Goldenrod;
-                TxtSocket.Text = "Unknown";
+                TraceError($"LoadDaemonStatus(): {ex.Message}");
+                SetIndicator(IconSocket, TxtSocket, "Unknown", Brushes.Goldenrod);
             }
         }
 
@@ -270,7 +300,7 @@ namespace ISCSI_Util.Views
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadUptime(): {ex}");
+                TraceError($"LoadUptime(): {ex.Message}");
                 TxtUptime.Text = "Unknown";
             }
         }
@@ -286,7 +316,7 @@ namespace ISCSI_Util.Views
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadHostname(): {ex}");
+                TraceError($"LoadHostname(): {ex.Message}");
                 TxtHostname.Text = "Unknown";
             }
         }
@@ -319,7 +349,7 @@ namespace ISCSI_Util.Views
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadIpAddress(): {ex}");
+                TraceError($"LoadIpAddress(): {ex.Message}");
                 TxtIpAddress.Text = "Unknown";
             }
         }
@@ -374,7 +404,7 @@ namespace ISCSI_Util.Views
             }
             catch (Exception ex)
             {
-                Trace($"[ERROR] LoadLatency(): {ex}");
+                TraceError($"LoadLatency(): {ex.Message}");
                 TxtLatency.Text = "Timeout";
             }
         }
@@ -384,20 +414,28 @@ namespace ISCSI_Util.Views
         {
             bool serviceOk = TxtIscsid.Text == "Running";
             bool networkOk = TxtNetwork.Text == "Connected";
-            bool daemonOk  = TxtSocket.Text == "Operational" 
-                          || TxtSocket.Text == "Syncing";
+            bool daemonOk  = TxtSocket.Text is "Operational" or "Syncing";
 
-            Trace($"UpdateSummary() serviceOk={serviceOk}, networkOk={networkOk}, daemonOk={daemonOk}");
+            string state = serviceOk && networkOk && daemonOk ? "OK" : "Critical";
 
-            if (!serviceOk || !networkOk || !daemonOk)
+            Trace($"UpdateSummary() state={state} service={TxtIscsid.Text}, " +
+                  $"network={TxtNetwork.Text}, daemon={TxtSocket.Text}");
+
+            // Solo se registra cuando el estado cambia, para que el log sea
+            // útil sin llenarse con una línea en cada refresco.
+            if (state != _lastSummaryState)
             {
-                SummaryBorder.Background = new SolidColorBrush(Color.Parse("#5A1E1E"));
-                TxtSummary.Text = "SYSTEM STATUS: Critical";
-                return;
+                _lastSummaryState = state;
+
+                LogService.Write(
+                    $"[STATUS] System status {state}: iscsid={TxtIscsid.Text}, " +
+                    $"network={TxtNetwork.Text}, daemon={TxtSocket.Text}");
             }
 
-            SummaryBorder.Background = new SolidColorBrush(Color.Parse("#1E4620"));
-            TxtSummary.Text = "SYSTEM STATUS: OK";
+            SummaryBorder.Background = new SolidColorBrush(
+                Color.Parse(state == "OK" ? "#1E4620" : "#5A1E1E"));
+
+            TxtSummary.Text = $"SYSTEM STATUS: {state}";
         }
     }
 }
