@@ -38,11 +38,16 @@ echo "==> Building iSCSI-Util $VERSION ($RID)"
 rm -rf "$DIST"
 mkdir -p "$SINGLE" "$FOLDER"
 
+# Restore once with the target RID so both publishes share the same assets
+# file. A plain build in between can otherwise overwrite it without the RID.
+dotnet restore "$PROJECT" -r "$RID" --nologo
+
 echo "==> Single-file publish"
 dotnet publish "$PROJECT" \
     -c Release \
     -r "$RID" \
     --self-contained true \
+    --no-restore \
     -p:PublishSingleFile=true \
     -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:EnableCompressionInSingleFile=false \
@@ -59,6 +64,7 @@ dotnet publish "$PROJECT" \
     -c Release \
     -r "$RID" \
     --self-contained true \
+    --no-restore \
     -p:PublishSingleFile=false \
     -o "$FOLDER" \
     --nologo
