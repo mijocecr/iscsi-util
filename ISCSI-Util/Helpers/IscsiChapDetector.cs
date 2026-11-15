@@ -24,10 +24,14 @@ public static class IscsiChapDetector
     // ============================================================
     private static void ReadLocalNodeConfig(IscsiDestino d, ChapResult r)
     {
-        LogService.Debug($"Reading local CHAP config for {d.Iqn} at {d.Ip}");
+        var portal = IscsiSecrets.PortalArg(d.Ip);
+
+        LogService.Debug(
+            $"Reading local CHAP config for {d.Iqn} at {IscsiSecrets.PortalWithPort(d.Ip)}"
+        );
 
         var show = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} -o show"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portal)} -o show"
         );
 
         if (string.IsNullOrWhiteSpace(show.Stdout))
@@ -46,21 +50,23 @@ public static class IscsiChapDetector
 
         bool chapEnabled = authMethod.Equals("CHAP", StringComparison.OrdinalIgnoreCase);
 
-        bool userEmpty   = string.IsNullOrWhiteSpace(user)   || user   == "<empty>";
-        bool passEmpty   = string.IsNullOrWhiteSpace(pass)   || pass   == "<empty>";
-        bool userInEmpty = string.IsNullOrWhiteSpace(userIn) || userIn == "<empty>";
-        bool passInEmpty = string.IsNullOrWhiteSpace(passIn) || passIn == "<empty>";
+        bool userEmpty   = IscsiSecrets.IsEmpty(user);
+        bool passEmpty   = IscsiSecrets.IsEmpty(pass);
+        bool userInEmpty = IscsiSecrets.IsEmpty(userIn);
+        bool passInEmpty = IscsiSecrets.IsEmpty(passIn);
 
         r.HasLocalChapConfigured   = chapEnabled && !userEmpty && !passEmpty;
         r.HasLocalMutualConfigured = chapEnabled && !userInEmpty && !passInEmpty;
 
-        r.LocalUser   = userEmpty   ? "" : user;
-        r.LocalPass   = passEmpty   ? "" : pass;
-        r.LocalUserIn = userInEmpty ? "" : userIn;
-        r.LocalPassIn = passInEmpty ? "" : passIn;
+        r.LocalUser   = userEmpty   ? "" : user.Trim();
+        r.LocalPass   = IscsiSecrets.Usable(pass);
+        r.LocalUserIn = userInEmpty ? "" : userIn.Trim();
+        r.LocalPassIn = IscsiSecrets.Usable(passIn);
 
         LogService.Debug(
-            $"Local CHAP: {r.HasLocalChapConfigured}, Local Mutual: {r.HasLocalMutualConfigured}"
+            $"Local CHAP: {r.HasLocalChapConfigured}, Local Mutual: {r.HasLocalMutualConfigured}, " +
+            $"outgoing secret={(passEmpty ? "none" : r.LocalPass.Length > 0 ? "available" : "masked/not-reusable")}, " +
+            $"incoming secret={(passInEmpty ? "none" : r.LocalPassIn.Length > 0 ? "available" : "masked/not-reusable")}"
         );
     }
 
@@ -69,11 +75,11 @@ public static class IscsiChapDetector
         foreach (var line in text.Split('\n'))
         {
             var t = line.Trim();
-            if (!t.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            var parts = t.Split('=', 2);
+            if (parts.Length != 2)
                 continue;
 
-            var parts = t.Split('=', 2);
-            if (parts.Length == 2)
+            if (parts[0].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
                 return parts[1].Trim();
         }
         return "";
@@ -84,11 +90,24 @@ public static class IscsiChapDetector
     // ============================================================
     private static void ProbeLogin(IscsiDestino d, ChapResult r)
     {
-        LogService.Debug($"Probing login for {d.Iqn} at {d.Ip}");
+        var portal = IscsiSecrets.PortalArg(d.Ip);
+
+        LogService.Debug(
+            $"Probing login for {d.Iqn} at {IscsiSecrets.PortalWithPort(d.Ip)}"
+        );
+
+        // Si el destino ya está conectado, no hacemos un login/logout de prueba:
+        // el logout desconectaría una sesión activa.
+        var sessions = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout ?? "";
+        if (sessions.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
+        {
+            LogService.Debug("Target already connected; skipping probe login.");
+            return;
+        }
 
         // Creamos nodo temporal si no existe
         var check = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")}"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portal)}"
         );
 
         bool exists = !check.Stderr.Contains("No records found", StringComparison.OrdinalIgnoreCase);
@@ -97,13 +116,13 @@ public static class IscsiChapDetector
         {
             LogService.Debug("Node does not exist locally. Creating temporary node.");
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --op=new"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=new"
             );
         }
 
         // Intento de login
         var login = ShellHelper.EjecutarComoRoot(
-            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --login"
+            $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portal)} --login"
         );
 
         // Logout inmediato si entró
@@ -111,7 +130,7 @@ public static class IscsiChapDetector
         {
             LogService.Debug("Login succeeded without CHAP. Logging out.");
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --logout"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portal)} --logout"
             );
         }
         else
@@ -121,8 +140,22 @@ public static class IscsiChapDetector
 
             if (err.Contains("authorization failure"))
             {
+                bool hadMutual = r.HasLocalMutualConfigured;
+
                 r.RequiresChap = true;
-                LogService.Debug("Server requires CHAP.");
+
+                // Las credenciales locales no son válidas (o no existen).
+                // Se marcan como no utilizables para que la UI vuelva a
+                // ofrecer el diálogo de configuración CHAP.
+                r.HasLocalChapConfigured = false;
+                r.HasLocalMutualConfigured = false;
+
+                if (hadMutual)
+                    r.RequiresMutualChap = true;
+
+                LogService.Debug(
+                    "Server rejected CHAP credentials; local configuration marked as not usable."
+                );
             }
 
             if (err.Contains("incoming authentication") ||
@@ -139,7 +172,7 @@ public static class IscsiChapDetector
         {
             LogService.Debug("Deleting temporary node.");
             ShellHelper.EjecutarComoRoot(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg($"{d.Ip}:3260")} --op=delete"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=delete"
             );
         }
     }
@@ -149,7 +182,9 @@ public static class IscsiChapDetector
     // ============================================================
     public static ChapResult Detect(IscsiDestino d)
     {
-        LogService.Write($"Detecting CHAP requirements for {d.Iqn} at {d.Ip}");
+        LogService.Write(
+            $"Detecting CHAP requirements for {d.Iqn} at {IscsiSecrets.PortalWithPort(d.Ip)}"
+        );
 
         var r = new ChapResult();
 

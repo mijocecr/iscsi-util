@@ -30,6 +30,13 @@ security pass.
 
 ### Fixed
 
+- CHAP and Mutual CHAP no longer overwrite stored secrets with the masked
+  `********` value returned by `iscsiadm -o show`. Existing secrets are kept
+  unless the user enters a real password.
+- CHAP portals are normalized before calling `iscsiadm`, avoiding duplicated
+  `:3260` suffixes.
+- Invalid CHAP credentials mark the local configuration as not usable so the
+  CHAP dialog can be opened again from the target view.
 - Real status detection for the Status view, with tracing written to the log.
 - Mount/unmount and smart action button behavior.
 - Sudo password rejection now asks for a new password instead of blocking.

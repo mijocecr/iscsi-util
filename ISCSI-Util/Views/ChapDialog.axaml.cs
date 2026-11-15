@@ -19,16 +19,21 @@ public partial class ChapDialog : Window
         InitializeComponent();
         _destino = destino;
 
-        // Cargar valores actuales (del usuario o detectados)
-        UserBox.Text = string.IsNullOrWhiteSpace(destino.UsuarioChap)
-            ? destino.LocalUser
-            : destino.UsuarioChap;
+        // Cargar valores actuales (del usuario o detectados).
+        // open-iscsi devuelve los secretos enmascarados como "********":
+        // ese valor nunca se precarga ni se reutiliza como contraseña.
+        UserBox.Text = IscsiSecrets.IsUsable(destino.UsuarioChap)
+            ? destino.UsuarioChap
+            : destino.LocalUser;
 
-        PassBox.Text = string.IsNullOrWhiteSpace(destino.PasswordChap)
-            ? destino.LocalPass
-            : destino.PasswordChap;
+        var savedPass = IscsiSecrets.Usable(destino.PasswordChap);
+        var detectedPass = IscsiSecrets.Usable(destino.LocalPass);
+        PassBox.Text = savedPass.Length > 0 ? savedPass : detectedPass;
 
-        LogService.Debug($"[CHAP_DIALOG] Valores iniciales cargados. User='{UserBox.Text}'");
+        LogService.Debug(
+            $"[CHAP_DIALOG] Valores iniciales cargados. User='{UserBox.Text}', " +
+            $"secret={(PassBox.Text?.Length > 0 ? "available" : "stored/not-reusable")}"
+        );
 
         CancelBtn.Click += (_, _) =>
         {
@@ -46,19 +51,45 @@ public partial class ChapDialog : Window
 
         ApplyBtn.IsEnabled = false;
 
-        string user = UserBox.Text?.Trim() ?? "";
-        string pass = PassBox.Text?.Trim() ?? "";
-
-        LogService.Write($"[CHAP_DIALOG] Aplicando CHAP para {_destino.Iqn} con usuario '{user}'");
-
         try
         {
+            string user = UserBox.Text?.Trim() ?? "";
+            string pass = PassBox.Text?.Trim() ?? "";
+            bool passProvided = IscsiSecrets.IsUsable(pass);
+
+            LogService.Write(
+                $"[CHAP_DIALOG] Aplicando CHAP para {_destino.Iqn} con usuario '{user}' " +
+                $"(secret={(passProvided ? "provided" : "reusing stored")})"
+            );
+
+            if (user.Length == 0)
+            {
+                NotificadorLinux.Enviar("[ERROR] El usuario CHAP es obligatorio.", 6000, "critical");
+                return;
+            }
+
+            // Si no se introduce una contraseña nueva, solo se permite cuando
+            // ya existe un secreto utilizable o configurado en el nodo.
+            bool hasStoredSecret =
+                IscsiSecrets.IsUsable(_destino.PasswordChap) ||
+                _destino.HasLocalChapConfigured;
+
+            if (!passProvided && !hasStoredSecret)
+            {
+                NotificadorLinux.Enviar("[ERROR] La contraseña CHAP es obligatoria.", 6000, "critical");
+                return;
+            }
+
+            var portal = IscsiSecrets.PortalArg(_destino.Ip);
+
             // --------------------------------------------------------------
             // 1) Guardar en el modelo (preferencia del usuario)
             // --------------------------------------------------------------
             _destino.UsaChap = true;
             _destino.UsuarioChap = user;
-            _destino.PasswordChap = pass;
+
+            if (passProvided)
+                _destino.PasswordChap = pass;
 
             // --------------------------------------------------------------
             // 2) Aplicar a iscsiadm (solo CHAP outgoing)
@@ -66,16 +97,21 @@ public partial class ChapDialog : Window
             LogService.Debug("[CHAP_DIALOG] Actualizando CHAP en iscsiadm...");
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.authmethod --value=CHAP"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.authmethod --value=CHAP"
             );
 
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
             );
 
-            await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
-            );
+            // Solo se sobrescribe el secreto cuando el usuario ha introducido
+            // una contraseña real; nunca con el valor enmascarado de open-iscsi.
+            if (passProvided)
+            {
+                await ShellHelper.EjecutarComoRootAsync(
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
+                );
+            }
 
             // --------------------------------------------------------------
             // 3) Refrescar estado CHAP real

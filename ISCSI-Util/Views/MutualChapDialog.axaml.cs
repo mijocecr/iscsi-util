@@ -19,24 +19,30 @@ public partial class MutualChapDialog : Window
         InitializeComponent();
         _destino = destino;
 
-        // Cargar valores actuales (preferir usuario → si no, valores detectados)
-        UserBox.Text = string.IsNullOrWhiteSpace(destino.UsuarioChap)
-            ? destino.LocalUser
-            : destino.UsuarioChap;
+        // Cargar valores actuales (preferir usuario → si no, valores detectados).
+        // Los secretos enmascarados por open-iscsi ("********") nunca se
+        // precargan ni se reutilizan como contraseña real.
+        UserBox.Text = IscsiSecrets.IsUsable(destino.UsuarioChap)
+            ? destino.UsuarioChap
+            : destino.LocalUser;
 
-        PassBox.Text = string.IsNullOrWhiteSpace(destino.PasswordChap)
-            ? destino.LocalPass
-            : destino.PasswordChap;
+        var savedPass = IscsiSecrets.Usable(destino.PasswordChap);
+        var detectedPass = IscsiSecrets.Usable(destino.LocalPass);
+        PassBox.Text = savedPass.Length > 0 ? savedPass : detectedPass;
 
-        UserInBox.Text = string.IsNullOrWhiteSpace(destino.UsuarioMutualChap)
-            ? destino.LocalUserIn
-            : destino.UsuarioMutualChap;
+        UserInBox.Text = IscsiSecrets.IsUsable(destino.UsuarioMutualChap)
+            ? destino.UsuarioMutualChap
+            : destino.LocalUserIn;
 
-        PassInBox.Text = string.IsNullOrWhiteSpace(destino.PasswordMutualChap)
-            ? destino.LocalPassIn
-            : destino.PasswordMutualChap;
+        var savedPassIn = IscsiSecrets.Usable(destino.PasswordMutualChap);
+        var detectedPassIn = IscsiSecrets.Usable(destino.LocalPassIn);
+        PassInBox.Text = savedPassIn.Length > 0 ? savedPassIn : detectedPassIn;
 
-        LogService.Debug("[MUTUAL_CHAP] Valores iniciales cargados.");
+        LogService.Debug(
+            $"[MUTUAL_CHAP] Valores iniciales cargados. Out='{UserBox.Text}', In='{UserInBox.Text}', " +
+            $"outgoing secret={(PassBox.Text?.Length > 0 ? "available" : "stored/not-reusable")}, " +
+            $"incoming secret={(PassInBox.Text?.Length > 0 ? "available" : "stored/not-reusable")}"
+        );
 
         CancelBtn.Click += (_, _) =>
         {
@@ -54,15 +60,56 @@ public partial class MutualChapDialog : Window
 
         ApplyBtn.IsEnabled = false;
 
-        string user = UserBox.Text?.Trim() ?? "";
-        string pass = PassBox.Text?.Trim() ?? "";
-        string userIn = UserInBox.Text?.Trim() ?? "";
-        string passIn = PassInBox.Text?.Trim() ?? "";
-
-        LogService.Write($"[MUTUAL_CHAP] Aplicando Mutual CHAP para {_destino.Iqn} → Out='{user}', In='{userIn}'");
-
         try
         {
+            string user = UserBox.Text?.Trim() ?? "";
+            string pass = PassBox.Text?.Trim() ?? "";
+            string userIn = UserInBox.Text?.Trim() ?? "";
+            string passIn = PassInBox.Text?.Trim() ?? "";
+
+            bool passProvided = IscsiSecrets.IsUsable(pass);
+            bool passInProvided = IscsiSecrets.IsUsable(passIn);
+
+            LogService.Write(
+                $"[MUTUAL_CHAP] Aplicando Mutual CHAP para {_destino.Iqn} → Out='{user}', In='{userIn}', " +
+                $"outgoing secret={(passProvided ? "provided" : "reusing stored")}, " +
+                $"incoming secret={(passInProvided ? "provided" : "reusing stored")}"
+            );
+
+            if (user.Length == 0)
+            {
+                NotificadorLinux.Enviar("[ERROR] El usuario CHAP es obligatorio.", 6000, "critical");
+                return;
+            }
+
+            if (userIn.Length == 0)
+            {
+                NotificadorLinux.Enviar("[ERROR] El usuario Mutual CHAP es obligatorio.", 6000, "critical");
+                return;
+            }
+
+            bool hasStoredOutgoing =
+                IscsiSecrets.IsUsable(_destino.PasswordChap) ||
+                _destino.HasLocalChapConfigured;
+
+            bool hasStoredIncoming =
+                IscsiSecrets.IsUsable(_destino.PasswordMutualChap) ||
+                _destino.HasLocalMutualConfigured;
+
+            if (!passProvided && !hasStoredOutgoing)
+            {
+                NotificadorLinux.Enviar("[ERROR] La contraseña CHAP es obligatoria.", 6000, "critical");
+                return;
+            }
+
+            if (!passInProvided && !hasStoredIncoming)
+            {
+                NotificadorLinux.Enviar("[ERROR] La contraseña Mutual CHAP es obligatoria.", 6000, "critical");
+                return;
+            }
+
+            var portal = IscsiSecrets.PortalArg(_destino.Ip);
+
             // --------------------------------------------------------------
             // 1) Guardar en el modelo (preferencias del usuario)
             // --------------------------------------------------------------
@@ -70,10 +117,12 @@ public partial class MutualChapDialog : Window
             _destino.UsaMutualChap = true;
 
             _destino.UsuarioChap = user;
-            _destino.PasswordChap = pass;
+            if (passProvided)
+                _destino.PasswordChap = pass;
 
             _destino.UsuarioMutualChap = userIn;
-            _destino.PasswordMutualChap = passIn;
+            if (passInProvided)
+                _destino.PasswordMutualChap = passIn;
 
             // --------------------------------------------------------------
             // 2) Aplicar a iscsiadm (CHAP + Mutual CHAP)
@@ -82,26 +131,33 @@ public partial class MutualChapDialog : Window
 
             // Activar CHAP
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.authmethod --value=CHAP"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.authmethod --value=CHAP"
             );
 
             // CHAP outgoing
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
             );
 
-            await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
-            );
+            // Solo se sobrescriben los secretos cuando son reales.
+            if (passProvided)
+            {
+                await ShellHelper.EjecutarComoRootAsync(
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
+                );
+            }
 
             // Mutual CHAP incoming
             await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.username_in --value={ShellHelper.QuoteArg(userIn)}"
+                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.username_in --value={ShellHelper.QuoteArg(userIn)}"
             );
 
-            await ShellHelper.EjecutarComoRootAsync(
-                $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(_destino.Ip)} --op=update --name node.session.auth.password_in --value={ShellHelper.QuoteArg(passIn)}"
-            );
+            if (passInProvided)
+            {
+                await ShellHelper.EjecutarComoRootAsync(
+                    $"iscsiadm -m node -T {ShellHelper.QuoteArg(_destino.Iqn)} -p {ShellHelper.QuoteArg(portal)} --op=update --name node.session.auth.password_in --value={ShellHelper.QuoteArg(passIn)}"
+                );
+            }
 
             // --------------------------------------------------------------
             // 3) Refrescar estado CHAP real

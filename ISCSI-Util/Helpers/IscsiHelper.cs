@@ -48,25 +48,6 @@ public static class IscsiHelper
     }
 
     // ============================================================
-    //  NORMALIZAR PORTAL (IP + PUERTO)
-    // ============================================================
-
-    private static (string Ip, int Port) NormalizarPortal(string portal)
-    {
-        if (string.IsNullOrWhiteSpace(portal))
-            return ("127.0.0.1", 3260);
-
-        if (portal.Contains(':'))
-        {
-            var partes = portal.Split(':', 2);
-            if (int.TryParse(partes[1], out var p))
-                return (partes[0], p);
-        }
-
-        return (portal, 3260);
-    }
-
-    // ============================================================
     //  DETECTAR FILESYSTEM
     // ============================================================
 
@@ -112,8 +93,7 @@ public static class IscsiHelper
 
         try
         {
-            var (ipSolo, port) = NormalizarPortal(d.Ip);
-            var portalIscsi = port == 3260 ? ipSolo : $"{ipSolo}:{port}";
+            var portalIscsi = IscsiSecrets.PortalArg(d.Ip);
 
             var check = ShellHelper.EjecutarComoRoot(
                 $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)}"
@@ -145,22 +125,40 @@ public static class IscsiHelper
 
             var chapEnabled = authMethod.Equals("CHAP", StringComparison.OrdinalIgnoreCase);
 
-            var userEmpty = string.IsNullOrWhiteSpace(user) || user == "<empty>";
-            var passEmpty = string.IsNullOrWhiteSpace(pass) || pass == "<empty>";
-            var userInEmpty = string.IsNullOrWhiteSpace(userIn) || userIn == "<empty>";
-            var passInEmpty = string.IsNullOrWhiteSpace(passIn) || passIn == "<empty>";
+            var userEmpty = IscsiSecrets.IsEmpty(user);
+            var passEmpty = IscsiSecrets.IsEmpty(pass);
+            var userInEmpty = IscsiSecrets.IsEmpty(userIn);
+            var passInEmpty = IscsiSecrets.IsEmpty(passIn);
 
             d.UsaChap = chapEnabled && !userEmpty && !passEmpty;
             d.UsaMutualChap = chapEnabled && !userInEmpty && !passInEmpty;
 
-            d.UsuarioChap = userEmpty ? "" : user;
-            d.PasswordChap = passEmpty ? "" : pass;
-            d.UsuarioMutualChap = userInEmpty ? "" : userIn;
-            d.PasswordMutualChap = passInEmpty ? "" : passIn;
+            // open-iscsi enmascara los secretos al mostrarlos. Nunca debemos
+            // guardar ese valor en el modelo: si el usuario ya introdujo una
+            // contraseña real, se conserva; si no, se deja vacía para que
+            // Conectar() reutilice el secreto que ya está en la base del nodo.
+            if (!userEmpty)
+                d.UsuarioChap = user.Trim();
+
+            if (IscsiSecrets.IsUsable(pass))
+                d.PasswordChap = pass.Trim();
+
+            if (!userInEmpty)
+                d.UsuarioMutualChap = userIn.Trim();
+
+            if (IscsiSecrets.IsUsable(passIn))
+                d.PasswordMutualChap = passIn.Trim();
+
+            d.LocalUser = userEmpty ? "" : user.Trim();
+            d.LocalPass = IscsiSecrets.Usable(pass);
+            d.LocalUserIn = userInEmpty ? "" : userIn.Trim();
+            d.LocalPassIn = IscsiSecrets.Usable(passIn);
 
             LogService.Debug(
                 $"[ISCSI] #{id} CHAP={d.UsaChap}, Mutual={d.UsaMutualChap}, " +
-                $"User='{d.UsuarioChap}', UserIn='{d.UsuarioMutualChap}'"
+                $"User='{d.UsuarioChap}', UserIn='{d.UsuarioMutualChap}', " +
+                $"outgoing secret={(passEmpty ? "none" : d.LocalPass.Length > 0 ? "available" : "masked/not-reusable")}, " +
+                $"incoming secret={(passInEmpty ? "none" : d.LocalPassIn.Length > 0 ? "available" : "masked/not-reusable")}"
             );
 
             if (!nodoExiste)
@@ -189,12 +187,12 @@ public static class IscsiHelper
         foreach (var line in config.Split('\n'))
         {
             var trimmed = line.Trim();
+            var parts = trimmed.Split('=', 2);
 
-            if (trimmed.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            if (parts.Length == 2 &&
+                parts[0].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
             {
-                var parts = trimmed.Split('=', 2);
-                if (parts.Length == 2)
-                    return parts[1].Trim();
+                return parts[1].Trim();
             }
         }
 
@@ -770,8 +768,11 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout ?? "";
         var yaConectado = sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase);
 
-        var (ipSolo, port) = NormalizarPortal(d.Ip);
-        var portalIscsi = port == 3260 ? ipSolo : $"{ipSolo}:{port}";
+        var portalIscsi = IscsiSecrets.PortalArg(d.Ip);
+
+        LogService.Debug(
+            $"[ISCSI] #{id} Portal={IscsiSecrets.PortalWithPort(d.Ip)}, CHAP={d.UsaChap}, Mutual={d.UsaMutualChap}"
+        );
 
         // ============================================================
         // 2) LOGIN iSCSI
@@ -790,12 +791,11 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
                 );
 
             // ============================================================
-            // CAMBIO CLAVE / SOPORTE CHAP:
-            // Se eliminó la restricción exclusiva de '!reutilizarAutenticacionGuardada'.
-            // Ahora, si el destino requiere CHAP o Mutual CHAP (y tenemos credenciales),
-            // actualizamos siempre la base de datos del nodo en open-iscsi antes del login.
-            // Esto asegura que al conectar desde la pestaña de sesiones (donde el nodo ya existe),
-            // las credenciales se inyecten correctamente y no falle por autenticación.
+            // SOPORTE CHAP:
+            // Antes del login se actualizan las credenciales disponibles.
+            // Los secretos enmascarados por open-iscsi ("********") nunca
+            // se escriben de vuelta: si no hay una contraseña real, se
+            // conserva la que ya está guardada en la base del nodo.
             // ============================================================
             if (d.UsaChap || d.UsaMutualChap)
             {
@@ -806,15 +806,30 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
 
                 if (d.UsaChap)
                 {
-                    var user = string.IsNullOrWhiteSpace(d.UsuarioChap) ? d.LocalUser : d.UsuarioChap;
-                    var pass = string.IsNullOrWhiteSpace(d.PasswordChap) ? d.LocalPass : d.PasswordChap;
+                    var user = IscsiSecrets.Usable(d.UsuarioChap);
+                    if (user.Length == 0)
+                        user = IscsiSecrets.Usable(d.LocalUser);
 
-                    if (!string.IsNullOrWhiteSpace(user) && !string.IsNullOrWhiteSpace(pass))
+                    var pass = IscsiSecrets.Usable(d.PasswordChap);
+                    if (pass.Length == 0)
+                        pass = IscsiSecrets.Usable(d.LocalPass);
+
+                    LogService.Debug(
+                        $"[ISCSI] #{id} CHAP outgoing: user={(user.Length > 0 ? "configured" : "missing")}, " +
+                        $"secret={(pass.Length > 0 ? "provided" : "reusing stored secret")}"
+                    );
+
+                    if (user.Length > 0)
                     {
                         ShellHelper.EjecutarComoRoot(
                             $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.username --value={ShellHelper.QuoteArg(user)}"
                         );
+                    }
 
+                    // Solo se sobrescribe el secreto cuando es real. Si open-iscsi
+                    // lo devolvió enmascarado, se conserva el ya guardado en el nodo.
+                    if (pass.Length > 0)
+                    {
                         ShellHelper.EjecutarComoRoot(
                             $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.password --value={ShellHelper.QuoteArg(pass)}"
                         );
@@ -823,19 +838,28 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
 
                 if (d.UsaMutualChap)
                 {
-                    var userIn = string.IsNullOrWhiteSpace(d.UsuarioMutualChap)
-                        ? d.LocalUserIn
-                        : d.UsuarioMutualChap;
-                    var passIn = string.IsNullOrWhiteSpace(d.PasswordMutualChap)
-                        ? d.LocalPassIn
-                        : d.PasswordMutualChap;
+                    var userIn = IscsiSecrets.Usable(d.UsuarioMutualChap);
+                    if (userIn.Length == 0)
+                        userIn = IscsiSecrets.Usable(d.LocalUserIn);
 
-                    if (!string.IsNullOrWhiteSpace(userIn) && !string.IsNullOrWhiteSpace(passIn))
+                    var passIn = IscsiSecrets.Usable(d.PasswordMutualChap);
+                    if (passIn.Length == 0)
+                        passIn = IscsiSecrets.Usable(d.LocalPassIn);
+
+                    LogService.Debug(
+                        $"[ISCSI] #{id} Mutual CHAP incoming: user={(userIn.Length > 0 ? "configured" : "missing")}, " +
+                        $"secret={(passIn.Length > 0 ? "provided" : "reusing stored secret")}"
+                    );
+
+                    if (userIn.Length > 0)
                     {
                         ShellHelper.EjecutarComoRoot(
                             $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.username_in --value={ShellHelper.QuoteArg(userIn)}"
                         );
+                    }
 
+                    if (passIn.Length > 0)
+                    {
                         ShellHelper.EjecutarComoRoot(
                             $"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --op=update --name node.session.auth.password_in --value={ShellHelper.QuoteArg(passIn)}"
                         );
@@ -1225,9 +1249,9 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             var sesiones = ShellHelper.EjecutarComoRoot("iscsiadm -m session").Stdout ?? "";
             if (!string.IsNullOrWhiteSpace(sesiones) && sesiones.Contains(d.Iqn, StringComparison.OrdinalIgnoreCase))
             {
-                var (ipSolo, _) = NormalizarPortal(d.Ip);
+                var portalIscsi = IscsiSecrets.PortalArg(d.Ip);
                 var logoutTask = Task.Run(() =>
-                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --logout")
+                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --logout")
                 );
 
                 await Task.WhenAny(logoutTask, Task.Delay(5000));
@@ -1249,9 +1273,9 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
             ShellHelper.EjecutarComoRoot("systemctl daemon-reload");
 
             // 6) BORRAR NODO Y DISCOVERYDB
-            var (ipSolo2, _) = NormalizarPortal(d.Ip);
-            ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo2)} --op=delete");
-            ShellHelper.EjecutarComoRoot($"iscsiadm -m discoverydb -t sendtargets -p {ShellHelper.QuoteArg(ipSolo2)} --op=delete");
+            var portalIscsi2 = IscsiSecrets.PortalArg(d.Ip);
+            ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi2)} --op=delete");
+            ShellHelper.EjecutarComoRoot($"iscsiadm -m discoverydb -t sendtargets -p {ShellHelper.QuoteArg(portalIscsi2)} --op=delete");
 
             // 7) RESET COMPLETO DEL OBJETO
             d.Conectado = false;
@@ -1316,8 +1340,8 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
 
                 if (string.IsNullOrEmpty(device))
                 {
-                    var (ipSolo, _) = NormalizarPortal(d.Ip ?? "");
-                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(ipSolo)} --rescan");
+                    var portalIscsi = IscsiSecrets.PortalArg(d.Ip);
+                    ShellHelper.EjecutarComoRoot($"iscsiadm -m node -T {ShellHelper.QuoteArg(d.Iqn)} -p {ShellHelper.QuoteArg(portalIscsi)} --rescan");
                     ShellHelper.EjecutarComoRoot("udevadm settle");
                     await Task.Delay(1000);
 
