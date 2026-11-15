@@ -23,7 +23,8 @@ public static class IscsiCore
         try
         {
             var discovery = await Task.Run(() =>
-                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ShellHelper.QuoteArg(ip)}")
+                // "-o new" evita que el discovery reescriba y borre el CHAP existente.
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ShellHelper.QuoteArg(ip)} -o new")
             );
 
             if (string.IsNullOrWhiteSpace(discovery.Stdout))

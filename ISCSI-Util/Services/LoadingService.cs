@@ -35,6 +35,18 @@ public static class LoadingService
         return new LoadingScope(Release);
     }
 
+    /// <summary>
+    /// Actualiza el texto del diálogo activo sin abrir otro. Si no hay ningún
+    /// scope en curso, no hace nada.
+    /// </summary>
+    public static void SetMessage(string message)
+    {
+        lock (Sync)
+        {
+            _dialog?.SetMessage(message);
+        }
+    }
+
     private static void Release()
     {
         lock (Sync)

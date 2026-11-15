@@ -470,6 +470,25 @@ public partial class MainWindow : Window
 
         if (saved)
             LogService.Write("[MAIN] Configuration updated.");
+
+        if (win.GhostCleanupPerformed)
+        {
+            LogService.Write("[MAIN] Ghost targets removed; refreshing views...");
+
+            try
+            {
+                await LoadSessionsAsync();
+
+                if (TargetsView is ISCSI_Util.Views.TargetsView targets)
+                    await targets.ActualizarEstadoAsync();
+            }
+            catch (Exception ex)
+            {
+                LogService.Error($"[MAIN] Error refreshing after ghost cleanup: {ex.Message}");
+            }
+
+            StatusBarText.Text = "Ghost targets removed.";
+        }
     }
 
     // ============================================================

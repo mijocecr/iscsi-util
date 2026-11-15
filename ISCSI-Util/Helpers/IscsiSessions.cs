@@ -77,6 +77,36 @@ public static class IscsiSessions
         catch { }
     }
 
+    /// <summary>
+    /// Elimina del historial local las entradas de un target que ya no existe,
+    /// para que no queden fechas de conexión huérfanas.
+    /// </summary>
+    public static void ForgetHistory(string iqn, string portal)
+    {
+        try
+        {
+            var historial = CargarHistorialConexiones();
+            var prefijo = $"{iqn}|{portal}|";
+
+            var claves = historial.Keys
+                .Where(k => k.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (claves.Count == 0)
+                return;
+
+            foreach (var clave in claves)
+                historial.Remove(clave);
+
+            GuardarHistorialConexiones(historial);
+            LogService.Debug($"[SESSIONS] Forgot history for {iqn} at {portal}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Debug($"[SESSIONS] Could not clear history for {iqn}: {ex.Message}");
+        }
+    }
+
     // ============================================================
     // OBTENER SESIONES REALES
     // ============================================================

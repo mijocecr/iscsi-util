@@ -2,6 +2,37 @@
 
 All notable changes to iSCSI-Util are documented in this file.
 
+## [5.0.1] - 2026-11-15
+
+### Added
+
+- Ghost target cleanup in *Configuration → Maintenance → Remove ghost
+  targets…*. Node records that the storage server no longer exports are
+  detected per reachable portal, shown in a confirmation dialog and removed
+  after logging out their sessions.
+- Records that belong to an unreachable portal are listed separately and only
+  removed when the user explicitly opts in.
+- Progress dialog while scanning portals and removing records, reporting the
+  current portal or target and the final result.
+- Cleanup summary with removed, skipped (still mounted) and failed targets.
+- Ghost cleanup also removes the matching entries from the local
+  `session_history.json` and refreshes the Sessions and Targets views.
+
+### Changed
+
+- Discovery now uses `iscsiadm -o new`, both in the GUI and in the CLI helper,
+  so an existing node record is never rewritten and its per-node CHAP
+  credentials are preserved.
+
+### Fixed
+
+- CHAP detection no longer reads the node database files directly. Those files
+  are `0600 root`, so unprivileged reads always failed and targets with CHAP
+  were reported as unauthenticated; detection now uses
+  `iscsiadm -m node -o show` through `sudo`.
+- Removed the obsolete file-based CHAP detection from the persistence layer and
+  the unused call in the targets view.
+
 ## [5.0.0] - 2026-11-14
 
 This is a major release that consolidates the work done after 4.5: multi-LUN

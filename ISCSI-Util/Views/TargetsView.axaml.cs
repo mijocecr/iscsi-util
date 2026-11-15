@@ -339,8 +339,8 @@ public partial class TargetsView : UserControl
         destino.Persistir = await RunSystemOperationAsync(() => IscsiPersistenceManager.Detect(destino));
         destino.InfoCompleta = true;
 
-        bool hasChap = destino.RequiresChap || destino.HasLocalChapConfigured || IscsiPersistenceManager.HasChapConfigured(destino);
-        bool hasMutual = destino.RequiresMutualChap || destino.HasLocalMutualConfigured || IscsiPersistenceManager.HasMutualChapConfigured(destino);
+        bool hasChap = destino.RequiresChap || destino.HasLocalChapConfigured;
+        bool hasMutual = destino.RequiresMutualChap || destino.HasLocalMutualConfigured;
 
         destino.UsaChap = hasChap;
         destino.UsaMutualChap = hasMutual;
@@ -1133,8 +1133,8 @@ public partial class TargetsView : UserControl
         if (d.Conectado && !d.TieneFilesystem && !string.IsNullOrWhiteSpace(d.DevicePath))
             return "avares://ISCSI-Util/Assets/Icons/no-fs.jpeg";
 
-        bool usaMutualReal = d.UsaMutualChap || d.HasLocalMutualConfigured || IscsiPersistenceManager.HasMutualChapConfigured(d);
-        bool usaChapReal = d.UsaChap || d.HasLocalChapConfigured || IscsiPersistenceManager.HasChapConfigured(d);
+        bool usaMutualReal = d.UsaMutualChap || d.HasLocalMutualConfigured;
+        bool usaChapReal = d.UsaChap || d.HasLocalChapConfigured;
 
         if (usaMutualReal)
             return "avares://ISCSI-Util/Assets/Icons/chap-mutual.png";

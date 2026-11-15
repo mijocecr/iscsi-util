@@ -216,7 +216,10 @@ public static class IscsiHelper
         {
             LogService.Debug($"[ISCSI] #{id} Ejecutando discovery sendtargets...");
             var discovery = await Task.Run(() =>
-                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ShellHelper.QuoteArg(ip)}")
+                // "-o new" crea solo nodos nuevos y NO reescribe los existentes.
+                // Sin esto, open-iscsi sobrescribe node.session.auth.* con los
+                // valores por defecto de iscsid.conf y borra el CHAP configurado.
+                ShellHelper.EjecutarComoRoot($"iscsiadm -m discovery -t sendtargets -p {ShellHelper.QuoteArg(ip)} -o new")
             );
 
             if (string.IsNullOrWhiteSpace(discovery.Stdout))

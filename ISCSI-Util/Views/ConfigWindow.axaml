@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="ISCSI_Util.Views.ConfigWindow"
-        Width="420" Height="280"
+        Width="420" Height="450"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         Title="Configuration">
@@ -74,6 +74,28 @@
             <CheckBox x:Name="VerboseCheck"
                       Content="Verbose logging"
                       Foreground="{DynamicResource SteamText}"/>
+
+            <!-- MAINTENANCE -->
+            <Border Height="1"
+                    Margin="0,2"
+                    Background="{DynamicResource SteamBorderStrong}"/>
+
+            <StackPanel Spacing="8">
+                <TextBlock Text="Maintenance"
+                           Foreground="{DynamicResource SteamBlue}"
+                           FontWeight="SemiBold"/>
+
+                <TextBlock Text="Remove node records for targets that no longer exist on the storage server. Their sessions are logged out first; mounted targets are skipped."
+                           TextWrapping="Wrap"
+                           Padding=" 0 10 0 10"
+                           FontSize="12"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <Button x:Name="BtnCleanGhosts"
+                        Content="Remove ghost targets…"
+                        HorizontalAlignment="Left"
+                        Classes="SteamButton"/>
+            </StackPanel>
 
             <!-- BUTTONS -->
             <StackPanel Orientation="Horizontal"
