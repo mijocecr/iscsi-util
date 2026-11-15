@@ -54,6 +54,7 @@
                 <!-- COLUMNA IZQUIERDA: Lista de Targets -->
                 <Grid RowDefinitions="Auto,*" RowSpacing="6">
                     <TextBlock Text="AVAILABLE TARGETS" FontSize="11" FontWeight="Bold"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}" Margin="4,0,0,0" />
 
                     <Border Grid.Row="1"

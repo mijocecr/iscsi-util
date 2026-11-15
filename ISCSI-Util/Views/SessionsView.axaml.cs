@@ -244,6 +244,7 @@ public partial class SessionsView : UserControl
             Text = displayName,
             FontSize = 13,
             FontWeight = selected ? FontWeight.Bold : FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
             Foreground = selected
@@ -308,6 +309,7 @@ public partial class SessionsView : UserControl
         header.Children.Add(new TextBlock
         {
             Text = ShortIqn(target.Iqn),
+            TextWrapping = TextWrapping.Wrap,
             FontSize = 13,
             FontWeight = FontWeight.Bold,
             TextTrimming = TextTrimming.CharacterEllipsis,
