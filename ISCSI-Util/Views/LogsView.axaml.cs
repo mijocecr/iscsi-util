@@ -5,6 +5,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Views
@@ -19,7 +20,7 @@ namespace ISCSI_Util.Views
             BtnRefresh.Click += (_, _) => LoadLog();
 
             // ============================================================
-            //  AHORA ABRE EL ARCHIVO EN EL EDITOR DE TEXTO
+            //  ABRE EL ARCHIVO DE LOG O EL JOURNAL EN MODO GRÁFICO
             // ============================================================
             BtnCopy.Click += (_, _) =>
             {
@@ -36,13 +37,41 @@ namespace ISCSI_Util.Views
                 }
                 else
                 {
-                    // Si no existe el log del programa, abrir journalctl en un visor
-                    Process.Start(new ProcessStartInfo
+                    // Si no existe el log del programa, volcamos journalctl a un archivo temporal 
+                    // y lo abrimos para que se muestre en el editor gráfico predeterminado.
+                    try
                     {
-                        FileName = "bash",
-                        Arguments = "-c \"journalctl -u iscsid | less\"",
-                        UseShellExecute = false
-                    });
+                        string tempLog = Path.Combine(Path.GetTempPath(), "iscsi-system.log");
+                        
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = "bash",
+                            Arguments = $"-c \"journalctl -u iscsid --no-pager -n 200 > '{tempLog}'\"",
+                            UseShellExecute = false
+                        };
+                        
+                        var p = Process.Start(psi);
+                        p?.WaitForExit();
+
+                        if (File.Exists(tempLog))
+                        {
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = tempLog,
+                                UseShellExecute = true
+                            });
+                        }
+                    }
+                    catch
+                    {
+                        // Fallback por si falla el volcado
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "xterm",
+                            Arguments = "-e \"journalctl -u iscsid | less\"",
+                            UseShellExecute = true
+                        });
+                    }
                 }
             };
         }

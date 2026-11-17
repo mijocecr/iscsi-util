@@ -4,18 +4,19 @@
         Width="380"
         Height="170"
         CanResize="False"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Background="Transparent"
         TransparencyLevelHint="AcrylicBlur, Blur, Transparent"
         SystemDecorations="None"
         ShowInTaskbar="False"
         Topmost="True">
 
-    <!-- Overlay oscuro -->
+    <!-- Overlay oscuro (mantiene el sombreado del fondo) -->
     <Border Background="#AA000000">
 
-        <!-- Caja central -->
-        <Border Background="#1E1E1E"
+        <!-- Caja central con nombre para controlarlo desde C# -->
+        <Border x:Name="CardBorder"
+                Background="#1E1E1E"
                 BorderBrush="#3A7BFF"
                 BorderThickness="2"
                 CornerRadius="12"
@@ -34,11 +35,12 @@
                            Foreground="White"
                            HorizontalAlignment="Center"/>
 
-                <ProgressBar IsIndeterminate="True"
+                <ProgressBar x:Name="ProgressBarControl"
+                             IsIndeterminate="True"
                              Width="260"
                              Height="8"
                              Foreground="#3A7BFF"
-                             Background="#333"
+                             Background="#333333"
                              CornerRadius="4"/>
 
             </StackPanel>

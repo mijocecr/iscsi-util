@@ -9,6 +9,7 @@
     MinHeight="580"
     MaxWidth="500"
     MaxHeight="580"
+    WindowStartupLocation="CenterScreen"
     CanResize="False"
     Title="iscsi-util">
 

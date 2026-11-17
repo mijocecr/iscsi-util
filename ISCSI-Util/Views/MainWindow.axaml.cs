@@ -42,10 +42,10 @@ public partial class MainWindow : Window
 
         StatusBarText.Text = state switch
         {
-            "SYSTEM STATUS: OK"       => "Ready.",
-            "SYSTEM STATUS: Warning"  => "Warning: degraded state.",
-            "SYSTEM STATUS: Critical" => "Critical: subsystem offline.",
-            _                         => "Status unknown."
+            "SYSTEM STATUS: OK"        => "Ready.",
+            "SYSTEM STATUS: Warning"   => "Warning: degraded state.",
+            "SYSTEM STATUS: Critical"  => "Critical: subsystem offline.",
+            _                          => "Status unknown."
         };
     }
 
@@ -116,10 +116,15 @@ public partial class MainWindow : Window
         ShellHelper.PasswordPrompt = PromptPasswordAsync;
 
         // ------------------------------------------------------------
-        // 2) ARRANCAR LOS SERVICIOS iSCSI DISPONIBLES
+        // 2) VALIDAR E INICIAR LOS SERVICIOS iSCSI / open-iscsi
         // ------------------------------------------------------------
-        StatusBarText.Text = "Starting iSCSI services...";
+        StatusBarText.Text = "Checking open-iscsi installation...";
         bool iscsiReady = await StartIscsiServicesAsync();
+
+        if (!iscsiReady)
+        {
+            return; // Si no está instalado o falla, se detiene la inicialización tras mostrar el aviso.
+        }
 
         // ------------------------------------------------------------
         // 3) CARGAR SESSIONS
@@ -137,14 +142,12 @@ public partial class MainWindow : Window
             await status.RefreshStatus();
         }
 
-        StatusBarText.Text = iscsiReady ? "Ready." : "Ready (iSCSI service unavailable).";
-        LogService.Write(iscsiReady
-            ? "[MAIN] Initialization completed. System ready."
-            : "[MAIN] Initialization completed with iSCSI services unavailable.");
+        StatusBarText.Text = "Ready.";
+        LogService.Write("[MAIN] Initialization completed. System ready.");
     }
 
     // ============================================================
-    // INICIAR SERVICIOS iSCSI
+    // INICIAR Y VERIFICAR SERVICIOS iSCSI (Compatible con distros modernas)
     // ============================================================
     private async Task<bool> StartIscsiServicesAsync()
     {
@@ -157,6 +160,7 @@ public partial class MainWindow : Window
         if (unitsResult.ExitCode != 0)
         {
             LogService.Error($"[MAIN] Unable to list systemd service units: {unitsResult.Stderr}");
+            await MostrarErrorOpenIscsiAsync();
             return false;
         }
 
@@ -168,9 +172,11 @@ public partial class MainWindow : Window
                 .Select(parts => parts[0]),
             StringComparer.OrdinalIgnoreCase);
 
+        // Verificamos si open-iscsi / iscsid está instalado en el sistema
         if (!installedUnits.Contains(daemonUnit))
         {
             LogService.Error($"[MAIN] Required systemd unit '{daemonUnit}' is not installed.");
+            await MostrarErrorOpenIscsiAsync();
             return false;
         }
 
@@ -188,14 +194,11 @@ public partial class MainWindow : Window
             if (startResult.ExitCode != 0)
             {
                 LogService.Error($"[MAIN] Failed to start '{daemonUnit}': {startResult.Stderr}");
+                await MostrarErrorOpenIscsiAsync();
                 return false;
             }
         }
 
-        // El servicio de sesiones (iscsi.service) es opcional: la aplicación
-        // gestiona las sesiones con iscsiadm. Además, arrancarlo cuando ya hay
-        // un iscsid activo falla porque iscsid.socket se niega a escuchar, así
-        // que solo se intenta si está habilitado y aún no está activo.
         var sessionUnit = new[] { "iscsi.service", "open-iscsi.service" }
             .FirstOrDefault(installedUnits.Contains);
 
@@ -204,21 +207,12 @@ public partial class MainWindow : Window
             var sessionActive = await ShellHelper.RunCleanResultAsync(
                 $"systemctl is-active --quiet {sessionUnit}");
 
-            if (sessionActive.ExitCode == 0)
-            {
-                LogService.Debug($"[MAIN] Optional service '{sessionUnit}' is already active.");
-            }
-            else
+            if (sessionActive.ExitCode != 0)
             {
                 var sessionEnabled = await ShellHelper.RunCleanResultAsync(
                     $"systemctl is-enabled --quiet {sessionUnit}");
 
-                if (sessionEnabled.ExitCode != 0)
-                {
-                    LogService.Debug(
-                        $"[MAIN] Optional service '{sessionUnit}' is disabled; not starting it.");
-                }
-                else
+                if (sessionEnabled.ExitCode == 0)
                 {
                     StatusBarText.Text = "Starting iSCSI session service...";
                     LogService.Debug($"[MAIN] Starting enabled session service '{sessionUnit}'...");
@@ -228,11 +222,8 @@ public partial class MainWindow : Window
 
                     if (sessionResult.ExitCode != 0)
                     {
-                        // No es un error de la aplicación: es opcional y las
-                        // sesiones se gestionan con iscsiadm.
                         LogService.Write(
-                            $"[MAIN] Optional service '{sessionUnit}' could not start " +
-                            $"(sessions are managed with iscsiadm): {sessionResult.Stderr.Trim()}");
+                            $"[MAIN] Optional service '{sessionUnit}' could not start: {sessionResult.Stderr.Trim()}");
                     }
                 }
             }
@@ -244,11 +235,76 @@ public partial class MainWindow : Window
         if (verifyResult.ExitCode != 0)
         {
             LogService.Error($"[MAIN] Service '{daemonUnit}' did not become active: {verifyResult.Stderr}");
+            await MostrarErrorOpenIscsiAsync();
             return false;
         }
 
         LogService.Write("[MAIN] Required iSCSI daemon is active.");
         return true;
+    }
+
+    // ============================================================
+    // DIÁLOGO DE ERROR: open-iscsi NO INSTALADO
+    // ============================================================
+    private async Task MostrarErrorOpenIscsiAsync()
+    {
+        LogService.Debug("[MAIN] Showing open-iscsi missing dialog...");
+
+        var dialog = new Window
+        {
+            Width = 420,
+            Height = 190,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = (IBrush)Application.Current!.FindResource("SteamPanel")!,
+            Padding = new Thickness(0),
+            Title = "Missing Dependency"
+        };
+
+        var border = new Border
+        {
+            Background = (IBrush)Application.Current!.FindResource("SteamCard")!,
+            BorderBrush = (IBrush)Application.Current!.FindResource("SteamAccent")!,
+            BorderThickness = new Thickness(2),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(18),
+            Margin = new Thickness(6)
+        };
+
+        var stack = new StackPanel { Spacing = 14 };
+
+        var text = new TextBlock
+        {
+            Text = "To use this program, you must install open-iscsi first.",
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Foreground = Brushes.Red,
+            FontSize = 14,
+            FontWeight = FontWeight.SemiBold
+        };
+
+        var okButton = new Button
+        {
+            Content = "Exit",
+            Width = 90,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Classes = { "SteamButton" },
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
+        };
+
+        okButton.Click += (_, _) =>
+        {
+            dialog.Close();
+            Close(); // Cierra la aplicación completa
+        };
+
+        stack.Children.Add(text);
+        stack.Children.Add(okButton);
+
+        border.Child = stack;
+        dialog.Content = border;
+
+        await dialog.ShowDialog(this);
     }
 
     // ============================================================
@@ -269,10 +325,6 @@ public partial class MainWindow : Window
         LogService.Debug("[MAIN] Password dialog closed.");
     }
 
-    /// <summary>
-    /// Pide una contraseña nueva cuando sudo rechazó la anterior en mitad de
-    /// una operación. Cancelar solo aborta esa operación, no cierra la app.
-    /// </summary>
     private async Task<string?> PromptPasswordAsync()
     {
         try
@@ -514,8 +566,6 @@ public partial class MainWindow : Window
 
     private async void OnMainTabSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        // Durante InitializeComponent el campo MainTabs aun no esta asignado,
-        // pero el TabControl ya dispara SelectionChanged. Usamos el sender.
         if (sender is not TabControl tabs || tabs.SelectedIndex != 1)
             return;
 

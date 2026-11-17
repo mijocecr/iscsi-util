@@ -210,75 +210,86 @@ public partial class SessionsView : UserControl
         SessionsList.InvalidateVisual();
     }
 
-    private Border CrearTarjeta(SessionInfo session)
+  private Border CrearTarjeta(SessionInfo session)
+{
+    var selected = ReferenceEquals(session, _selected);
+
+    var displayName = ShortIqn(session.Iqn);
+    var displayPortal = ShortPortal(session.Portal);
+
+    // Detectamos si el tema actual es claro u oscuro para los colores de respaldo
+    bool isLight = Application.Current?.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Light;
+
+    // Usamos FindResource directamente o valores por defecto seguros
+    var defaultTextColor = Application.Current?.TryFindResource("SteamText", out var textRes) == true && textRes is IBrush textBrush 
+        ? textBrush 
+        : new SolidColorBrush(Color.Parse(isLight ? "#1B2838" : "#C7D5E0"));
+
+    var cardBackground = selected 
+        ? (Application.Current?.TryFindResource("SteamCard", out var cardRes) == true && cardRes is IBrush cardBrush ? cardBrush : new SolidColorBrush(Color.Parse("#2A475E")))
+        : new SolidColorBrush(Color.Parse(isLight ? "#EAEAEA" : "#151E28"));
+
+    var borderBrush = selected 
+        ? new SolidColorBrush(Color.Parse("#4CFF4C")) 
+        : (Application.Current?.TryFindResource("SteamBorder", out var borderRes) == true && borderRes is IBrush borderBrushColor ? borderBrushColor : new SolidColorBrush(Color.Parse(isLight ? "#CCCCCC" : "#0F141A")));
+
+    var row = new Border
     {
-        var selected = ReferenceEquals(session, _selected);
+        Background = cardBackground,
+        BorderBrush = borderBrush,
+        BorderThickness = new Thickness(selected ? 1.5 : 1),
+        CornerRadius = new CornerRadius(8),
+        Padding = new Thickness(12, 10),
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+        Cursor = new Cursor(StandardCursorType.Hand)
+    };
 
-        var displayName = ShortIqn(session.Iqn);
-        var displayPortal = ShortPortal(session.Portal);
+    var contentPanel = new StackPanel
+    {
+        Orientation = Avalonia.Layout.Orientation.Vertical,
+        Spacing = 3,
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch
+    };
 
-        var defaultTextColor = GetThemeBrush("SteamText", "#C7D5E0");
-        var cardBackground = selected ? GetThemeBrush("SteamCard", "#2A475E") : new SolidColorBrush(Color.Parse("#151E28"));
-        var borderBrush = selected ? new SolidColorBrush(Color.Parse("#4CFF4C")) : GetThemeBrush("SteamBorder", "#0F141A");
+    var name = new TextBlock
+    {
+        Text = displayName,
+        FontSize = 13,
+        FontWeight = selected ? FontWeight.Bold : FontWeight.SemiBold,
+        TextWrapping = TextWrapping.Wrap,
+        TextTrimming = TextTrimming.CharacterEllipsis,
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        Foreground = selected
+            ? new SolidColorBrush(Color.Parse("#4CFF4C"))
+            : defaultTextColor
+    };
 
-        var row = new Border
-        {
-            Background = cardBackground,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(selected ? 1.5 : 1),
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 10),
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-            Cursor = new Cursor(StandardCursorType.Hand)
-        };
+    var portalInfo = new TextBlock
+    {
+        Text = $"{displayPortal}  ·  LUN {session.LunId}",
+        FontSize = 11,
+        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        Foreground = defaultTextColor,
+        Opacity = 0.7
+    };
 
-        var contentPanel = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Vertical,
-            Spacing = 3,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch
-        };
+    contentPanel.Children.Add(name);
+    contentPanel.Children.Add(portalInfo);
+    row.Child = contentPanel;
 
-        var name = new TextBlock
-        {
-            Text = displayName,
-            FontSize = 13,
-            FontWeight = selected ? FontWeight.Bold : FontWeight.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            Foreground = selected
-                ? new SolidColorBrush(Color.Parse("#4CFF4C"))
-                : defaultTextColor
-        };
+    row.PointerPressed += (_, _) =>
+    {
+        _selected = session;
+        _lastRescanStatus = string.Empty;
 
-        var portalInfo = new TextBlock
-        {
-            Text = $"{displayPortal}  ·  LUN {session.LunId}",
-            FontSize = 11,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            Foreground = defaultTextColor,
-            Opacity = 0.7
-        };
+        DetailsCard.IsVisible = true;
+        
+        PintarLista();
+        PintarDetalles(session);
+    };
 
-        contentPanel.Children.Add(name);
-        contentPanel.Children.Add(portalInfo);
-        row.Child = contentPanel;
-
-        row.PointerPressed += (_, _) =>
-        {
-            _selected = session;
-            _lastRescanStatus = string.Empty;
-
-            // Al hacer clic en un target, mostramos la tarjeta de detalles y la rellenamos
-            DetailsCard.IsVisible = true;
-            
-            PintarLista();
-            PintarDetalles(session);
-        };
-
-        return row;
-    }
+    return row;
+}
 
     /// <summary>
     /// Tarjeta de un target que expone varios LUNs. El target es la cabecera

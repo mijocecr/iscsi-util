@@ -398,168 +398,184 @@ public partial class TargetsView : UserControl
     // TARGET CARD
     // ============================================================
 
+    
     private Control CreateTargetCard(IscsiDestino destino)
+{
+    var isSelected = _selected != null &&
+        _selected.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
+        MismoPortal(_selected.Ip, destino.Ip);
+
+    bool isLight = Application.Current?.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Light;
+
+    var cardBackground = isSelected 
+        ? (Application.Current?.TryFindResource("SteamCard", out var cardRes) == true && cardRes is IBrush cardBrush ? cardBrush : new SolidColorBrush(Color.Parse("#2A475E")))
+        : new SolidColorBrush(Color.Parse(isLight ? "#EAEAEA" : "#151E28"));
+    
+    var borderBrush = isSelected 
+        ? new SolidColorBrush(Color.Parse("#4CFF4C")) 
+        : (Application.Current?.TryFindResource("SteamBorder", out var borderRes) == true && borderRes is IBrush borderBrushColor ? borderBrushColor : new SolidColorBrush(Color.Parse(isLight ? "#CCCCCC" : "#0F141A")));
+
+    var border = new Border
     {
-        var border = new Border
+        Background = cardBackground,
+        BorderBrush = borderBrush,
+        BorderThickness = new Thickness(isSelected ? 1.5 : 1),
+        Padding = new Thickness(10),
+        CornerRadius = new CornerRadius(10),
+        Margin = new Thickness(0),
+        Cursor = new Cursor(StandardCursorType.Hand)
+    };
+
+    if (isSelected)
+        border.Classes.Add("selected");
+
+    var grid = new Grid
+    {
+        RowDefinitions = new RowDefinitions("Auto"),
+        RowSpacing = 6
+    };
+
+    var titleRow = new Grid
+    {
+        ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+        ColumnSpacing = 8,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+    };
+
+    var iqnText = new TextBlock
+    {
+        Text = GetTargetDisplayName(destino),
+        TextAlignment = TextAlignment.Left,
+        TextWrapping = TextWrapping.Wrap,
+        FontSize = 13,
+        FontWeight = FontWeight.SemiBold,
+        Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
+    };
+
+    titleRow.Children.Add(iqnText);
+
+    var connectionIndicator = new Border
+    {
+        Width = 10,
+        Height = 10,
+        CornerRadius = new CornerRadius(5),
+        Background = destino.Conectado ? Brushes.LimeGreen : Brushes.Gray,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        Margin = new Thickness(0, 0, 4, 0)
+    };
+    titleRow.Children.Add(connectionIndicator);
+    Grid.SetColumn(connectionIndicator, 1);
+
+    grid.Children.Add(titleRow);
+    Grid.SetRow(titleRow, 0);
+
+    var btnRow = new StackPanel
+    {
+        Orientation = Avalonia.Layout.Orientation.Horizontal,
+        Spacing = 6,
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+    };
+
+    if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
+    {
+        var mutualBtn = new Button
         {
-            Classes = { "SteamCard" },
-            Padding = new Thickness(10),
-            CornerRadius = new CornerRadius(10),
-            Margin = new Thickness(0),
-            Cursor = new Cursor(StandardCursorType.Hand)
+            Content = "Mutual",
+            Classes = { "SteamButton" },
+            Width = 90,
+            Height = 28
         };
 
-        if (_selected != null &&
-            _selected.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
-            MismoPortal(_selected.Ip, destino.Ip))
-            border.Classes.Add("selected");
-
-        var grid = new Grid
+        mutualBtn.Click += async (_, _) =>
         {
-            RowDefinitions = new RowDefinitions("Auto"),
-            RowSpacing = 6
-        };
-
-        var titleRow = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            ColumnSpacing = 8,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-        };
-
-        var iqnText = new TextBlock
-        {
-            Text = GetTargetDisplayName(destino),
-            TextAlignment = TextAlignment.Left,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = (IBrush)Application.Current!.FindResource("SteamBlue")!
-        };
-
-        titleRow.Children.Add(iqnText);
-
-        var connectionIndicator = new Border
-        {
-            Width = 10,
-            Height = 10,
-            CornerRadius = new CornerRadius(5),
-            Background = destino.Conectado ? Brushes.LimeGreen : Brushes.Gray,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 4, 0)
-        };
-        titleRow.Children.Add(connectionIndicator);
-        Grid.SetColumn(connectionIndicator, 1);
-
-        grid.Children.Add(titleRow);
-        Grid.SetRow(titleRow, 0);
-
-        var btnRow = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 6,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
-        };
-
-        if (destino.RequiresMutualChap && !destino.HasLocalMutualConfigured)
-        {
-            var mutualBtn = new Button
+            if (this.GetVisualRoot() is Window owner)
             {
-                Content = "Mutual",
-                Classes = { "SteamButton" },
-                Width = 90,
-                Height = 28
-            };
-
-            mutualBtn.Click += async (_, _) =>
-            {
-                if (this.GetVisualRoot() is Window owner)
-                {
-                    var dlg = new MutualChapDialog(destino);
-                    await dlg.ShowDialog(owner);
-                    await RefreshTargetsList();
-                }
-            };
-
-            btnRow.Children.Add(mutualBtn);
-        }
-        else if (destino.RequiresChap && !destino.HasLocalChapConfigured)
-        {
-            var chapBtn = new Button
-            {
-                Content = "Configure CHAP",
-                Classes = { "SteamButton" },
-                Width = 130,
-                Height = 28
-            };
-
-            chapBtn.Click += async (_, _) =>
-            {
-                if (this.GetVisualRoot() is Window owner)
-                {
-                    var dlg = new ChapDialog(destino);
-                    await dlg.ShowDialog(owner);
-                    await RefreshTargetsList();
-                }
-            };
-
-            btnRow.Children.Add(chapBtn);
-        }
-
-        if (btnRow.Children.Count > 0)
-        {
-            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            grid.Children.Add(btnRow);
-            Grid.SetRow(btnRow, 1);
-        }
-
-        border.PointerPressed += async (_, e) =>
-        {
-            e.Handled = true;
-
-            var selected = _targets.FirstOrDefault(t =>
-                               t.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
-                               MismoPortal(t.Ip, destino.Ip))
-                           ?? _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
-
-            if (selected == null)
-                return;
-
-            _selected = selected;
-            _selectedLun = int.MinValue;
-            _targetLuns.Remove(TargetKey(selected));
-
-            foreach (var child in TargetsList.Children)
-            {
-                if (child is Border b)
-                    b.Classes.Remove("selected");
+                var dlg = new MutualChapDialog(destino);
+                await dlg.ShowDialog(owner);
+                await RefreshTargetsList();
             }
-
-            border.Classes.Add("selected");
-
-            using (LoadingService.Show("Reading target info..."))
-            {
-                try
-                {
-                    await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
-                    await UpdateTargetStateAsync(selected);
-                }
-                catch (Exception ex)
-                {
-                    LogService.Error($"[SELECT] {ex.Message}");
-                }
-            }
-
-            RebuildTargetsList();
-            if (_targets.Any(t =>
-                    t.Iqn.Equals(selected.Iqn, StringComparison.OrdinalIgnoreCase) &&
-                    MismoPortal(t.Ip, selected.Ip)))
-                await LoadTargetDetailsAsync(selected);
         };
 
-        border.Child = grid;
-        return border;
+        btnRow.Children.Add(mutualBtn);
     }
+    else if (destino.RequiresChap && !destino.HasLocalChapConfigured)
+    {
+        var chapBtn = new Button
+        {
+            Content = "Configure CHAP",
+            Classes = { "SteamButton" },
+            Width = 130,
+            Height = 28
+        };
+
+        chapBtn.Click += async (_, _) =>
+        {
+            if (this.GetVisualRoot() is Window owner)
+            {
+                var dlg = new ChapDialog(destino);
+                await dlg.ShowDialog(owner);
+                await RefreshTargetsList();
+            }
+        };
+
+        btnRow.Children.Add(chapBtn);
+    }
+
+    if (btnRow.Children.Count > 0)
+    {
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        grid.Children.Add(btnRow);
+        Grid.SetRow(btnRow, 1);
+    }
+
+    border.PointerPressed += async (_, e) =>
+    {
+        e.Handled = true;
+
+        var selected = _targets.FirstOrDefault(t =>
+                                   t.Iqn.Equals(destino.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                                   MismoPortal(t.Ip, destino.Ip))
+                                ?? _targets.FirstOrDefault(t => t.Iqn == destino.Iqn);
+
+        if (selected == null)
+            return;
+
+        _selected = selected;
+        _selectedLun = int.MinValue;
+        _targetLuns.Remove(TargetKey(selected));
+
+        foreach (var child in TargetsList.Children)
+        {
+            if (child is Border b)
+                b.Classes.Remove("selected");
+        }
+
+        border.Classes.Add("selected");
+
+        using (LoadingService.Show("Reading target info..."))
+        {
+            try
+            {
+                await RunSystemOperationAsync(() => IscsiHelper.CompletarInformacionDestino(selected, 0));
+                await UpdateTargetStateAsync(selected);
+            }
+            catch (Exception ex)
+            {
+                LogService.Error($"[SELECT] {ex.Message}");
+            }
+        }
+
+        RebuildTargetsList();
+        if (_targets.Any(t =>
+                t.Iqn.Equals(selected.Iqn, StringComparison.OrdinalIgnoreCase) &&
+                MismoPortal(t.Ip, selected.Ip)))
+            await LoadTargetDetailsAsync(selected);
+    };
+
+    border.Child = grid;
+    return border;
+}
+    
 
     // ============================================================
     // TARGET DETAILS PANEL
