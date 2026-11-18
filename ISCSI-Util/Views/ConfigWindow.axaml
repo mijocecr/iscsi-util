@@ -94,6 +94,7 @@
                 <Button x:Name="BtnCleanGhosts"
                         Content="Remove ghost targets…"
                         HorizontalAlignment="Left"
+                        HorizontalContentAlignment="Center"
                         Classes="SteamButton"/>
             </StackPanel>
 

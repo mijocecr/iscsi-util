@@ -2,6 +2,51 @@
 
 All notable changes to iSCSI-Util are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Startup dependency check: iSCSI-Util now detects whether open-iscsi is
+  installed by inspecting the `iscsiadm`/`iscsid` binaries and the
+  `iscsid.service` unit (locale-independently). When it is missing, a
+  dedicated English notice lists the install command for each distribution
+  instead of failing silently. The same check runs in the CLI.
+- Startup privilege check: iSCSI-Util now detects whether the current user can
+  run `sudo` (via group membership in `sudo`/`wheel`/`admin` and a
+  locale-independent `sudo -n -l` probe). When they cannot, a dedicated English
+  notice explains how to grant sudo access; the CLI prints the same guidance
+  instead of looping forever on a password that can never be accepted.
+- The AppImage now bundles OpenSSL 3, ICU and the X11 stack, copied out of an
+  AlmaLinux 9 container so they do not force a newer glibc on the target
+  system. This makes the AppImage run on a wider range of distributions
+  without depending on the host library versions.
+- The AppImage ships AppStream metainfo and update information, and the release
+  build also produces a `.zsync` file for delta updates.
+
+### Changed
+
+- The AppImage now carries the folder-based self-contained build (instead of
+  the single-file one), so nothing has to be extracted into `$HOME` at
+  startup, and `AppRun` sets `LD_LIBRARY_PATH` and `PATH`.
+- `ISCSI-Util.tar.gz` is now byte-for-byte reproducible, so the AUR checksum is
+  stable across builds.
+
+### Fixed
+
+- All user-facing desktop notifications and error messages are now in English.
+- Every button uses `HorizontalContentAlignment="Center"` so its label is
+  always centered.
+- Status view false positives:
+  - An ICMP `ping` that is blocked no longer marks the system as *Degraded*;
+    latency is now shown as an informational value (`Unavailable`).
+  - The network check no longer reports *Disconnected* when the `ip` command is
+    unavailable, and it now also considers the IPv6 default route.
+  - The reported IP address is chosen by ignoring virtual interfaces (Docker,
+    libvirt, VPN, …) instead of hardcoding private ranges, which used to hide
+    valid addresses such as `172.16.x` or `192.168.194.x`.
+  - A failed `systemctl` probe is reported as *Unknown* instead of *Stopped*,
+    and a `failed` unit is reported as *Failed* (critical).
+
 ## [5.0.1] - 2026-11-15
 
 ### Added

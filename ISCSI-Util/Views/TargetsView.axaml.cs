@@ -483,7 +483,8 @@ public partial class TargetsView : UserControl
             Content = "Mutual",
             Classes = { "SteamButton" },
             Width = 90,
-            Height = 28
+            Height = 28,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center
         };
 
         mutualBtn.Click += async (_, _) =>
@@ -505,7 +506,8 @@ public partial class TargetsView : UserControl
             Content = "Configure CHAP",
             Classes = { "SteamButton" },
             Width = 130,
-            Height = 28
+            Height = 28,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center
         };
 
         chapBtn.Click += async (_, _) =>
@@ -793,6 +795,7 @@ public partial class TargetsView : UserControl
                     Classes = { "SteamButton" },
                     FontSize = 10,
                     Padding = new Thickness(6, 2),
+                    HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
                 };
                 copyBtn.Click += async (_, _) =>

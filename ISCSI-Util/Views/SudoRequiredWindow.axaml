@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ISCSI_Util.Views.SudoRequiredWindow"
+        Width="560"
+        SizeToContent="Height"
+        Title="Administrator privileges required"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource SteamBackground}"
+        Foreground="{DynamicResource SteamText}">
+
+    <ScrollViewer Background="{DynamicResource SteamBackground}"
+                  VerticalScrollBarVisibility="Auto">
+        <Border Margin="12"
+                Padding="18"
+                Background="{DynamicResource SteamPanel}"
+                BorderBrush="{DynamicResource SteamBorderStrong}"
+                BorderThickness="1"
+                CornerRadius="10">
+
+            <StackPanel Spacing="14">
+
+                <TextBlock Text="Administrator privileges required"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SteamText}"/>
+
+                <TextBlock TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"
+                           Text="iSCSI-Util needs administrator (sudo) privileges to run iscsiadm, but the current user is not allowed to run sudo."/>
+
+                <TextBlock TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"
+                           Text="Add your user to the sudo group and try again. Replace &lt;your-user&gt; with your username:"/>
+
+                <Border Padding="12"
+                        Background="{DynamicResource SteamCard}"
+                        BorderBrush="{DynamicResource SteamBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+                    <StackPanel Spacing="6">
+                        <TextBlock Foreground="{DynamicResource SteamText}" Text="Debian / Ubuntu / Linux Mint:"/>
+                        <SelectableTextBlock Foreground="{DynamicResource SteamText}" FontFamily="monospace"
+                                             Text="sudo usermod -aG sudo &lt;your-user&gt;"/>
+                        <TextBlock Foreground="{DynamicResource SteamText}" Text="Fedora / RHEL / CentOS:"/>
+                        <SelectableTextBlock Foreground="{DynamicResource SteamText}" FontFamily="monospace"
+                                             Text="sudo usermod -aG wheel &lt;your-user&gt;"/>
+                        <TextBlock Foreground="{DynamicResource SteamText}" Text="Arch / Manjaro / CachyOS:"/>
+                        <SelectableTextBlock Foreground="{DynamicResource SteamText}" FontFamily="monospace"
+                                             Text="sudo usermod -aG wheel &lt;your-user&gt;"/>
+                        <TextBlock Foreground="{DynamicResource SteamText}" Text="openSUSE:"/>
+                        <SelectableTextBlock Foreground="{DynamicResource SteamText}" FontFamily="monospace"
+                                             Text="sudo usermod -aG wheel &lt;your-user&gt;"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock TextWrapping="Wrap"
+                           Foreground="{DynamicResource SteamText}"
+                           Text="Log out and back in (or reboot) for the change to take effect."/>
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Spacing="10">
+                    <Button Content="Continue anyway"
+                            HorizontalContentAlignment="Center"
+                            Click="OnContinue"/>
+                    <Button Content="Close"
+                            Width="100"
+                            HorizontalContentAlignment="Center"
+                            Background="{DynamicResource SteamAccent}"
+                            Foreground="White"
+                            Click="OnClose"/>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+    </ScrollViewer>
+</Window>

@@ -160,7 +160,7 @@ public partial class MainWindow : Window
         if (unitsResult.ExitCode != 0)
         {
             LogService.Error($"[MAIN] Unable to list systemd service units: {unitsResult.Stderr}");
-            await MostrarErrorOpenIscsiAsync();
+            await MostrarServicioIscsiFallidoAsync();
             return false;
         }
 
@@ -173,10 +173,11 @@ public partial class MainWindow : Window
             StringComparer.OrdinalIgnoreCase);
 
         // Verificamos si open-iscsi / iscsid está instalado en el sistema
-        if (!installedUnits.Contains(daemonUnit))
+        // (inspeccionando binarios y unidad, sin depender del idioma).
+        if (!IscsiEnvironment.IsOpenIscsiInstalled())
         {
-            LogService.Error($"[MAIN] Required systemd unit '{daemonUnit}' is not installed.");
-            await MostrarErrorOpenIscsiAsync();
+            LogService.Error("[MAIN] open-iscsi is not installed on this system.");
+            await MostrarOpenIscsiFaltanteAsync();
             return false;
         }
 
@@ -194,7 +195,7 @@ public partial class MainWindow : Window
             if (startResult.ExitCode != 0)
             {
                 LogService.Error($"[MAIN] Failed to start '{daemonUnit}': {startResult.Stderr}");
-                await MostrarErrorOpenIscsiAsync();
+                await MostrarServicioIscsiFallidoAsync();
                 return false;
             }
         }
@@ -235,7 +236,7 @@ public partial class MainWindow : Window
         if (verifyResult.ExitCode != 0)
         {
             LogService.Error($"[MAIN] Service '{daemonUnit}' did not become active: {verifyResult.Stderr}");
-            await MostrarErrorOpenIscsiAsync();
+            await MostrarServicioIscsiFallidoAsync();
             return false;
         }
 
@@ -244,21 +245,32 @@ public partial class MainWindow : Window
     }
 
     // ============================================================
-    // DIÁLOGO DE ERROR: open-iscsi NO INSTALADO
+    // DIÁLOGO: open-iscsi NO INSTALADO
     // ============================================================
-    private async Task MostrarErrorOpenIscsiAsync()
+    private async Task MostrarOpenIscsiFaltanteAsync()
     {
         LogService.Debug("[MAIN] Showing open-iscsi missing dialog...");
 
+        var dialog = new IscsiMissingWindow(IscsiEnvironment.Inspect());
+        await dialog.ShowDialog(this);
+    }
+
+    // ============================================================
+    // DIÁLOGO DE ERROR: el servicio iscsid NO ARRANCA
+    // ============================================================
+    private async Task MostrarServicioIscsiFallidoAsync()
+    {
+        LogService.Debug("[MAIN] Showing iSCSI service failure dialog...");
+
         var dialog = new Window
         {
-            Width = 420,
-            Height = 190,
+            Width = 440,
+            Height = 210,
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = (IBrush)Application.Current!.FindResource("SteamPanel")!,
             Padding = new Thickness(0),
-            Title = "Missing Dependency"
+            Title = "iSCSI service unavailable"
         };
 
         var border = new Border
@@ -275,7 +287,8 @@ public partial class MainWindow : Window
 
         var text = new TextBlock
         {
-            Text = "To use this program, you must install open-iscsi first.",
+            Text = "open-iscsi is installed, but the iscsid service could not be started.\n\n" +
+                   "Check its status with:\n    systemctl status iscsid",
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Foreground = Brushes.Red,

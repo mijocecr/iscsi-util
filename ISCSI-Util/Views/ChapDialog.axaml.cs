@@ -64,7 +64,7 @@ public partial class ChapDialog : Window
 
             if (user.Length == 0)
             {
-                NotificadorLinux.Enviar("[ERROR] El usuario CHAP es obligatorio.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] The CHAP username is required.", 6000, "critical");
                 return;
             }
 
@@ -76,7 +76,7 @@ public partial class ChapDialog : Window
 
             if (!passProvided && !hasStoredSecret)
             {
-                NotificadorLinux.Enviar("[ERROR] La contraseña CHAP es obligatoria.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] The CHAP password is required.", 6000, "critical");
                 return;
             }
 
@@ -146,7 +146,7 @@ public partial class ChapDialog : Window
         catch (Exception ex)
         {
             LogService.Error($"[CHAP_DIALOG] Error aplicando CHAP: {ex.Message}");
-            NotificadorLinux.Enviar("[ERROR] No se pudo aplicar CHAP.", 6000, "critical");
+            NotificadorLinux.Enviar("[ERROR] Could not apply CHAP.", 6000, "critical");
         }
         finally
         {

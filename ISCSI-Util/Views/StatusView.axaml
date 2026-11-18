@@ -447,11 +447,13 @@
                 <Button Classes="SteamButton"
                         x:Name="BtnReload"
                         Content="Reload"
+                        HorizontalContentAlignment="Center"
                         Width="100"/>
 
                 <Button Classes="SteamButton"
                         x:Name="BtnRefresh"
                         Content="Refresh"
+                        HorizontalContentAlignment="Center"
                         Width="100"/>
             </StackPanel>
 
@@ -459,6 +461,7 @@
                     Classes="SteamButton DangerButton"
                     x:Name="BtnRestart"
                     Content="Restart Service"
+                    HorizontalContentAlignment="Center"
                     Width="140"
                     ToolTip.Tip="Restarts iscsid. Active sessions and mounted volumes may be interrupted."/>
 

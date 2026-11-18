@@ -540,6 +540,15 @@ namespace ISCSI_Util.Views
                 string state = result.Stdout.Trim().ToLowerInvariant();
                 Trace($"LoadServiceStatus() state='{state}' exit={result.ExitCode}");
 
+                // Sin salida el comando no llegó a responder (por ejemplo,
+                // systemctl no está disponible). Eso no significa que el
+                // servicio esté detenido.
+                if (string.IsNullOrWhiteSpace(state))
+                {
+                    SetIndicator(IconIscsid, TxtIscsid, "Unknown", Brushes.Goldenrod);
+                    return;
+                }
+
                 switch (state)
                 {
                     case "active":
@@ -550,6 +559,10 @@ namespace ISCSI_Util.Views
                     case "reloading":
                     case "deactivating":
                         SetIndicator(IconIscsid, TxtIscsid, "Starting", Brushes.Goldenrod);
+                        break;
+
+                    case "failed":
+                        SetIndicator(IconIscsid, TxtIscsid, "Failed", Brushes.Red);
                         break;
 
                     default:
@@ -569,12 +582,23 @@ namespace ISCSI_Util.Views
             try
             {
                 // Una dirección global puede ser solo docker0. Lo que indica
-                // conectividad real es tener una ruta por defecto.
-                Trace("LoadNetworkStatus() → ip -o -4 route show default");
-                var result = await ShellHelper.RunCleanResultAsync("ip -o -4 route show default");
+                // conectividad real es tener una ruta por defecto, en IPv4 o
+                // IPv6.
+                Trace("LoadNetworkStatus() → ip route show default (v4/v6)");
+                var v4 = await ShellHelper.RunCleanResultAsync("ip -o -4 route show default");
+                var v6 = await ShellHelper.RunCleanResultAsync("ip -o -6 route show default");
 
-                bool connected = result.ExitCode == 0 &&
-                                 !string.IsNullOrWhiteSpace(result.Stdout);
+                // Si el comando `ip` no existe o falla, no sabemos el estado. No
+                // se debe confundir "no puedo comprobarlo" con "desconectado".
+                if (v4.ExitCode != 0 && v6.ExitCode != 0)
+                {
+                    SetIndicator(IconNetwork, TxtNetwork, "Unknown", Brushes.Goldenrod);
+                    Trace($"LoadNetworkStatus() ← ip no disponible (v4={v4.ExitCode}, v6={v6.ExitCode})");
+                    return;
+                }
+
+                bool connected = !string.IsNullOrWhiteSpace(v4.Stdout) ||
+                                 !string.IsNullOrWhiteSpace(v6.Stdout);
 
                 SetIndicator(IconNetwork, TxtNetwork,
                     connected ? "Connected" : "Disconnected",
@@ -680,24 +704,21 @@ namespace ISCSI_Util.Views
         {
             try
             {
-                Trace("LoadIpAddress() → ip -o -4 addr show scope global | awk ...");
-                string raw = await ShellHelper.RunCleanAsync(
-                    "ip -o -4 addr show scope global | awk '{print $4}' | cut -d/ -f1"
-                );
+                Trace("LoadIpAddress() → ip -o -4 addr show scope global");
+                var result = await ShellHelper.RunCleanResultAsync(
+                    "ip -o -4 addr show scope global");
 
-                var ips = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                             .Select(ip => ip.Trim())
-                             .Where(ip =>
-                                 !string.IsNullOrWhiteSpace(ip) &&
-                                 !ip.StartsWith("127.") &&
-                                 !ip.StartsWith("172.16.") &&
-                                 !ip.StartsWith("172.17.") &&
-                                 !ip.StartsWith("172.18.") &&
-                                 !ip.StartsWith("172.19.") &&
-                                 !ip.StartsWith("192.168.194.") &&
-                                 !ip.StartsWith("172.16.206.")
-                             )
-                             .ToList();
+                var ips = result.Stdout
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                    .Where(parts => parts.Length >= 4)
+                    // En `ip -o` cada línea es: "2: eth0    inet 192.168.1.10/24 ...":
+                    // parts[1] es la interfaz y parts[3] la dirección con prefijo.
+                    .Select(parts => (Interface: parts[1], Address: parts[3].Split('/')[0]))
+                    .Where(item => !IsVirtualInterface(item.Interface))
+                    .Select(item => item.Address)
+                    .Where(ip => !string.IsNullOrWhiteSpace(ip) && !ip.StartsWith("127."))
+                    .ToList();
 
                 TxtIpAddress.Text = ips.FirstOrDefault() ?? "Unknown";
                 Trace($"LoadIpAddress() ← '{TxtIpAddress.Text}'");
@@ -708,6 +729,21 @@ namespace ISCSI_Util.Views
                 TxtIpAddress.Text = "Unknown";
             }
         }
+
+        // Interfaces virtuales habituales (Docker, libvirt, VPN, contenedores)
+        // que no representan la dirección real de la máquina. Antes se excluían
+        // rangos de IP concretos, lo que ocultaba direcciones privadas legítimas
+        // (por ejemplo un NAS en 172.16.x o 192.168.194.x).
+        private static bool IsVirtualInterface(string name) =>
+            name.StartsWith("docker", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("veth", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("br-", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("virbr", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("vmnet", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("tun", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("tap", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("wg", StringComparison.OrdinalIgnoreCase) ||
+            name.StartsWith("lo", StringComparison.OrdinalIgnoreCase);
 
         private async Task LoadLatency()
         {
@@ -732,8 +768,11 @@ namespace ISCSI_Util.Views
 
                 if (string.IsNullOrWhiteSpace(raw))
                 {
-                    TxtLatency.Text = "Timeout";
-                    Trace("LoadLatency() ← vacío → Timeout");
+                    // Un ping sin respuesta no implica un problema: muchas redes
+                    // bloquean ICMP. Se muestra como dato informativo y no como
+                    // un estado degradado.
+                    TxtLatency.Text = "Unavailable";
+                    Trace("LoadLatency() ← vacío → Unavailable");
                     return;
                 }
 
@@ -753,14 +792,14 @@ namespace ISCSI_Util.Views
                 }
                 else
                 {
-                    TxtLatency.Text = "Timeout";
-                    Trace("LoadLatency() ← sin 'time=' → Timeout");
+                    TxtLatency.Text = "Unavailable";
+                    Trace("LoadLatency() ← sin 'time=' → Unavailable");
                 }
             }
             catch (Exception ex)
             {
                 TraceError($"LoadLatency(): {ex.Message}");
-                TxtLatency.Text = "Timeout";
+                TxtLatency.Text = "Unavailable";
             }
         }
 
@@ -783,6 +822,11 @@ namespace ISCSI_Util.Views
                 case "Stopped":
                     critical = true;
                     reasons.Add("iscsid is stopped");
+                    break;
+
+                case "Failed":
+                    critical = true;
+                    reasons.Add("iscsid failed to start");
                     break;
 
                 default:
@@ -828,17 +872,9 @@ namespace ISCSI_Util.Views
                     break;
             }
 
-            if (TxtLatency.Text == "Timeout")
-            {
-                degraded = true;
-                reasons.Add("network latency timeout");
-            }
-
-            if (_activeSessions > 0 && _activeLuns == 0)
-            {
-                degraded = true;
-                reasons.Add("check targets: no LUN devices detected");
-            }
+            // La latencia ICMP no se tiene en cuenta para el resumen: muchas
+            // redes bloquean `ping` aunque el equipo esté perfectamente
+            // conectado. Se muestra solo como dato informativo.
 
             string state = critical ? "Critical" : degraded ? "Degraded" : "OK";
 

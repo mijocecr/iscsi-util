@@ -138,6 +138,7 @@
                                                 FontWeight="SemiBold"
                                                 HorizontalAlignment="Left"
                                                 VerticalAlignment="Center"
+                                                HorizontalContentAlignment="Center"
                                                 IsVisible="False" 
                                                 Click="OnOpenInline" />
 
@@ -184,6 +185,7 @@
                                     Foreground="{DynamicResource SteamText}"
                                     BorderBrush="{DynamicResource SteamAccent}"
                                     HorizontalAlignment="Left"
+                                    HorizontalContentAlignment="Center"
                                     BorderThickness="1.2"
                                     CornerRadius="8"
                                     Padding="14,6"
@@ -197,6 +199,7 @@
                                     BorderThickness="1.2"
                                     CornerRadius="8"
                                     Padding="12,6"
+                                    HorizontalContentAlignment="Center"
                                     IsVisible="False" Click="OnUnmount" />
 
                             <Button x:Name="BtnDisconnect" Content="Disconnect"
@@ -206,6 +209,7 @@
                                     BorderThickness="1.2"
                                     CornerRadius="8"
                                     Padding="12,6"
+                                    HorizontalContentAlignment="Center"
                                     IsVisible="False" Click="OnDisconnect" />
                         </StackPanel>
 

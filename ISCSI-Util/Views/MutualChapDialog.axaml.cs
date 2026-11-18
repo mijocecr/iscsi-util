@@ -78,13 +78,13 @@ public partial class MutualChapDialog : Window
 
             if (user.Length == 0)
             {
-                NotificadorLinux.Enviar("[ERROR] El usuario CHAP es obligatorio.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] The CHAP username is required.", 6000, "critical");
                 return;
             }
 
             if (userIn.Length == 0)
             {
-                NotificadorLinux.Enviar("[ERROR] El usuario Mutual CHAP es obligatorio.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] The Mutual CHAP username is required.", 6000, "critical");
                 return;
             }
 
@@ -98,13 +98,13 @@ public partial class MutualChapDialog : Window
 
             if (!passProvided && !hasStoredOutgoing)
             {
-                NotificadorLinux.Enviar("[ERROR] La contraseña CHAP es obligatoria.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] The CHAP password is required.", 6000, "critical");
                 return;
             }
 
             if (!passInProvided && !hasStoredIncoming)
             {
-                NotificadorLinux.Enviar("[ERROR] La contraseña Mutual CHAP es obligatoria.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] The Mutual CHAP password is required.", 6000, "critical");
                 return;
             }
 
@@ -192,7 +192,7 @@ public partial class MutualChapDialog : Window
         catch (Exception ex)
         {
             LogService.Error($"[MUTUAL_CHAP] Error aplicando Mutual CHAP: {ex.Message}");
-            NotificadorLinux.Enviar("[ERROR] No se pudo aplicar Mutual CHAP.", 6000, "critical");
+            NotificadorLinux.Enviar("[ERROR] Could not apply Mutual CHAP.", 6000, "critical");
         }
         finally
         {

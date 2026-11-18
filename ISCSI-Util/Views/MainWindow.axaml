@@ -37,6 +37,7 @@
                         Click="OnOpenConfig"
                         VerticalAlignment="Center"
                         HorizontalAlignment="Right"
+                        HorizontalContentAlignment="Center"
                         Classes="SteamButton"/>
             </Grid>
         </Border>

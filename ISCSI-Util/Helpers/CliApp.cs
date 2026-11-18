@@ -21,6 +21,33 @@ public static class CliApp
     public static async Task Run()
     {
         ConfigManager.Load();
+
+        if (!IscsiEnvironment.IsOpenIscsiInstalled())
+        {
+            Console.WriteLine("open-iscsi is not installed on this system.");
+            Console.WriteLine("iSCSI-Util needs open-iscsi to manage iSCSI targets, sessions and LUNs.");
+            Console.WriteLine("Install it first, for example:");
+            Console.WriteLine("  Debian/Ubuntu:  sudo apt install open-iscsi");
+            Console.WriteLine("  Fedora/RHEL:    sudo dnf install iscsi-initiator-utils");
+            Console.WriteLine("  Arch/Manjaro:   sudo pacman -S open-iscsi");
+            Console.WriteLine("  openSUSE:       sudo zypper install open-iscsi");
+            Console.WriteLine("Then start the daemon: sudo systemctl enable --now iscsid");
+            return;
+        }
+
+        if (!SudoEnvironment.CurrentUserHasSudo())
+        {
+            Console.WriteLine("iSCSI-Util needs administrator (sudo) privileges to run iscsiadm,");
+            Console.WriteLine("but the current user is not allowed to run sudo.");
+            Console.WriteLine("Add your user to the sudo group, for example:");
+            Console.WriteLine("  Debian/Ubuntu:  sudo usermod -aG sudo <your-user>");
+            Console.WriteLine("  Fedora/RHEL:    sudo usermod -aG wheel <your-user>");
+            Console.WriteLine("  Arch/Manjaro:   sudo usermod -aG wheel <your-user>");
+            Console.WriteLine("  openSUSE:       sudo usermod -aG wheel <your-user>");
+            Console.WriteLine("Then log out and back in (or reboot) for the change to take effect.");
+            return;
+        }
+
         RequestAndValidatePassword();
 
         if (!await StartIscsiServices())
@@ -141,9 +168,9 @@ public static class CliApp
                 .Select(parts => parts[0]),
             StringComparer.OrdinalIgnoreCase);
 
-        if (!installedUnits.Contains("iscsid.service"))
+        if (!IscsiEnvironment.IsOpenIscsiInstalled())
         {
-            Console.WriteLine("Required service iscsid.service is not installed.");
+            Console.WriteLine("open-iscsi is not installed on this system.");
             return false;
         }
 

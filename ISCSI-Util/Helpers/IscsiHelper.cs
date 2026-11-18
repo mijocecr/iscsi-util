@@ -518,7 +518,7 @@ public static class IscsiHelper
         if (check.ExitCode != 0)
         {
             LogService.Error($"[ISCSI] No se pudo comprobar el montaje {s.MountPoint}: {check.Stderr}");
-            NotificadorLinux.Enviar($"[ERROR] No se pudo comprobar el montaje {s.MountPoint}.", 6000, "critical");
+            NotificadorLinux.Enviar($"[ERROR] Could not check whether {s.MountPoint} is mounted.", 6000, "critical");
             return Task.CompletedTask;
         }
 
@@ -526,7 +526,7 @@ public static class IscsiHelper
         if (result.ExitCode != 0)
         {
             LogService.Error($"[ISCSI] No se pudo desmontar {s.MountPoint}: {result.Stderr}");
-            NotificadorLinux.Enviar($"[ERROR] No se pudo desmontar {s.MountPoint}.", 6000, "critical");
+            NotificadorLinux.Enviar($"[ERROR] Could not unmount {s.MountPoint}.", 6000, "critical");
             return Task.CompletedTask;
         }
 
@@ -549,7 +549,7 @@ public static class IscsiHelper
         if (check.ExitCode != 0)
         {
             LogService.Error($"[ISCSI] No se pudo comprobar el montaje {destino.MountPoint}: {check.Stderr}");
-            NotificadorLinux.Enviar($"[ERROR] No se pudo comprobar el montaje {destino.MountPoint}.", 6000, "critical");
+            NotificadorLinux.Enviar($"[ERROR] Could not check whether {destino.MountPoint} is mounted.", 6000, "critical");
             return Task.CompletedTask;
         }
 
@@ -557,7 +557,7 @@ public static class IscsiHelper
         if (result.ExitCode != 0)
         {
             LogService.Error($"[ISCSI] No se pudo desmontar {destino.MountPoint}: {result.Stderr}");
-            NotificadorLinux.Enviar($"[ERROR] No se pudo desmontar {destino.MountPoint}.", 6000, "critical");
+            NotificadorLinux.Enviar($"[ERROR] Could not unmount {destino.MountPoint}.", 6000, "critical");
             return Task.CompletedTask;
         }
 
@@ -590,7 +590,7 @@ public static class IscsiHelper
             catch (Exception ex)
             {
                 LogService.Error($"[ISCSI] No se pudo crear {destino.MountPoint}: {ex.Message}");
-                NotificadorLinux.Enviar("[ERROR] No se pudo crear el punto de montaje.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] Could not create the mount point.", 6000, "critical");
                 return Task.CompletedTask;
             }
         }
@@ -622,7 +622,7 @@ public static class IscsiHelper
         if (result.ExitCode != 0)
         {
             LogService.Error($"[ISCSI] No se pudo montar {source} en {destino.MountPoint}: {result.Stderr}");
-            NotificadorLinux.Enviar("[ERROR] No se pudo montar el volumen.", 6000, "critical");
+            NotificadorLinux.Enviar("[ERROR] Could not mount the volume.", 6000, "critical");
             return Task.CompletedTask;
         }
 
@@ -645,13 +645,13 @@ public static class IscsiHelper
             var mountPointCheck = ShellHelper.RunClean($"mountpoint -q \"{s.MountPoint}\"");
             if (mountPointCheck.ExitCode == 0)
             {
-                NotificadorLinux.Enviar("Desmonta el volumen antes de desconectar la sesión.", 5000, "warning");
+                NotificadorLinux.Enviar("Unmount the volume before disconnecting the session.", 5000, "warning");
                 return;
             }
             if (mountPointCheck.ExitCode != 32)
             {
                 LogService.Error($"[ISCSI] No se pudo comprobar el montaje {s.MountPoint}: {mountPointCheck.Stderr}");
-                NotificadorLinux.Enviar("[ERROR] No se pudo comprobar el montaje del destino.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] Could not check the target mount status.", 6000, "critical");
                 return;
             }
         }
@@ -663,14 +663,14 @@ public static class IscsiHelper
             if (mountedDevice.ExitCode > 1)
             {
                 LogService.Error($"[ISCSI] No se pudo comprobar si {s.Device} está montado: {mountedDevice.Stderr}");
-                NotificadorLinux.Enviar("[ERROR] No se pudo comprobar si el destino está montado.", 6000, "critical");
+                NotificadorLinux.Enviar("[ERROR] Could not check whether the target is mounted.", 6000, "critical");
                 return;
             }
 
             if (mountedDevice.ExitCode == 0 && !string.IsNullOrWhiteSpace(mountedDevice.Stdout))
             {
                 LogService.Error($"[ISCSI] No se desconecta {s.Iqn}: el dispositivo sigue montado.");
-                NotificadorLinux.Enviar("Desmonta el volumen antes de desconectar la sesión.", 5000, "warning");
+                NotificadorLinux.Enviar("Unmount the volume before disconnecting the session.", 5000, "warning");
                 return;
             }
         }
@@ -688,7 +688,7 @@ public static class IscsiHelper
         else
         {
             LogService.Error($"[ISCSI] Error al desconectar sesión {s.Iqn}: {res.Stderr}");
-            NotificadorLinux.Enviar($"[ERROR] No se pudo desconectar {s.Iqn}.", 6000, "critical");
+            NotificadorLinux.Enviar($"[ERROR] Could not disconnect {s.Iqn}.", 6000, "critical");
             return;
         }
 
@@ -883,7 +883,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
 
             if (loginResult.ExitCode != 0 &&
                 !loginResult.Stderr.Contains("already present", StringComparison.OrdinalIgnoreCase))
-                throw new Exception($"Login iSCSI falló: {loginResult.Stderr}");
+                throw new Exception($"iSCSI login failed: {loginResult.Stderr}");
 
             await Task.Delay(300);
         }
@@ -916,7 +916,7 @@ private static async Task Conectar(IscsiDestino d, bool reutilizarAutenticacionG
         }
 
         if (string.IsNullOrWhiteSpace(d.DevicePath))
-            throw new Exception("No se encontró symlink del dispositivo iSCSI.");
+            throw new Exception("Could not find the iSCSI device symlink.");
 
         // El LUN real puede haberse resuelto durante la detección (p. ej. un
         // target de un solo LUN distinto de 0). Recalcular la ruta ahora para

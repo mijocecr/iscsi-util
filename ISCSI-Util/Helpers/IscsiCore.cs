@@ -333,7 +333,7 @@ public static class IscsiCore
                 if (loginResult.ExitCode != 0 &&
                     !loginResult.Stderr.Contains("already present", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new Exception($"Login iSCSI falló: {loginResult.Stderr}");
+                    throw new Exception($"iSCSI login failed: {loginResult.Stderr}");
                 }
 
                 await Task.Delay(300);

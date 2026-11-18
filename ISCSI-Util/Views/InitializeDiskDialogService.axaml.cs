@@ -120,6 +120,7 @@ public partial class InitializeDiskDialog : Window
         {
             Content = "OK",
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Width = 80
         };
 
