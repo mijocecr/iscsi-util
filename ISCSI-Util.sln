@@ -2,15 +2,44 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ISCSI-Util", "ISCSI-Util\ISCSI-Util.csproj", "{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ISCSI-Util.Tests", "ISCSI-Util.Tests\ISCSI-Util.Tests.csproj", "{4890A426-3E73-4870-B40E-3096A45243B1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Debug|x64.Build.0 = Debug|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Debug|x86.Build.0 = Debug|Any CPU
 		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Release|x64.ActiveCfg = Release|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Release|x64.Build.0 = Release|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Release|x86.ActiveCfg = Release|Any CPU
+		{ED99F685-A2DD-42E0-9A15-AA3BFE1D0531}.Release|x86.Build.0 = Release|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Debug|x64.Build.0 = Debug|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Debug|x86.Build.0 = Debug|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Release|x64.ActiveCfg = Release|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Release|x64.Build.0 = Release|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Release|x86.ActiveCfg = Release|Any CPU
+		{4890A426-3E73-4870-B40E-3096A45243B1}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 EndGlobal

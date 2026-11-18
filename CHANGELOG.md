@@ -2,7 +2,7 @@
 
 All notable changes to iSCSI-Util are documented in this file.
 
-## [Unreleased]
+## [5.1.0] - 2026-11-18
 
 ### Added
 
@@ -22,6 +22,8 @@ All notable changes to iSCSI-Util are documented in this file.
   without depending on the host library versions.
 - The AppImage ships AppStream metainfo and update information, and the release
   build also produces a `.zsync` file for delta updates.
+- Added an xUnit test project (`ISCSI-Util.Tests`) that covers the dependency
+  and privilege detection and the Status view parsing helpers.
 
 ### Changed
 

@@ -613,7 +613,7 @@ namespace ISCSI_Util.Views
             }
         }
 
-        private static string GetSystemdProperty(string output, string name)
+        internal static string GetSystemdProperty(string output, string name)
         {
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -708,19 +708,7 @@ namespace ISCSI_Util.Views
                 var result = await ShellHelper.RunCleanResultAsync(
                     "ip -o -4 addr show scope global");
 
-                var ips = result.Stdout
-                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-                    .Where(parts => parts.Length >= 4)
-                    // En `ip -o` cada línea es: "2: eth0    inet 192.168.1.10/24 ...":
-                    // parts[1] es la interfaz y parts[3] la dirección con prefijo.
-                    .Select(parts => (Interface: parts[1], Address: parts[3].Split('/')[0]))
-                    .Where(item => !IsVirtualInterface(item.Interface))
-                    .Select(item => item.Address)
-                    .Where(ip => !string.IsNullOrWhiteSpace(ip) && !ip.StartsWith("127."))
-                    .ToList();
-
-                TxtIpAddress.Text = ips.FirstOrDefault() ?? "Unknown";
+                TxtIpAddress.Text = SelectPrimaryIpAddress(result.Stdout);
                 Trace($"LoadIpAddress() ← '{TxtIpAddress.Text}'");
             }
             catch (Exception ex)
@@ -730,11 +718,35 @@ namespace ISCSI_Util.Views
             }
         }
 
+        // Elige la dirección IPv4 principal a partir de la salida de
+        // `ip -o -4 addr show scope global`. Se ignoran las interfaces virtuales
+        // (Docker, libvirt, VPN, contenedores) para no mostrar la dirección de un
+        // bridge o de un contenedor en lugar de la de la máquina.
+        internal static string SelectPrimaryIpAddress(string? ipOutput)
+        {
+            if (string.IsNullOrWhiteSpace(ipOutput))
+                return "Unknown";
+
+            var ips = ipOutput
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                .Where(parts => parts.Length >= 4)
+                // En `ip -o` cada línea es: "2: eth0    inet 192.168.1.10/24 ...":
+                // parts[1] es la interfaz y parts[3] la dirección con prefijo.
+                .Select(parts => (Interface: parts[1], Address: parts[3].Split('/')[0]))
+                .Where(item => !IsVirtualInterface(item.Interface))
+                .Select(item => item.Address)
+                .Where(ip => !string.IsNullOrWhiteSpace(ip) && !ip.StartsWith("127."))
+                .ToList();
+
+            return ips.FirstOrDefault() ?? "Unknown";
+        }
+
         // Interfaces virtuales habituales (Docker, libvirt, VPN, contenedores)
         // que no representan la dirección real de la máquina. Antes se excluían
         // rangos de IP concretos, lo que ocultaba direcciones privadas legítimas
         // (por ejemplo un NAS en 172.16.x o 192.168.194.x).
-        private static bool IsVirtualInterface(string name) =>
+        internal static bool IsVirtualInterface(string name) =>
             name.StartsWith("docker", StringComparison.OrdinalIgnoreCase) ||
             name.StartsWith("veth", StringComparison.OrdinalIgnoreCase) ||
             name.StartsWith("br-", StringComparison.OrdinalIgnoreCase) ||

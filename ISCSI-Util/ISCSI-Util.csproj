@@ -2,7 +2,7 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
-        <Version>5.0.1</Version>
+        <Version>5.1.0</Version>
         <Nullable>enable</Nullable>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
@@ -11,6 +11,12 @@
     <ItemGroup>
         <AvaloniaResource Include="Assets\**"/>
         <AvaloniaResource Include="Styles\**"/>
+    </ItemGroup>
+
+    <!-- La lógica pura (helpers de entorno y de la vista Status) se expone a
+         los tests sin hacerla pública. -->
+    <ItemGroup>
+        <InternalsVisibleTo Include="ISCSI-Util.Tests"/>
     </ItemGroup>
 
     <ItemGroup>
