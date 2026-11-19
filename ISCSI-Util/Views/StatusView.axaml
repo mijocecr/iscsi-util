@@ -132,7 +132,6 @@
                            TextAlignment="Center"
                            HorizontalAlignment="Center"
                            TextWrapping="Wrap"
-                           TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource SteamGreen}"/>
 
             </StackPanel>
@@ -144,12 +143,14 @@
         ============================================================ -->
         <Grid Grid.Row="1"
               ColumnDefinitions="*,*,*"
+              RowDefinitions="Auto,Auto"
               ColumnSpacing="10"
+              RowSpacing="6"
               Margin="0,5,0,10"
               HorizontalAlignment="Stretch">
 
             <!-- SERVICE STATUS -->
-            <Border Grid.Column="0"
+            <Border Grid.Row="0" Grid.Column="0"
                     Classes="SteamCard"
                     Background="{DynamicResource SteamCardBackground}"
                     BorderBrush="{DynamicResource SteamBorderStrong}"
@@ -179,7 +180,7 @@
             </Border>
 
             <!-- NETWORK STATUS -->
-            <Border Grid.Column="1"
+            <Border Grid.Row="0" Grid.Column="1"
                     Classes="SteamCard"
                     Background="{DynamicResource SteamCardBackground}"
                     BorderBrush="{DynamicResource SteamBorderStrong}"
@@ -209,7 +210,7 @@
             </Border>
 
             <!-- DAEMON STATUS -->
-            <Border Grid.Column="2"
+            <Border Grid.Row="0" Grid.Column="2"
                     Classes="SteamCard"
                     Background="{DynamicResource SteamCardBackground}"
                     BorderBrush="{DynamicResource SteamBorderStrong}"
@@ -237,6 +238,15 @@
                 </StackPanel>
 
             </Border>
+
+            <!-- Aviso accionable: se muestra cuando iscsid no está activo e
+                 indica el comando exacto para habilitarlo y arrancarlo. -->
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="3"
+                       x:Name="TxtServiceHint"
+                       TextWrapping="Wrap"
+                       IsVisible="False"
+                       FontSize="11"
+                       Foreground="#FF9A95"/>
 
         </Grid>
 
@@ -271,10 +281,12 @@
                            FontWeight="Bold"
                            Foreground="{DynamicResource SteamBlue}"/>
 
-                <!-- Datos en dos columnas para aprovechar el ancho -->
+                <!-- Uptime y hostname ocupan una línea completa para que los
+                     valores largos puedan ajustarse sin apretar a la columna
+                     vecina en una ventana de solo 500 px. -->
                 <Grid Grid.Row="1"
                       ColumnDefinitions="Auto,*,Auto,*"
-                      RowDefinitions="Auto,Auto"
+                      RowDefinitions="Auto,Auto,Auto"
                       ColumnSpacing="6"
                       RowSpacing="3"
                       HorizontalAlignment="Stretch">
@@ -286,43 +298,42 @@
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
 
-                    <TextBlock Grid.Row="0" Grid.Column="1"
+                    <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3"
                                x:Name="TxtUptime"
                                Classes="mono"
                                FontSize="13"
-                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}"/>
 
-                    <TextBlock Grid.Row="0" Grid.Column="2"
+                    <TextBlock Grid.Row="1" Grid.Column="0"
                                Text="Hostname:"
                                FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
-                               Margin="8,0,0,0"
                                Foreground="{DynamicResource SteamBlue}"/>
 
-                    <TextBlock Grid.Row="0" Grid.Column="3"
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
                                x:Name="TxtHostname"
                                Classes="mono"
                                FontSize="13"
-                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="0"
+                    <TextBlock Grid.Row="2" Grid.Column="0"
                                Text="IP:"
                                FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SteamBlue}"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="1"
+                    <TextBlock Grid.Row="2" Grid.Column="1"
                                x:Name="TxtIpAddress"
                                Classes="mono"
                                FontSize="13"
-                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="2"
+                    <TextBlock Grid.Row="2" Grid.Column="2"
                                Text="Latency:"
                                FontSize="12"
                                FontWeight="Bold"
@@ -330,22 +341,22 @@
                                Margin="8,0,0,0"
                                Foreground="{DynamicResource SteamBlue}"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="3"
+                    <TextBlock Grid.Row="2" Grid.Column="3"
                                x:Name="TxtLatency"
                                Classes="mono"
                                FontSize="13"
                                Text="Reading..."
-                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}"/>
 
                 </Grid>
 
-                <!-- Última operación -->
+                <!-- Última actualización: solo la hora, sin mensajes de acción -->
                 <Grid Grid.Row="2"
                       ColumnDefinitions="Auto,*"
                       ColumnSpacing="6">
 
-                    <TextBlock Text="Last operation:"
+                    <TextBlock Text="Last Update:"
                                FontSize="12"
                                FontWeight="Bold"
                                VerticalAlignment="Center"
@@ -355,7 +366,8 @@
                                x:Name="TxtLastOp"
                                Classes="mono"
                                FontSize="13"
-                               TextTrimming="CharacterEllipsis"
+                               Text="--:--:--"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource SteamGreen}"/>
                 </Grid>
 
@@ -389,7 +401,7 @@
                                    Classes="mono"
                                    FontSize="13"
                                    Text="Reading..."
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Foreground="{DynamicResource SteamGreen}"/>
                     </Grid>
 
@@ -406,7 +418,7 @@
                                    Classes="mono"
                                    FontSize="13"
                                    Text="Reading..."
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Foreground="{DynamicResource SteamGreen}"/>
                     </Grid>
 
@@ -423,7 +435,7 @@
                                    Classes="mono"
                                    FontSize="13"
                                    Text="Reading..."
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Foreground="{DynamicResource SteamGreen}"/>
                     </Grid>
 
@@ -444,17 +456,15 @@
                         Orientation="Horizontal"
                         Spacing="8">
 
+                <!-- Botón dinámico: arranca iscsid si está parado/fallido y
+                     recarga el estado si ya está en marcha. La etiqueta se
+                     actualiza desde ApplyServiceHint(). -->
                 <Button Classes="SteamButton"
                         x:Name="BtnReload"
                         Content="Reload"
                         HorizontalContentAlignment="Center"
-                        Width="100"/>
-
-                <Button Classes="SteamButton"
-                        x:Name="BtnRefresh"
-                        Content="Refresh"
-                        HorizontalContentAlignment="Center"
-                        Width="100"/>
+                        Width="120"
+                        ToolTip.Tip="Starts iscsid if it is stopped or failed; otherwise reloads the status. Does not interrupt active sessions."/>
             </StackPanel>
 
             <Button Grid.Column="2"

@@ -32,12 +32,16 @@
                 <Button Content="⚙"
                         Grid.Column="1"
                         Grid.Row="0"
+                        Width="30" Height="30"
                         Margin="10"
+                        Padding="0"
                         FontSize="18"
                         Click="OnOpenConfig"
                         VerticalAlignment="Center"
                         HorizontalAlignment="Right"
                         HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        ToolTip.Tip="iSCSI-util configuration."
                         Classes="SteamButton"/>
             </Grid>
         </Border>

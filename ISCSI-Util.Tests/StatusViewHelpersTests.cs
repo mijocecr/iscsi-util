@@ -61,4 +61,95 @@ public class StatusViewHelpersTests
     [InlineData("", "ActiveState", "")]
     public void GetSystemdProperty_reads_named_property(string output, string name, string expected)
         => Assert.Equal(expected, StatusView.GetSystemdProperty(output, name));
+
+    [Theory]
+    [InlineData("123456.78 999.99", 123456.78)]
+    [InlineData("0.00 1.00", 0.0)]
+    [InlineData("  42.5  10.0 ", 42.5)]
+    public void ParseUpSeconds_reads_first_proc_field(string procUptime, double expected)
+        => Assert.Equal(expected, StatusView.ParseUpSeconds(procUptime));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("abc def")]
+    [InlineData("-5.0 0.0")]
+    [InlineData(null)]
+    public void ParseUpSeconds_returns_null_on_invalid_input(string? procUptime)
+        => Assert.Null(StatusView.ParseUpSeconds(procUptime));
+
+    [Theory]
+    [InlineData(0.0, "0 seconds")]
+    [InlineData(1.0, "1 second")]
+    [InlineData(60.0, "1 minute")]
+    [InlineData(3600.0, "1 hour")]
+    [InlineData(90061.0, "1 day, 1 hour, 1 minute")]
+    public void FormatUptime_builds_locale_independent_text(double seconds, string expected)
+        => Assert.Equal(expected, StatusView.FormatUptime(seconds));
+
+    [Theory]
+    [InlineData(null, "Unknown")]
+    [InlineData(-1.0, "Unknown")]
+    public void FormatUptime_returns_unknown_on_invalid_input(double? seconds, string expected)
+        => Assert.Equal(expected, StatusView.FormatUptime(seconds));
+
+    [Theory]
+    [InlineData("default via 192.168.1.1 dev eth0 proto static metric 100", "192.168.1.1")]
+    [InlineData("default via fe80::1 dev eth0 proto ra metric 1024", "fe80::1")]
+    [InlineData("192.168.1.0/24 dev eth0 proto kernel scope link", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void SelectDefaultGateway_parses_ip_route_output(string? output, string? expected)
+        => Assert.Equal(expected, StatusView.SelectDefaultGateway(output));
+
+    [Theory]
+    [InlineData("64 bytes from 8.8.8.8: icmp_seq=1 ttl=117 time=12.3 ms", "12.3")]
+    [InlineData("64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=0.045 ms", "0.045")]
+    [InlineData("Request timeout for icmp_seq 0", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void ParseLatencyMs_reads_ping_output(string? output, string? expected)
+        => Assert.Equal(expected, StatusView.ParseLatencyMs(output));
+
+    [Theory]
+    [InlineData("Running")]
+    [InlineData("Starting")]
+    [InlineData("running")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ServiceHintFor_returns_null_when_daemon_is_running(string? iscsidText)
+        => Assert.Null(StatusView.ServiceHintFor(iscsidText));
+
+    [Theory]
+    [InlineData("Stopped")]
+    [InlineData("Failed")]
+    public void ServiceHintFor_shows_command_when_daemon_is_down(string iscsidText)
+    {
+        var hint = StatusView.ServiceHintFor(iscsidText);
+
+        Assert.NotNull(hint);
+        Assert.Contains("systemctl enable --now iscsid", hint);
+        Assert.Contains("Start Service", hint);
+    }
+
+    [Fact]
+    public void ServiceHintFor_shows_guidance_when_state_is_unknown()
+    {
+        var hint = StatusView.ServiceHintFor("Unknown");
+
+        Assert.NotNull(hint);
+        Assert.Contains("systemd may not be available", hint);
+    }
+
+    [Theory]
+    [InlineData("Stopped", true)]
+    [InlineData("Failed", true)]
+    [InlineData(" stopped ", true)]
+    [InlineData("Running", false)]
+    [InlineData("Starting", false)]
+    [InlineData("Unknown", false)]
+    [InlineData(null, false)]
+    public void NeedsStart_selects_the_dynamic_button_action(string? iscsidText, bool expected)
+        => Assert.Equal(expected, StatusView.NeedsStart(iscsidText));
 }

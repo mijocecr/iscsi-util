@@ -2,6 +2,42 @@
 
 All notable changes to iSCSI-Util are documented in this file.
 
+## [5.2.0] - 2026-11-19
+
+### Added
+
+- When `iscsid` is stopped or failed, the Status tab now shows an actionable
+  hint with the exact command (`sudo systemctl enable --now iscsid`) and the
+  action button becomes **Start Service**. Starting the daemon does not
+  interrupt active sessions, so no confirmation is requested. The button
+  switches back to **Reload** as soon as the daemon is running, so one control
+  covers both actions.
+- The hostname is read from `/proc/sys/kernel/hostname` and the uptime from
+  `/proc/uptime`, with `hostname`/`hostnamectl` and `uptime -p` as fallbacks.
+  This removes the dependency on net-tools and util-linux in minimal systems
+  and keeps the values independent of the locale.
+- Network and IP detection fall back to .NET APIs when `iproute2` is missing,
+  and latency no longer requires `awk`: the default gateway is parsed in C#
+  and both `ping -w` (iputils) and `ping -W` (BusyBox) are tried.
+- Added tests for uptime parsing and formatting, gateway selection, latency
+  parsing, the service hint and the dynamic Reload/Start decision.
+
+### Changed
+
+- *System Information* now gives uptime and hostname a full row each, so long
+  values wrap instead of squeezing the neighbouring column in the fixed
+  500px window. Every status value uses `TextWrapping="Wrap"`.
+- The settings button is now 30x30 with an 18pt centered glyph, matching
+  SAMBA-Util.
+- Removed the redundant **Refresh** button from the Status tab: **Reload**
+  already performs the same full status refresh while the daemon is running.
+- The *Last operation* row is now **Last Update** and always shows the time of
+  the last successful status read. Action results remain in the status banner.
+
+### Fixed
+
+- Long hostnames and uptime values are no longer truncated with an ellipsis.
+
 ## [5.1.0] - 2026-11-18
 
 ### Added

@@ -10,7 +10,10 @@ using ISCSI_Util.Helpers;
 using ISCSI_Util.Services;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Threading.Tasks;
 
 namespace ISCSI_Util.Views
@@ -125,6 +128,146 @@ namespace ISCSI_Util.Views
                 ? $"{value / 1000d:F1}k"
                 : $"{value:F0}";
 
+        // Lee un valor de /proc sin depender de herramientas externas ni del
+        // idioma del sistema. Es la fuente más portable en Linux moderno.
+        private static string? ReadProcValue(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                    return null;
+
+                var value = File.ReadAllText(path).Trim();
+                return string.IsNullOrEmpty(value) ? null : value;
+            }
+            catch (Exception ex)
+            {
+                TraceError($"ReadProcValue('{path}'): {ex.Message}");
+                return null;
+            }
+        }
+
+        // Primer campo de /proc/uptime: segundos desde el arranque.
+        internal static double? ParseUpSeconds(string? procUptime)
+        {
+            if (string.IsNullOrWhiteSpace(procUptime))
+                return null;
+
+            var first = procUptime
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
+
+            return double.TryParse(first, NumberStyles.Float,
+                       CultureInfo.InvariantCulture, out var seconds) && seconds >= 0
+                ? seconds
+                : null;
+        }
+
+        internal static string FormatUptime(double? seconds)
+        {
+            if (seconds is null || !double.IsFinite(seconds.Value) || seconds.Value < 0)
+                return "Unknown";
+
+            var ts = TimeSpan.FromSeconds(seconds.Value);
+            var parts = new List<string>();
+
+            if (ts.Days > 0)
+                parts.Add($"{ts.Days} {(ts.Days == 1 ? "day" : "days")}");
+            if (ts.Hours > 0)
+                parts.Add($"{ts.Hours} {(ts.Hours == 1 ? "hour" : "hours")}");
+            if (ts.Minutes > 0)
+                parts.Add($"{ts.Minutes} {(ts.Minutes == 1 ? "minute" : "minutes")}");
+            if (parts.Count == 0)
+                parts.Add($"{ts.Seconds} {(ts.Seconds == 1 ? "second" : "seconds")}");
+
+            return string.Join(", ", parts);
+        }
+
+        // Extrae la IP del gateway de `ip route show default` sin depender de
+        // `awk`, que no está garantizado en instalaciones mínimas.
+        internal static string? SelectDefaultGateway(string? ipRouteOutput)
+        {
+            if (string.IsNullOrWhiteSpace(ipRouteOutput))
+                return null;
+
+            foreach (var line in ipRouteOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                int via = Array.IndexOf(parts, "via");
+
+                if (via >= 0 && via + 1 < parts.Length)
+                    return parts[via + 1];
+            }
+
+            return null;
+        }
+
+        // Con LC_ALL=C fijado por ShellHelper, la salida de ping siempre trae
+        // "time=12.3 ms" (nunca "tiempo=").
+        internal static string? ParseLatencyMs(string? pingOutput)
+        {
+            if (string.IsNullOrWhiteSpace(pingOutput))
+                return null;
+
+            int idx = pingOutput.IndexOf("time=", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+                return null;
+
+            var value = pingOutput[(idx + 5)..]
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+
+        // Texto de ayuda que se muestra bajo el estado de servicios cuando
+        // iscsid no está activo, con el comando exacto para habilitarlo y
+        // arrancarlo. Es puro para poder probarlo: devuelve null si no aplica.
+        internal static string? ServiceHintFor(string? iscsidText)
+        {
+            if (string.IsNullOrWhiteSpace(iscsidText))
+                return null;
+
+            var text = iscsidText.Trim();
+
+            // En ejecución (o arrancando) no hay nada que sugerir.
+            if (text.Equals("Running", StringComparison.OrdinalIgnoreCase) ||
+                text.Equals("Starting", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (text.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                return "Cannot check the iscsid service: systemd may not be available. " +
+                       "Start it with your init system.";
+
+            return "The iscsid service is not running. Use \"Start Service\" below, " +
+                   "or run: sudo systemctl enable --now iscsid";
+        }
+
+        // La fila "Last Update" muestra siempre la hora de la última lectura
+        // correcta del estado. Los resultados de las acciones van en el banner
+        // de estado, no aquí.
+        private void SetLastUpdate()
+            => TxtLastOp.Text = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+        // El botón de recarga se convierte en "Start Service" cuando el daemon
+        // está parado o fallido. En el resto de estados solo recarga el estado.
+        internal static bool NeedsStart(string? iscsidText)
+        {
+            var text = iscsidText?.Trim();
+            return text?.Equals("Stopped", StringComparison.OrdinalIgnoreCase) == true ||
+                   text?.Equals("Failed", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        private void ApplyServiceHint()
+        {
+            var hint = ServiceHintFor(TxtIscsid.Text);
+            TxtServiceHint.Text = hint ?? "";
+            TxtServiceHint.IsVisible = hint is not null;
+
+            // Solo cambia la etiqueta; el tooltip es fijo y describe las dos
+            // acciones del botón para que nunca quede desincronizado de ella.
+            BtnReload.Content = NeedsStart(TxtIscsid.Text) ? "Start Service" : "Reload";
+        }
+
         public async Task RefreshStatus()
         {
             if (_isRefreshing)
@@ -145,7 +288,6 @@ namespace ISCSI_Util.Views
             catch (Exception ex)
             {
                 TraceError($"RefreshStatus(): {ex.Message}");
-                TxtLastOp.Text = $"Last update failed: {ex.Message}";
                 SetSummary("Error", ex.Message, CriticalColor, CriticalBackground);
             }
             finally
@@ -158,14 +300,21 @@ namespace ISCSI_Util.Views
         private void SetButtonsEnabled(bool enabled)
         {
             BtnReload.IsEnabled = enabled;
-            BtnRefresh.IsEnabled = enabled;
             BtnRestart.IsEnabled = enabled;
         }
 
         private void HookButtons()
         {
-            BtnReload.Click += async (_, _) => await RefreshStatus();
-            BtnRefresh.Click += async (_, _) => await RefreshStatus();
+            // Un único botón: si el daemon está parado o fallido lo arranca;
+            // en cualquier otro estado solo recarga. La etiqueta la actualiza
+            // ApplyServiceHint() según TxtIscsid.Text.
+            BtnReload.Click += async (_, _) =>
+            {
+                if (NeedsStart(TxtIscsid.Text))
+                    await StartIscsidAsync();
+                else
+                    await RefreshStatus();
+            };
 
             BtnRestart.Click += async (_, _) =>
             {
@@ -192,24 +341,19 @@ namespace ISCSI_Util.Views
                         throw new Exception(detail);
                     }
 
-                    TxtLastOp.Text = "Service restarted.";
                     SetSummary("Updating", "Restarting the iSCSI service...",
                         WarningColor, WarningBackground);
 
                     // Esperar a que iscsid vuelva a estar activo en vez de
                     // asumir que 4 segundos siempre son suficientes.
                     if (!await WaitForDaemonReadyAsync(TimeSpan.FromSeconds(10)))
-                    {
                         TraceError("BtnRestart: iscsid no volvió a estar activo tras el reinicio.");
-                        TxtLastOp.Text = "Service restarted, but it did not become active.";
-                    }
 
                     await RefreshStatus();
                 }
                 catch (Exception ex)
                 {
                     TraceError($"BtnRestart: {ex.Message}");
-                    TxtLastOp.Text = $"Restart failed: {ex.Message}";
                     SetSummary("Error", $"Restart failed: {ex.Message}",
                         CriticalColor, CriticalBackground);
                 }
@@ -218,6 +362,47 @@ namespace ISCSI_Util.Views
                     SetButtonsEnabled(true);
                 }
             };
+        }
+
+        // Arranca y habilita iscsid en un solo paso. A diferencia de Restart,
+        // no corta sesiones activas, así que no pide confirmación.
+        private async Task StartIscsidAsync()
+        {
+            Trace("StartIscsidAsync: systemctl enable --now iscsid");
+            SetButtonsEnabled(false);
+
+            try
+            {
+                var start = await SystemOperationLock.RunAsync(
+                    () => ShellHelper.EjecutarComoRootAsync("systemctl enable --now iscsid"));
+
+                if (start.ExitCode != 0)
+                {
+                    var detail = string.IsNullOrWhiteSpace(start.Stderr)
+                        ? $"exit code {start.ExitCode}"
+                        : start.Stderr.Trim();
+
+                    throw new Exception(detail);
+                }
+
+                SetSummary("Updating", "Starting the iSCSI service...",
+                    WarningColor, WarningBackground);
+
+                if (!await WaitForDaemonReadyAsync(TimeSpan.FromSeconds(10)))
+                    TraceError("StartIscsidAsync: iscsid no se activó tras el arranque.");
+
+                await RefreshStatus();
+            }
+            catch (Exception ex)
+            {
+                TraceError($"StartIscsidAsync: {ex.Message}");
+                SetSummary("Error", $"Start failed: {ex.Message}",
+                    CriticalColor, CriticalBackground);
+            }
+            finally
+            {
+                SetButtonsEnabled(true);
+            }
         }
 
         /// <summary>
@@ -332,7 +517,7 @@ namespace ISCSI_Util.Views
                 tService, tNetwork, tDaemon, tUptime, tHostname, tIp,
                 tLatency, tSessions, tThroughput);
 
-            TxtLastOp.Text = $"Last update: {DateTime.Now:HH:mm:ss}";
+            SetLastUpdate();
             _hasLoadedStatus = true;
             UpdateSummary();
 
@@ -588,12 +773,18 @@ namespace ISCSI_Util.Views
                 var v4 = await ShellHelper.RunCleanResultAsync("ip -o -4 route show default");
                 var v6 = await ShellHelper.RunCleanResultAsync("ip -o -6 route show default");
 
-                // Si el comando `ip` no existe o falla, no sabemos el estado. No
-                // se debe confundir "no puedo comprobarlo" con "desconectado".
+                // Si `ip` no existe o falla, se comprueba con las API de .NET
+                // antes de declarar el estado como desconocido.
                 if (v4.ExitCode != 0 && v6.ExitCode != 0)
                 {
-                    SetIndicator(IconNetwork, TxtNetwork, "Unknown", Brushes.Goldenrod);
-                    Trace($"LoadNetworkStatus() ← ip no disponible (v4={v4.ExitCode}, v6={v6.ExitCode})");
+                    bool dotnetConnected = HasDefaultRouteViaDotNet();
+
+                    SetIndicator(IconNetwork, TxtNetwork,
+                        dotnetConnected ? "Connected" : "Unknown",
+                        dotnetConnected ? Brushes.LimeGreen : Brushes.Goldenrod);
+
+                    Trace($"LoadNetworkStatus() ← ip no disponible " +
+                          $"(v4={v4.ExitCode}, v6={v6.ExitCode}), .NET={dotnetConnected}");
                     return;
                 }
 
@@ -664,18 +855,31 @@ namespace ISCSI_Util.Views
         {
             try
             {
-                Trace("LoadUptime() → uptime -p");
-                string raw = await ShellHelper.RunCleanAsync("uptime -p");
-
-                if (string.IsNullOrWhiteSpace(raw))
+                // /proc/uptime no depende de `uptime` (util-linux) ni del idioma,
+                // y está disponible en cualquier Linux moderno.
+                var seconds = ParseUpSeconds(ReadProcValue("/proc/uptime"));
+                if (seconds is not null)
                 {
-                    TxtUptime.Text = "Unknown";
-                    Trace("LoadUptime() ← vacío");
+                    TxtUptime.Text = FormatUptime(seconds);
+                    Trace($"LoadUptime() ← '{TxtUptime.Text}' (from /proc/uptime)");
                     return;
                 }
 
-                TxtUptime.Text = raw.Replace("up ", "").Trim();
-                Trace($"LoadUptime() ← '{TxtUptime.Text}'");
+                // Fallback para sistemas donde /proc no sea legible.
+                string raw = await ShellHelper.RunCleanAsync("uptime -p");
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    TxtUptime.Text = "Unknown";
+                    Trace("LoadUptime() ← Unknown");
+                    return;
+                }
+
+                const string prefix = "up ";
+                if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    raw = raw[prefix.Length..];
+
+                TxtUptime.Text = raw.Trim();
+                Trace($"LoadUptime() ← '{TxtUptime.Text}' (from uptime -p)");
             }
             catch (Exception ex)
             {
@@ -688,9 +892,23 @@ namespace ISCSI_Util.Views
         {
             try
             {
-                Trace("LoadHostname() → hostname");
-                string raw = await ShellHelper.RunCleanAsync("hostname");
-                TxtHostname.Text = raw.Trim();
+                // /proc/sys/kernel/hostname refleja el nombre real en caliente y
+                // no requiere net-tools (`hostname`), que falta en muchas
+                // distribuciones mínimas modernas.
+                var name = ReadProcValue("/proc/sys/kernel/hostname");
+
+                if (string.IsNullOrEmpty(name))
+                {
+                    name = await ShellHelper.RunCleanAsync("hostname");
+
+                    if (string.IsNullOrWhiteSpace(name))
+                        name = await ShellHelper.RunCleanAsync("hostnamectl hostname");
+                }
+
+                TxtHostname.Text = string.IsNullOrWhiteSpace(name)
+                    ? "Unknown"
+                    : name.Trim();
+
                 Trace($"LoadHostname() ← '{TxtHostname.Text}'");
             }
             catch (Exception ex)
@@ -708,7 +926,15 @@ namespace ISCSI_Util.Views
                 var result = await ShellHelper.RunCleanResultAsync(
                     "ip -o -4 addr show scope global");
 
-                TxtIpAddress.Text = SelectPrimaryIpAddress(result.Stdout);
+                var address = SelectPrimaryIpAddress(result.Stdout);
+                if (address == "Unknown")
+                {
+                    // `iproute2` puede no estar instalado en distribuciones
+                    // mínimas; en ese caso se consulta el propio sistema.
+                    address = SelectPrimaryIpAddressFromDotNet();
+                }
+
+                TxtIpAddress.Text = address;
                 Trace($"LoadIpAddress() ← '{TxtIpAddress.Text}'");
             }
             catch (Exception ex)
@@ -757,56 +983,93 @@ namespace ISCSI_Util.Views
             name.StartsWith("wg", StringComparison.OrdinalIgnoreCase) ||
             name.StartsWith("lo", StringComparison.OrdinalIgnoreCase);
 
+        // Comprobación de ruta por defecto sin depender de `iproute2`.
+        private static bool HasDefaultRouteViaDotNet()
+        {
+            try
+            {
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus != OperationalStatus.Up)
+                        continue;
+
+                    if (ni.GetIPProperties().GatewayAddresses.Count > 0)
+                        return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                TraceError($"HasDefaultRouteViaDotNet(): {ex.Message}");
+            }
+
+            return false;
+        }
+
+        // Último recurso para la IP principal cuando `ip` no está disponible.
+        private static string SelectPrimaryIpAddressFromDotNet()
+        {
+            try
+            {
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus != OperationalStatus.Up ||
+                        ni.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                        IsVirtualInterface(ni.Name))
+                        continue;
+
+                    var address = ni.GetIPProperties().UnicastAddresses
+                        .FirstOrDefault(a =>
+                            a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                            !a.Address.ToString().StartsWith("127."));
+
+                    if (address is not null)
+                        return address.Address.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                TraceError($"SelectPrimaryIpAddressFromDotNet(): {ex.Message}");
+            }
+
+            return "Unknown";
+        }
+
         private async Task LoadLatency()
         {
             try
             {
+                // Se parsea en C# en lugar de usar `awk`, que no está garantizado
+                // en instalaciones mínimas.
                 Trace("LoadLatency() → obtener gateway");
-                string gateway = await ShellHelper.RunCleanAsync(
-                    "ip route | awk '/default/ {print $3; exit}'"
-                );
-                gateway = gateway.Trim();
+                var route = await ShellHelper.RunCleanResultAsync("ip -4 route show default");
+
+                string gateway = SelectDefaultGateway(route.Stdout) ?? "";
+                // El gateway se inyecta en la línea de comandos: solo se admite
+                // si es una dirección IP válida.
+                if (!System.Net.IPAddress.TryParse(gateway, out _))
+                    gateway = "";
+
                 Trace($"LoadLatency() gateway='{gateway}'");
 
-                string pingCmd;
+                string target = string.IsNullOrEmpty(gateway) ? "8.8.8.8" : gateway;
 
-                if (!string.IsNullOrWhiteSpace(gateway))
-                    pingCmd = $"ping -c 1 -w 1 {gateway} || ping -c 1 -w 1 8.8.8.8";
-                else
-                    pingCmd = "ping -c 1 -w 1 8.8.8.8";
+                // `-w` es de iputils; busybox usa `-W`. Se prueban ambas y se
+                // silencia stderr para que un intento fallido no invalide la
+                // respuesta válida del siguiente (RunCleanAsync descarta stderr).
+                string pingCmd =
+                    $"ping -c 1 -w 2 {target} 2>/dev/null || " +
+                    $"ping -c 1 -W 2 {target} 2>/dev/null || " +
+                    "ping -c 1 -w 2 8.8.8.8 2>/dev/null || " +
+                    "ping -c 1 -W 2 8.8.8.8 2>/dev/null";
 
                 Trace($"LoadLatency() → {pingCmd}");
                 string raw = await ShellHelper.RunCleanAsync(pingCmd);
 
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    // Un ping sin respuesta no implica un problema: muchas redes
-                    // bloquean ICMP. Se muestra como dato informativo y no como
-                    // un estado degradado.
-                    TxtLatency.Text = "Unavailable";
-                    Trace("LoadLatency() ← vacío → Unavailable");
-                    return;
-                }
-
-                int idx = raw.IndexOf("time=", StringComparison.OrdinalIgnoreCase);
-                if (idx == -1)
-                    idx = raw.IndexOf("tiempo=", StringComparison.OrdinalIgnoreCase);
-
-                if (idx != -1)
-                {
-                    bool spanish = raw.IndexOf("tiempo=", StringComparison.OrdinalIgnoreCase) == idx;
-                    int offset = spanish ? 7 : 5;
-
-                    string sub = raw[(idx + offset)..];
-                    string ms = sub.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-                    TxtLatency.Text = $"{ms} ms";
-                    Trace($"LoadLatency() ← '{TxtLatency.Text}'");
-                }
-                else
-                {
-                    TxtLatency.Text = "Unavailable";
-                    Trace("LoadLatency() ← sin 'time=' → Unavailable");
-                }
+                // Un ping sin respuesta no implica un problema: muchas redes
+                // bloquean ICMP. Es un dato informativo, no un estado degradado.
+                string? ms = ParseLatencyMs(raw);
+                TxtLatency.Text = ms is null ? "Unavailable" : $"{ms} ms";
+                Trace($"LoadLatency() ← '{TxtLatency.Text}'");
             }
             catch (Exception ex)
             {
@@ -817,6 +1080,8 @@ namespace ISCSI_Util.Views
 
         private void UpdateSummary()
         {
+            ApplyServiceHint();
+
             var reasons = new List<string>();
             bool critical = false;
             bool degraded = false;
