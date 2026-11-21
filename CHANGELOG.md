@@ -2,6 +2,18 @@
 
 All notable changes to iSCSI-Util are documented in this file.
 
+## [5.2.1] - 2026-11-21
+
+### Fixed
+
+- The **Remove ghost targets** dialog no longer produces a horizontal
+  scrollbar for long IQNs. Each record is now a compact card with the short
+  name in large text (the same abbreviation used by the session and target
+  cards), the full IQN in smaller wrapped text, and the portal and flags below
+  it. Horizontal scrolling is disabled and only the list scrolls vertically.
+- The list of unreachable portals in the confirmation checkbox and the
+  cleanup summary dialog now wrap as well, so no long IQN is cut off.
+
 ## [5.2.0] - 2026-11-19
 
 ### Added

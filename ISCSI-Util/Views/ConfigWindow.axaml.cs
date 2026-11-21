@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -202,14 +203,16 @@ public partial class ConfigWindow : Window
         };
         panel.Children.Add(summary);
 
-        var list = new TextBox
+        // Lista de tarjetas: nombre corto en grande e IQN completo en texto
+        // pequeño con wrap. El scroll horizontal queda desactivado para que
+        // ningún IQN largo obligue a desplazarse lateralmente.
+        var listContent = new StackPanel { Spacing = 8 };
+        var list = new ScrollViewer
         {
-            IsReadOnly = true,
-            AcceptsReturn = true,
             Height = 230,
-            FontFamily = new FontFamily("monospace"),
-            FontSize = 11,
-            TextWrapping = TextWrapping.NoWrap
+            Content = listContent,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
         panel.Children.Add(list);
 
@@ -219,8 +222,12 @@ public partial class ConfigWindow : Window
         {
             includeUnreachable = new CheckBox
             {
-                Content = $"Also remove {scan.Unreachable.Count} record(s) from unreachable " +
-                          $"portal(s): {string.Join(", ", scan.UnreachablePortals)}",
+                Content = new TextBlock
+                {
+                    Text = $"Also remove {scan.Unreachable.Count} record(s) from unreachable " +
+                           $"portal(s): {string.Join(", ", scan.UnreachablePortals)}",
+                    TextWrapping = TextWrapping.Wrap
+                },
                 IsChecked = false
             };
             panel.Children.Add(includeUnreachable);
@@ -259,24 +266,24 @@ public partial class ConfigWindow : Window
 
         void RefreshList()
         {
-            var text = new StringBuilder();
+            listContent.Children.Clear();
 
             if (scan.Confirmed.Count > 0)
             {
-                text.AppendLine("Confirmed ghosts (the portal no longer exports them):");
+                listContent.Children.Add(
+                    SectionHeader("Confirmed ghosts (the portal no longer exports them):"));
                 foreach (var ghost in scan.Confirmed)
-                    text.AppendLine("  " + Describe(ghost));
-                text.AppendLine();
+                    listContent.Children.Add(CreateGhostCard(ghost));
             }
 
             if (includeUnreachable?.IsChecked == true && scan.Unreachable.Count > 0)
             {
-                text.AppendLine("Unreachable portals (the portal did not respond):");
+                listContent.Children.Add(
+                    SectionHeader("Unreachable portals (the portal did not respond):"));
                 foreach (var ghost in scan.Unreachable)
-                    text.AppendLine("  " + Describe(ghost));
+                    listContent.Children.Add(CreateGhostCard(ghost));
             }
 
-            list.Text = text.ToString().TrimEnd();
             remove.IsEnabled = Selected().Count > 0;
         }
 
@@ -296,20 +303,94 @@ public partial class ConfigWindow : Window
         return await dialog.ShowDialog<List<IscsiGhostCleaner.GhostTarget>?>(this);
     }
 
-    private static string Describe(IscsiGhostCleaner.GhostTarget ghost)
+    private static TextBlock SectionHeader(string text) => new()
     {
-        var flags = new List<string>();
+        Text = text,
+        FontWeight = FontWeight.Bold,
+        TextWrapping = TextWrapping.Wrap,
+        Foreground = ThemeBrush("SteamText", "#C7D5E0")
+    };
 
+    // Tarjeta compacta: el mismo nombre abreviado que usan las tarjetas de
+    // sesiones/targets, el IQN completo en texto más pequeño y los detalles en
+    // una línea que también hace wrap. Así no aparece scroll horizontal.
+    private static Border CreateGhostCard(IscsiGhostCleaner.GhostTarget ghost)
+    {
+        var textBrush = ThemeBrush("SteamText", "#C7D5E0");
+
+        var card = new Border
+        {
+            Background = new SolidColorBrush(Color.Parse("#151E28")),
+            BorderBrush = ThemeBrush("SteamBorder", "#0F141A"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(10, 8),
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+
+        var stack = new StackPanel { Spacing = 3 };
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = ShortIqn(ghost.Iqn),
+            FontSize = 13,
+            FontWeight = FontWeight.Bold,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = textBrush
+        });
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = ghost.Iqn,
+            FontSize = 10,
+            FontFamily = new FontFamily("monospace"),
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.75,
+            Foreground = textBrush
+        });
+
+        var details = new List<string> { ghost.Portal };
         if (ghost.Connected)
-            flags.Add("connected");
+            details.Add("connected");
         if (ghost.Mounted)
-            flags.Add("mounted, will be skipped");
+            details.Add("mounted, will be skipped");
         if (ghost.PortalUnreachable)
-            flags.Add("portal unreachable");
+            details.Add("portal unreachable");
 
-        return flags.Count == 0
-            ? $"{ghost.Portal}  {ghost.Iqn}"
-            : $"{ghost.Portal}  {ghost.Iqn}  [{string.Join(", ", flags)}]";
+        stack.Children.Add(new TextBlock
+        {
+            Text = string.Join("  ·  ", details),
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.7,
+            Foreground = textBrush
+        });
+
+        card.Child = stack;
+        return card;
+    }
+
+    // Coincide con SessionsView.ShortIqn y TargetsView.GetTargetDisplayName:
+    // el nombre después del último ':'.
+    internal static string ShortIqn(string? iqn)
+    {
+        if (string.IsNullOrEmpty(iqn))
+            return "";
+
+        var colonIndex = iqn.LastIndexOf(':');
+        return colonIndex >= 0 && colonIndex < iqn.Length - 1
+            ? iqn[(colonIndex + 1)..]
+            : iqn;
+    }
+
+    private static IBrush ThemeBrush(string key, string fallbackHex)
+    {
+        if (Application.Current?.TryGetResource(
+                key, Application.Current.ActualThemeVariant, out var res) == true &&
+            res is IBrush brush)
+            return brush;
+
+        return new SolidColorBrush(Color.Parse(fallbackHex));
     }
 
     private static string BuildSummary(IscsiGhostCleaner.CleanResult result)
@@ -371,7 +452,7 @@ public partial class ConfigWindow : Window
             AcceptsReturn = true,
             FontFamily = new FontFamily("monospace"),
             FontSize = 11,
-            TextWrapping = TextWrapping.NoWrap
+            TextWrapping = TextWrapping.Wrap
         };
         panel.Children.Add(body);
 
