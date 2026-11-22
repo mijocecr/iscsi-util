@@ -27,7 +27,7 @@ public partial class LoadingDialog : Window
         // Fondo de la tarjeta central según el tema
         if (CardBorder != null)
         {
-            CardBorder.Background = new SolidColorBrush(Color.Parse(isLight ? "#FFFFFF" : "#1E1E1E"));
+            CardBorder.Background = new SolidColorBrush(Color.Parse(isLight ? "#F4F6FA" : "#1E242C"));
         }
 
         // Color del texto principal para que contraste bien en modo claro u oscuro

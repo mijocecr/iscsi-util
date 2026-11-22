@@ -16,14 +16,14 @@
 
         <!-- Caja central con nombre para controlarlo desde C# -->
         <Border x:Name="CardBorder"
-                Background="#1E1E1E"
-                BorderBrush="#3A7BFF"
+                Background="#1E242C"
+                BorderBrush="#1C69D4"
                 BorderThickness="2"
                 CornerRadius="12"
                 Padding="22"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Effect="drop-shadow(0 0 10 #000000AA)">
+                Effect="drop-shadow(0 0 18 #000000AA)">
 
             <StackPanel Spacing="16" HorizontalAlignment="Center">
 
