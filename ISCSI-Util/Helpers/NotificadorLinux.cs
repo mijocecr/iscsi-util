@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using ISCSI_Util.Services;
 
 namespace ISCSI_Util.Helpers;
 
@@ -58,7 +59,7 @@ public static class NotificadorLinux
             {
                 if (!NotifySendDisponible.Value)
                 {
-                    Console.WriteLine($"[NOTIFICACIÓN] {mensaje}");
+                    LogService.Write($"[NOTIFICACIÓN] {mensaje}");
                     return;
                 }
 
@@ -67,7 +68,7 @@ public static class NotificadorLinux
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[NOTIFICACIÓN] {mensaje} ({ex.Message})");
+            LogService.Error($"[NOTIFICACIÓN] {mensaje} ({ex.Message})");
         }
     }
 
@@ -111,7 +112,7 @@ public static class NotificadorLinux
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[NOTIFICACIÓN] {mensaje} ({ex.Message})");
+            LogService.Error($"[NOTIFICACIÓN] {mensaje} ({ex.Message})");
         }
     }
 

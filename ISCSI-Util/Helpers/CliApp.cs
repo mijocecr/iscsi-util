@@ -55,7 +55,7 @@ public static class CliApp
 
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             Console.WriteLine("===== iSCSI-Util =====");
             Console.WriteLine("1) Targets");
             Console.WriteLine("2) Sessions");
@@ -201,7 +201,7 @@ public static class CliApp
 
     private static async Task DiscoverTargets()
     {
-        Console.Clear();
+        ClearScreen();
         Console.WriteLine("=== Discover targets ===");
         Console.Write("Portal IPv4 address: ");
         var portal = Console.ReadLine()?.Trim() ?? "";
@@ -225,7 +225,7 @@ public static class CliApp
 
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             Console.WriteLine("=== Discovered targets ===");
             for (int i = 0; i < targets.Count; i++)
                 Console.WriteLine($"{i + 1}) {GetDisplayName(targets[i])}  [{ConnectionState(targets[i])}]");
@@ -245,7 +245,7 @@ public static class CliApp
     {
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             PrintTargetDetails(target);
 
             Console.WriteLine("\nActions:");
@@ -585,7 +585,7 @@ public static class CliApp
 
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             Console.WriteLine("=== Active sessions ===");
             for (int i = 0; i < sessions.Count; i++)
             {
@@ -640,7 +640,7 @@ public static class CliApp
     {
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             Console.WriteLine($"=== {session.Iqn} ===");
             Console.WriteLine($"Portal:       {session.Portal}");
             Console.WriteLine($"Status:       {(session.Connected ? "Connected" : "Disconnected")}");
@@ -720,7 +720,7 @@ public static class CliApp
     {
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             Console.WriteLine("=== System status ===");
 
             foreach (var unit in new[] { "iscsid.service", "iscsi.service", "open-iscsi.service" })
@@ -752,7 +752,7 @@ public static class CliApp
     private static void ShowLogs()
     {
         string appLog = Path.Combine(ConfigManager.LogPath, "iscsi-util.log");
-        Console.Clear();
+        ClearScreen();
         Console.WriteLine("=== Logs ===");
         Console.WriteLine("1) Show latest log entries");
         Console.WriteLine("2) Open application log file");
@@ -789,7 +789,7 @@ public static class CliApp
     {
         while (true)
         {
-            Console.Clear();
+            ClearScreen();
             Console.WriteLine("=== Settings ===");
             Console.WriteLine($"Current mount directory: {ConfigManager.MountBasePath}");
             Console.WriteLine($"Current permissions:     {ConfigManager.DefaultPermissions}");
@@ -890,6 +890,23 @@ public static class CliApp
     {
         Console.WriteLine($"1) Yes    0) No");
         return ReadChoice($"{prompt} ", 0, 1) == 1;
+    }
+
+    private static void ClearScreen()
+    {
+        // Con la salida redirigida (logs, pipes, tests) Console.Clear() escribiría
+        // secuencias de terminal en medio de la salida de la CLI.
+        if (Console.IsOutputRedirected)
+            return;
+
+        try
+        {
+            Console.Clear();
+        }
+        catch
+        {
+            // Algunas terminales no soportan limpiar la pantalla.
+        }
     }
 
     private static void Pause()
